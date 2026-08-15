@@ -1,5 +1,8 @@
 /**
- * PLANT ENGINEERING AUDIT PORTAL — GOOGLE APPS SCRIPT BACKEND
+ * PLANT ENGINEERING AUDIT PORTAL — UNIVERSAL GOOGLE APPS SCRIPT BACKEND
+ * Supports BOTH:
+ * 1. Native Container-Bound Web App (served at script.google.com via HtmlService)
+ * 2. External Portal Client on Vercel (via JSONP / doPost)
  * With Inline Photo Embedding in Emails & Automatic Drive Folder Management
  */
 
@@ -18,20 +21,127 @@ function getDatabaseSpreadsheet() {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// SERVE THE WEB APPLICATION
+// UNIVERSAL ROUTER (GET) — Serves UI OR Handles JSONP API Requests
 // ──────────────────────────────────────────────────────────────────────────────
 function doGet(e) {
-  var action = (e && e.parameter && e.parameter.action) ? e.parameter.action : null;
-  if (action === 'SEND_TEST_EMAIL') {
-    var email = (e.parameter && e.parameter.email) ? e.parameter.email : 'mehul.chikhaliya@borosil.com';
-    sendTestNotificationEmail(email);
-    return ContentService.createTextOutput(JSON.stringify({ status: 'SUCCESS', message: 'Test email dispatched to ' + email })).setMimeType(ContentService.MimeType.JSON);
+  var action   = (e && e.parameter && e.parameter.action) ? e.parameter.action : null;
+  var callback = (e && e.parameter && e.parameter.callback) ? e.parameter.callback : null;
+
+  // If no API action is specified, render the Native Web Application
+  if (!action && !callback) {
+    return HtmlService.createHtmlOutputFromFile('index')
+      .setTitle('BRL Engineering Audit Portal')
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1.0');
   }
 
-  return HtmlService.createHtmlOutputFromFile('index')
-    .setTitle('BRL Engineering Audit Portal')
-    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
-    .addMetaTag('viewport', 'width=device-width, initial-scale=1.0');
+  var result;
+  var ss = getDatabaseSpreadsheet();
+
+  try {
+    if (action === 'SEND_TEST_EMAIL') {
+      var email = (e.parameter && e.parameter.email) ? e.parameter.email : 'mehul.chikhaliya@borosil.com';
+      sendTestNotificationEmail(email);
+      result = { status: 'SUCCESS', message: 'Test email dispatched to ' + email };
+
+    } else if (!ss) {
+      result = { status: 'ERROR', message: 'Could not open Google Sheet with ID: ' + SPREADSHEET_ID };
+
+    } else if (action === 'PING') {
+      result = {
+        status: 'SUCCESS',
+        message: 'Connected to ' + (ss.getName ? ss.getName() : 'Google Sheet'),
+        sheetName: ss.getName ? ss.getName() : 'Google Sheet',
+        sheetId: ss.getId ? ss.getId() : SPREADSHEET_ID,
+        timestamp: new Date().toISOString()
+      };
+
+    } else if (action === 'GET_CHECKPOINTS') {
+      result = handleGetCheckpoints(ss);
+
+    } else if (action === 'GET_AUDITS') {
+      result = handleGetAudits(ss);
+
+    } else if (action === 'GET_ACTIONS') {
+      result = handleGetActions(ss);
+
+    } else if (action === 'AUDIT_HEADER') {
+      var header = JSON.parse(e.parameter.payload || '{}');
+      var folderInfo = createAuditDriveFolderHierarchy(header.auditId, header.date);
+      handleAuditHeader(ss, header, folderInfo);
+      result = { status: 'SUCCESS', auditId: header.auditId, driveFolderId: folderInfo.folderId, driveFolderUrl: folderInfo.folderUrl };
+
+    } else if (action === 'AUDIT_RESULTS') {
+      var data = JSON.parse(e.parameter.payload || '{}');
+      handleAuditResults(ss, data.auditId, data.results || []);
+      result = { status: 'SUCCESS', auditId: data.auditId, rowsAdded: (data.results || []).length };
+
+    } else if (action === 'AUDIT_ACTIONS') {
+      var data2 = JSON.parse(e.parameter.payload || '{}');
+      handleAuditActions(ss, data2.auditId, data2.actions || []);
+
+      // Auto-trigger deviation email with Drive folder info
+      if (data2.actions && data2.actions.length > 0) {
+        try {
+          var masterSheet = ss.getSheetByName('Audit_Master');
+          var headerInfo = { auditId: data2.auditId };
+          var driveFolderUrl = '';
+          if (masterSheet) {
+            var mData = masterSheet.getDataRange().getValues();
+            for (var m = mData.length - 1; m >= 1; m--) {
+              if (String(mData[m][0]) === String(data2.auditId)) {
+                headerInfo = {
+                  auditId: mData[m][0],
+                  date: mData[m][1],
+                  sectionName: mData[m][3],
+                  subSectionName: mData[m][4],
+                  lineName: mData[m][5],
+                  equipmentName: mData[m][6],
+                  auditorName: mData[m][7],
+                  driveFolderUrl: mData[m][16]
+                };
+                driveFolderUrl = mData[m][16];
+                break;
+              }
+            }
+          }
+          sendDeviationAlertEmail(data2.auditId, headerInfo, data2.actions, [], driveFolderUrl, []);
+        } catch (mailErr) {
+          Logger.log('Auto-email error: ' + mailErr);
+        }
+      }
+
+      result = { status: 'SUCCESS', auditId: data2.auditId, actionsAdded: (data2.actions || []).length };
+
+    } else if (action === 'SAVE_PHOTO_CHUNK') {
+      var photoId     = e.parameter.photoId;
+      var auditId     = e.parameter.auditId;
+      var folderId    = e.parameter.folderId;
+      var chunkIndex  = Number(e.parameter.chunkIndex);
+      var totalChunks = Number(e.parameter.totalChunks);
+      var chunkData   = e.parameter.chunkData || '';
+      var fileName    = e.parameter.fileName || ('Photo_' + photoId + '.jpg');
+      var srNo        = Number(e.parameter.srNo) || 1;
+
+      result = handleSavePhotoChunk(ss, auditId, folderId, photoId, chunkIndex, totalChunks, chunkData, fileName, srNo);
+
+    } else if (action === 'UPDATE_ACTION') {
+      var payload = JSON.parse(e.parameter.payload || '{}');
+      result = handleUpdateAction(ss, payload);
+
+    } else {
+      result = { status: 'ERROR', message: 'Unknown action: ' + action };
+    }
+
+  } catch (err) {
+    result = { status: 'ERROR', message: err.toString() };
+  }
+
+  var json = JSON.stringify(result);
+  if (callback) {
+    return ContentService.createTextOutput(callback + '(' + json + ')').setMimeType(ContentService.MimeType.JAVASCRIPT);
+  }
+  return ContentService.createTextOutput(json).setMimeType(ContentService.MimeType.JSON);
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -50,7 +160,7 @@ function submitAuditFromClient(payload) {
     var auditId = header.auditId || ('ENG-' + Date.now());
     var dateStr = header.date || new Date().toISOString().substring(0, 10);
 
-    // 1. Create Google Drive Folder Hierarchy (Engineering Audit System / Audit Records / Year / Month / AuditId / Photos)
+    // 1. Create Google Drive Folder Hierarchy
     var folderInfo = createAuditDriveFolderHierarchy(auditId, dateStr);
     header.driveFolderId = folderInfo.folderId;
     header.driveFolderUrl = folderInfo.folderUrl;
@@ -95,6 +205,75 @@ function submitAuditFromClient(payload) {
     Logger.log("Submission error: " + err.toString());
     return { status: 'ERROR', message: err.toString() };
   }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// CHUNKED PHOTO SAVER (Decodes Base64 & Creates JPEG in Drive's Photos Folder)
+// ──────────────────────────────────────────────────────────────────────────────
+function handleSavePhotoChunk(ss, auditId, folderId, photoId, chunkIndex, totalChunks, chunkData, fileName, srNo) {
+  var cache = CacheService.getScriptCache();
+  var key = 'photo_' + photoId + '_' + chunkIndex;
+  cache.put(key, chunkData, 600); // 10 min cache
+
+  if (chunkIndex === totalChunks - 1) {
+    var fullBase64 = '';
+    for (var i = 0; i < totalChunks; i++) {
+      var cKey = 'photo_' + photoId + '_' + i;
+      var chunk = (i === chunkIndex) ? chunkData : cache.get(cKey);
+      if (chunk) {
+        fullBase64 += chunk;
+        cache.remove(cKey);
+      }
+    }
+
+    if (fullBase64.indexOf('base64,') !== -1) {
+      fullBase64 = fullBase64.split('base64,')[1];
+    }
+    fullBase64 = fullBase64.replace(/ /g, '+');
+
+    try {
+      var auditFolder = null;
+      if (folderId) {
+        try { auditFolder = DriveApp.getFolderById(folderId); } catch (e) {}
+      }
+      if (!auditFolder && auditId) {
+        var folderInfo = createAuditDriveFolderHierarchy(auditId, '');
+        if (folderInfo.folderId) auditFolder = DriveApp.getFolderById(folderInfo.folderId);
+      }
+      if (!auditFolder) auditFolder = DriveApp.getRootFolder();
+
+      var photosFolder = getOrCreateFolder(auditFolder, 'Photos');
+      var decoded = Utilities.base64Decode(fullBase64);
+      var blob = Utilities.newBlob(decoded, 'image/jpeg', fileName);
+      var file = photosFolder.createFile(blob);
+
+      try {
+        file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      } catch (shareErr) {}
+
+      var photoUrl = file.getUrl();
+
+      // Update Audit_Details sheet with Photo URL for this Sr No.
+      if (ss) {
+        var detailsSheet = ss.getSheetByName('Audit_Details');
+        if (detailsSheet) {
+          var data = detailsSheet.getDataRange().getValues();
+          for (var r = 1; r < data.length; r++) {
+            if (String(data[r][0]) === String(auditId) && Number(data[r][1]) === Number(srNo)) {
+              detailsSheet.getRange(r + 1, 10).setValue(photoUrl);
+              break;
+            }
+          }
+        }
+      }
+
+      return { status: 'SUCCESS', photoUrl: photoUrl, fileName: fileName };
+    } catch (err) {
+      return { status: 'ERROR', message: 'Failed to create image: ' + err.toString() };
+    }
+  }
+
+  return { status: 'CHUNK_SAVED', chunkIndex: chunkIndex };
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

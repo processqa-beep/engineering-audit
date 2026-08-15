@@ -2,7 +2,7 @@ import { AuditHeader, AuditResult, ActionItem, Checkpoint } from './types';
 import { StorageEngine } from './storageEngine';
 
 // ──────────────────────────────────────────────────────────────────────────────
-// JSONP helper — sends a <script> tag GET request to Google Apps Script (fallback).
+// JSONP helper — sends a <script> tag GET request to Google Apps Script.
 // ──────────────────────────────────────────────────────────────────────────────
 function jsonpRequest<T = any>(
   scriptUrl: string,
@@ -67,38 +67,8 @@ export class GasBackendClient {
 
   // ── PING ────────────────────────────────────────────────────────────────────
   public static async pingEndpoint(): Promise<{ success: boolean; message: string; sheetName?: string }> {
-    // 1. Try Google Service Account API Test first
-    try {
-      const settings = StorageEngine.getSettings();
-      const credentials =
-        settings.serviceAccountEmail && settings.serviceAccountPrivateKey
-          ? {
-              client_email: settings.serviceAccountEmail,
-              private_key: settings.serviceAccountPrivateKey,
-            }
-          : undefined;
-
-      const res = await fetch('/api/audit/test-connection', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sheetId: this.getSheetId(), credentials }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        if (data.status === 'SUCCESS') {
-          return {
-            success: true,
-            message: `Connected via Google API ✓ Sheet: "${data.sheetTitle}"`,
-            sheetName: data.sheetTitle,
-          };
-        }
-      }
-    } catch {}
-
-    // 2. Fallback to Apps Script PING
     const url = this.getScriptUrl();
-    if (!url) return { success: false, message: 'Apps Script URL or Service Account not configured.' };
+    if (!url) return { success: false, message: 'Apps Script URL not set in Settings.' };
     try {
       const res = await jsonpRequest<any>(url, { action: 'PING', sheetId: this.getSheetId() }, 10000);
       if (res?.status === 'SUCCESS') {
@@ -123,15 +93,16 @@ export class GasBackendClient {
     return checkpoints;
   }
 
-  // ── SUBMIT AUDIT (Official Google Drive & Sheets API Pipeline) ────────────────
+  // ── SUBMIT AUDIT (Full JSONP Pipeline with Photo Chunking & Auto Email) ──────
   public static async submitAudit(
     header: AuditHeader,
     results: AuditResult[],
     actions: ActionItem[]
   ): Promise<{ status: string; message: string; driveFolderId?: string; driveFolderUrl?: string }> {
-    // 1. Save in local storage first for instant offline recovery
+    // 1. Always save in local storage first for offline / instant recovery
     StorageEngine.saveAudit(header, results, actions);
 
+    const scriptUrl = this.getScriptUrl();
     const sheetId = this.getSheetId();
 
     // 1. Slim evaluated results
@@ -148,17 +119,7 @@ export class GasBackendClient {
       whatImpactIfThisPartGetsFail: (r.whatImpactIfThisPartGetsFail || '').slice(0, 150),
     }));
 
-    // 2. Extract photos for Google Drive
-    const photos = results
-      .filter((r) => r.photoUrl && (r.photoUrl.startsWith('data:image') || r.photoUrl.length > 100))
-      .map((r) => ({
-        sr: r.srNo,
-        comp: (r.componentName || 'Comp').replace(/[^a-zA-Z0-9_-]/g, '_'),
-        photoBase64: r.photoUrl,
-        fileName: `Photo_Sr${r.srNo}_${(r.componentName || 'Comp').replace(/[^a-zA-Z0-9_-]/g, '_')}.jpg`,
-      }));
-
-    // 3. Slim actions
+    // 2. Slim actions
     const slimActions = actions.map((a) => ({
       id: a.actionId,
       comp: (a.componentName || '').slice(0, 80),
@@ -170,49 +131,13 @@ export class GasBackendClient {
       target: a.targetDate || '',
     }));
 
-    // PRIMARY PATH: Direct Serverless Google Drive & Sheets API (/api/audit/submit)
+    let driveFolderId = '';
+    let driveFolderUrl = '';
+
     try {
-      const settings = StorageEngine.getSettings();
-      const credentials =
-        settings.serviceAccountEmail && settings.serviceAccountPrivateKey
-          ? {
-              client_email: settings.serviceAccountEmail,
-              private_key: settings.serviceAccountPrivateKey,
-            }
-          : undefined;
-
-      const res = await fetch('/api/audit/submit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          header,
-          results: slimResults,
-          actions: slimActions,
-          photos,
-          sheetId,
-          credentials,
-        }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        if (data.status === 'SUCCESS') {
-          return {
-            status: 'SUCCESS',
-            message: '✅ Transmitted to Google Sheets & Drive (Photos & Deviation Alert Saved)!',
-            driveFolderId: data.driveFolderId,
-            driveFolderUrl: data.driveFolderUrl,
-          };
-        }
-      }
-    } catch (apiErr) {
-      console.warn('[API audit/submit notice, using fallback]:', apiErr);
-    }
-
-    // FALLBACK PATH: Direct GAS Header Registration
-    try {
+      // ── Step 1: Register Audit Header (Creates Audit_Master row + Drive Folder Hierarchy) ──
       const headerRes = await jsonpRequest<any>(
-        this.getScriptUrl(),
+        scriptUrl,
         {
           action: 'AUDIT_HEADER',
           sheetId,
@@ -221,16 +146,85 @@ export class GasBackendClient {
         15000
       );
 
+      if (headerRes?.status === 'SUCCESS') {
+        driveFolderId = headerRes.driveFolderId || '';
+        driveFolderUrl = headerRes.driveFolderUrl || '';
+      }
+
+      // ── Step 2: Submit Evaluated Audit Results to Audit_Details ────────────
+      if (slimResults.length > 0) {
+        await jsonpRequest<any>(
+          scriptUrl,
+          {
+            action: 'AUDIT_RESULTS',
+            sheetId,
+            payload: JSON.stringify({ auditId: header.auditId, results: slimResults }),
+          },
+          15000
+        );
+      }
+
+      // ── Step 3: Upload Photos via Safe JSONP Chunks (Creates JPEG in Drive Photos folder) ──
+      const photos = results.filter((r) => r.photoUrl && r.photoUrl.startsWith('data:image'));
+      for (const photo of photos) {
+        const photoBase64 = photo.photoUrl || '';
+        const CHUNK_SIZE = 1200;
+        const totalChunks = Math.ceil(photoBase64.length / CHUNK_SIZE);
+        const photoId = `${header.auditId.replace(/[^a-zA-Z0-9]/g, '')}_sr${photo.srNo}`;
+        const fileName = `Photo_Sr${photo.srNo}_${(photo.componentName || 'Comp').replace(/[^a-zA-Z0-9_-]/g, '_')}.jpg`;
+
+        for (let c = 0; c < totalChunks; c++) {
+          const chunkData = photoBase64.slice(c * CHUNK_SIZE, (c + 1) * CHUNK_SIZE);
+          try {
+            await jsonpRequest<any>(
+              scriptUrl,
+              {
+                action: 'SAVE_PHOTO_CHUNK',
+                sheetId,
+                auditId: header.auditId,
+                folderId: driveFolderId,
+                photoId,
+                chunkIndex: String(c),
+                totalChunks: String(totalChunks),
+                chunkData,
+                fileName,
+                srNo: String(photo.srNo),
+              },
+              15000
+            );
+            await new Promise((resolve) => setTimeout(resolve, 40));
+          } catch (photoErr) {
+            console.warn(`Photo chunk ${c}/${totalChunks} notice:`, photoErr);
+          }
+        }
+      }
+
+      // ── Step 4: Submit Action Items (Saves to Action_Tracker & Automatically Dispatches Email) ──
+      if (slimActions.length > 0) {
+        await jsonpRequest<any>(
+          scriptUrl,
+          {
+            action: 'AUDIT_ACTIONS',
+            sheetId,
+            payload: JSON.stringify({ auditId: header.auditId, actions: slimActions }),
+          },
+          15000
+        );
+      }
+
       return {
         status: 'SUCCESS',
-        message: '✅ Transmitted to Google Sheets & Drive!',
-        driveFolderId: headerRes?.driveFolderId,
-        driveFolderUrl: headerRes?.driveFolderUrl,
+        message: '✅ Transmitted to Google Sheets, Drive & Email Dispatched!',
+        driveFolderId,
+        driveFolderUrl,
       };
-    } catch (fallbackErr: any) {
+    } catch (err: any) {
+      console.warn('[GAS] Submit notice (saved locally):', err);
       return {
         status: 'LOCAL_SAVED',
-        message: `Saved locally in browser. Notice: ${fallbackErr.message}`,
+        message: `Saved locally. Notice: ${err.message}`,
+        driveFolderId,
+        driveFolderUrl,
       };
     }
   }
