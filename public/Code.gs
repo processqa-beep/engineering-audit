@@ -1,6 +1,6 @@
 /**
- * PLANT ENGINEERING AUDIT PORTAL — NATIVE GOOGLE APPS SCRIPT BACKEND
- * 100% IT Policy Compliant (Runs natively inside Borosil Google Workspace)
+ * PLANT ENGINEERING AUDIT PORTAL — GOOGLE APPS SCRIPT BACKEND
+ * With Inline Photo Embedding in Emails & Automatic Drive Folder Management
  */
 
 var SPREADSHEET_ID = "1s0a4QFIbE7uOpmSQX29279JswMvAOaX2z93kh5v36B0";
@@ -21,6 +21,13 @@ function getDatabaseSpreadsheet() {
 // SERVE THE WEB APPLICATION
 // ──────────────────────────────────────────────────────────────────────────────
 function doGet(e) {
+  var action = (e && e.parameter && e.parameter.action) ? e.parameter.action : null;
+  if (action === 'SEND_TEST_EMAIL') {
+    var email = (e.parameter && e.parameter.email) ? e.parameter.email : 'mehul.chikhaliya@borosil.com';
+    sendTestNotificationEmail(email);
+    return ContentService.createTextOutput(JSON.stringify({ status: 'SUCCESS', message: 'Test email dispatched to ' + email })).setMimeType(ContentService.MimeType.JSON);
+  }
+
   return HtmlService.createHtmlOutputFromFile('index')
     .setTitle('BRL Engineering Audit Portal')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
@@ -28,7 +35,7 @@ function doGet(e) {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// CLIENT API: SUBMIT AUDIT WITH PHOTOS & EMAIL
+// CLIENT API: SUBMIT AUDIT WITH INLINE PHOTOS & EMAIL
 // ──────────────────────────────────────────────────────────────────────────────
 function submitAuditFromClient(payload) {
   try {
@@ -43,16 +50,15 @@ function submitAuditFromClient(payload) {
     var auditId = header.auditId || ('ENG-' + Date.now());
     var dateStr = header.date || new Date().toISOString().substring(0, 10);
 
-    // 1. Create Google Drive Folder Hierarchy
+    // 1. Create Google Drive Folder Hierarchy (Engineering Audit System / Audit Records / Year / Month / AuditId / Photos)
     var folderInfo = createAuditDriveFolderHierarchy(auditId, dateStr);
     header.driveFolderId = folderInfo.folderId;
     header.driveFolderUrl = folderInfo.folderUrl;
 
-    // 2. Save Photos directly into Drive's Photos Folder
-    var photoMap = {};
-    if (photos && photos.length > 0) {
-      photoMap = saveAuditPhotosToDrive(folderInfo.photosFolderId, photos);
-    }
+    // 2. Save Photos to Google Drive & generate Blobs for Inline Email
+    var photoResult = saveAuditPhotosToDrive(folderInfo.photosFolderId, photos, auditId, dateStr);
+    var photoMap = photoResult.photoMap || {};
+    var blobList = photoResult.blobList || [];
 
     // 3. Attach Drive Photo URLs to results
     for (var i = 0; i < results.length; i++) {
@@ -67,10 +73,10 @@ function submitAuditFromClient(payload) {
     handleAuditResults(ss, auditId, results);
     handleAuditActions(ss, auditId, actions);
 
-    // 5. Send Stylized HTML Deviation Email if deviations exist
+    // 5. Send Stylized HTML Deviation Email with INLINE EMBEDDED PHOTOS
     if (actions && actions.length > 0) {
       try {
-        sendDeviationAlertEmail(auditId, header, actions, results, folderInfo.folderUrl);
+        sendDeviationAlertEmail(auditId, header, actions, results, folderInfo.folderUrl, blobList);
       } catch (mailErr) {
         Logger.log("Email error: " + mailErr.toString());
       }
@@ -92,7 +98,7 @@ function submitAuditFromClient(payload) {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// CLIENT API: FETCH CHECKPOINTS
+// CLIENT API: FETCH CHECKPOINTS, HISTORY & ACTIONS
 // ──────────────────────────────────────────────────────────────────────────────
 function getCheckpointsFromClient() {
   try {
@@ -104,9 +110,6 @@ function getCheckpointsFromClient() {
   }
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// CLIENT API: FETCH AUDIT HISTORY & ACTIONS
-// ──────────────────────────────────────────────────────────────────────────────
 function getAuditHistoryFromClient() {
   try {
     var ss = getDatabaseSpreadsheet();
@@ -138,13 +141,26 @@ function updateActionFromClient(data) {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// GOOGLE DRIVE PHOTOS MANAGER
+// GOOGLE DRIVE PHOTOS MANAGER (Saves to Drive & Prepares Blobs)
 // ──────────────────────────────────────────────────────────────────────────────
-function saveAuditPhotosToDrive(photosFolderId, photos) {
+function saveAuditPhotosToDrive(photosFolderId, photos, auditId, dateStr) {
   var photoMap = {};
-  if (!photos || photos.length === 0) return photoMap;
+  var blobList = [];
+  if (!photos || photos.length === 0) return { photoMap: photoMap, blobList: blobList };
+
   try {
-    var photosFolder = DriveApp.getFolderById(photosFolderId);
+    var photosFolder = null;
+    if (photosFolderId) {
+      try { photosFolder = DriveApp.getFolderById(photosFolderId); } catch (e) {}
+    }
+    if (!photosFolder && auditId) {
+      var folderInfo = createAuditDriveFolderHierarchy(auditId, dateStr);
+      if (folderInfo.photosFolderId) {
+        photosFolder = DriveApp.getFolderById(folderInfo.photosFolderId);
+      }
+    }
+    if (!photosFolder) photosFolder = DriveApp.getRootFolder();
+
     for (var i = 0; i < photos.length; i++) {
       var p = photos[i];
       var base64Data = p.photoBase64 || '';
@@ -164,12 +180,15 @@ function saveAuditPhotosToDrive(photosFolderId, photos) {
         file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
       } catch (shareErr) {}
 
-      photoMap[p.sr] = file.getUrl();
+      var fileUrl = file.getUrl();
+      photoMap[p.sr] = fileUrl;
+      blobList.push({ sr: p.sr, blob: blob, name: fileName, url: fileUrl });
     }
   } catch (err) {
     Logger.log('Photo save error: ' + err.toString());
   }
-  return photoMap;
+
+  return { photoMap: photoMap, blobList: blobList };
 }
 
 function createAuditDriveFolderHierarchy(auditId, dateStr) {
@@ -424,9 +443,9 @@ function handleUpdateAction(ss, data) {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// HTML DEVIATION NOTIFICATION EMAIL TEMPLATE
+// HTML DEVIATION NOTIFICATION EMAIL TEMPLATE (With Inline Embedded Photos)
 // ──────────────────────────────────────────────────────────────────────────────
-function sendDeviationAlertEmail(auditId, header, actions, results, driveFolderUrl) {
+function sendDeviationAlertEmail(auditId, header, actions, results, driveFolderUrl, blobs) {
   if (!actions || actions.length === 0) return;
 
   var recipients = 'mehul.chikhaliya@borosil.com, process.qa@borosil.com';
@@ -453,6 +472,17 @@ function sendDeviationAlertEmail(auditId, header, actions, results, driveFolderU
 
   var subject = (criticalCount > 0 ? '⚠️ CRITICAL DEVIATION' : '⚠️ AUDIT DEVIATION') + ' — ' + auditId + ' (' + section + ')';
 
+  // Build inline image attachments dictionary
+  var inlineImagesObj = {};
+  var attachmentsList = [];
+  if (blobs && blobs.length > 0) {
+    for (var b = 0; b < blobs.length; b++) {
+      var imgKey = 'photo_' + b;
+      inlineImagesObj[imgKey] = blobs[b].blob;
+      attachmentsList.push(blobs[b].blob);
+    }
+  }
+
   var deviationRowsHtml = '';
   for (var i = 0; i < actions.length; i++) {
     var act = actions[i];
@@ -476,7 +506,6 @@ function sendDeviationAlertEmail(auditId, header, actions, results, driveFolderU
   var failImpact = (matchingResult && matchingResult.whatImpactIfThisPartGetsFail) ? matchingResult.whatImpactIfThisPartGetsFail : 'Equipment wear / operational stoppage';
   var corrAction = singleAction.act || singleAction.recommendedAction || 'Perform corrective maintenance';
   var targetDate = singleAction.target || singleAction.targetDate || 'Immediate';
-  var photoUrl = (matchingResult && matchingResult.photoUrl) ? matchingResult.photoUrl : '';
 
   var html = '<!DOCTYPE html>' +
 '<html lang="en">' +
@@ -501,8 +530,8 @@ function sendDeviationAlertEmail(auditId, header, actions, results, driveFolderU
 '    .critical { color: #c62828; font-weight: bold; }' +
 '    .observation { background: #fff8e1; padding: 12px; border: 1px solid #f0d98a; line-height: 1.6; }' +
 '    .action { background: #f3f8fc; padding: 12px; border: 1px solid #c8dcea; line-height: 1.6; }' +
-'    .photo { text-align: center; margin-top: 10px; }' +
-'    .photo img { max-width: 500px; width: 100%; border: 1px solid #ccc; }' +
+'    .photo { text-align: center; margin: 15px 0; }' +
+'    .photo img { max-width: 550px; width: 100%; border: 2px solid #1f4e78; border-radius: 6px; }' +
 '    .button { display: inline-block; padding: 10px 18px; background: #1f4e78; color: white !important; text-decoration: none; border-radius: 4px; font-weight: bold; }' +
 '    .footer { margin-top: 25px; padding: 15px 25px; background: #f2f5f7; font-size: 12px; color: #666; text-align: center; line-height: 1.6; }' +
 '    .signature { padding: 20px 25px; font-size: 14px; line-height: 1.6; }' +
@@ -562,13 +591,6 @@ function sendDeviationAlertEmail(auditId, header, actions, results, driveFolderU
 '            <tr><th>Target Completion Date</th><td>' + targetDate + '</td></tr>' +
 '        </table>' +
 '    </div>';
-
-    if (photoUrl) {
-      html += '<div class="section">' +
-'        <div class="section-title">Deviation Photograph</div>' +
-'        <div class="photo"><img src="' + photoUrl + '" alt="Deviation Photo"></div>' +
-'    </div>';
-    }
   } else {
     html += '<div class="section">' +
 '        <div class="section-title">Deviation Summary</div>' +
@@ -577,6 +599,19 @@ function sendDeviationAlertEmail(auditId, header, actions, results, driveFolderU
 '            <tbody>' + deviationRowsHtml + '</tbody>' +
 '        </table>' +
 '    </div>';
+  }
+
+  // Embed inline photos directly into email body
+  if (blobs && blobs.length > 0) {
+    html += '<div class="section">' +
+'        <div class="section-title">Deviation Photograph(s)</div>';
+    for (var b = 0; b < blobs.length; b++) {
+      html += '<div class="photo">' +
+'          <img src="cid:photo_' + b + '" alt="Deviation Photo">' +
+'          <p style="font-size:11px; color:#666; margin-top:4px;">' + blobs[b].name + '</p>' +
+'        </div>';
+    }
+    html += '</div>';
   }
 
   html += '<div class="section" style="text-align:center;">' +
@@ -596,12 +631,44 @@ function sendDeviationAlertEmail(auditId, header, actions, results, driveFolderU
 '</html>';
 
   try {
-    MailApp.sendEmail({
+    var mailOptions = {
       to: recipients,
       subject: subject,
       htmlBody: html
-    });
+    };
+
+    if (Object.keys(inlineImagesObj).length > 0) {
+      mailOptions.inlineImages = inlineImagesObj;
+      mailOptions.attachments = attachmentsList;
+    }
+
+    MailApp.sendEmail(mailOptions);
   } catch (e) {
     Logger.log('MailApp error: ' + e.toString());
   }
+}
+
+function sendTestNotificationEmail(email) {
+  var target = email || 'mehul.chikhaliya@borosil.com';
+  var testActions = [{
+    id: 'ACT-TEST-1',
+    comp: 'Spindle Bearing Unit',
+    ck: 'Check spindle vibration & temperature levels',
+    obs: 'Elevated temperature 65°C detected during run',
+    act: 'Inspect lubrication & check bearing clearance',
+    prio: 'Critical',
+    status: 'Open',
+    target: '2026-08-20'
+  }];
+
+  var testHeader = {
+    date: new Date().toISOString().substring(0, 10),
+    auditorName: 'Mehul Chikhaliya',
+    sectionName: 'Grinding (M1)',
+    subSectionName: 'Edger Section',
+    lineName: 'BL#1',
+    equipmentName: 'Benteler Edger'
+  };
+
+  sendDeviationAlertEmail('ENG-TEST-' + Date.now(), testHeader, testActions, [], 'https://docs.google.com/spreadsheets/d/' + SPREADSHEET_ID, []);
 }
