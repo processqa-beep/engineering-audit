@@ -8,7 +8,7 @@
 // Example: If your Sheet URL is https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit
 // Then SPREADSHEET_ID is "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"
 // ──────────────────────────────────────────────────────────────────────────────
-var SPREADSHEET_ID = ""; 
+var SPREADSHEET_ID = "1s0a4QFIbE7uOpmSQX29279JswMvAOaX2z93kh5v36B0"; 
 
 // ──────────────────────────────────────────────────────────────────────────────
 // SPREADSHEET RESOLVER — Bulletproof for Container-Bound & Standalone scripts

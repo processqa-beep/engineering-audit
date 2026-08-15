@@ -151,7 +151,7 @@ export const initialMailConfigs: MailConfig[] = [];
 // SYSTEM SETTINGS
 // ──────────────────────────────────────────────────────────────────────────────
 export const defaultSettings: SystemSettings = {
-  googleSheetId: '',
+  googleSheetId: '1s0a4QFIbE7uOpmSQX29279JswMvAOaX2z93kh5v36B0',
   googleDriveFolderId: '',
   googleAppsScriptUrl: '',
   autoBackupEnabled: false,

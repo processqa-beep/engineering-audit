@@ -193,10 +193,17 @@ export const SettingsView: React.FC = () => {
  * 2. Standalone scripts (created at script.google.com) - auto finds or creates Engineering_Audit_Database sheet!
  */
 
+var SPREADSHEET_ID = "1s0a4QFIbE7uOpmSQX29279JswMvAOaX2z93kh5v36B0";
+
 // ──────────────────────────────────────────────────────────────────────────────
 // SPREADSHEET RESOLVER
 // ──────────────────────────────────────────────────────────────────────────────
 function getDatabaseSpreadsheet(e) {
+  try {
+    if (SPREADSHEET_ID && SPREADSHEET_ID.trim().length > 5) {
+      return SpreadsheetApp.openById(SPREADSHEET_ID.trim());
+    }
+  } catch (err) {}
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     if (ss) return ss;
