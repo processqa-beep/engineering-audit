@@ -99,12 +99,21 @@ function doGet(e) {
 
 // ──────────────────────────────────────────────────────────────────────────────
 // ROUTER (POST — Atomic 1-Shot Audit Submission + Photo Upload)
+// Supports both fetch POST body and hidden form iframe POST
 // ──────────────────────────────────────────────────────────────────────────────
 function doPost(e) {
   try {
+    var raw = '';
+    if (e && e.postData && e.postData.contents) {
+      raw = e.postData.contents;
+    } else if (e && e.parameter && e.parameter.postData) {
+      raw = e.parameter.postData;
+    }
+
+    var data = raw ? JSON.parse(raw) : {};
     var ss   = getDatabaseSpreadsheet(e);
-    var data = (e.postData && e.postData.contents) ? JSON.parse(e.postData.contents) : {};
-    var act  = data.action || 'SUBMIT_AUDIT';
+    var act  = data.action || (e && e.parameter && e.parameter.action) || 'SUBMIT_AUDIT';
+
     if (!ss) return respond({ status: 'ERROR', message: 'Spreadsheet not accessible' });
 
     if (act === 'SUBMIT_AUDIT') {
@@ -165,9 +174,13 @@ function saveAuditPhotosToDrive(auditFolderId, photos) {
 
     for (var i = 0; i < photos.length; i++) {
       var p = photos[i];
-      if (!p.photoBase64 || p.photoBase64.indexOf('base64,') === -1) continue;
+      var base64Data = p.photoBase64 || '';
+      if (!base64Data) continue;
 
-      var base64Data = p.photoBase64.split('base64,')[1];
+      if (base64Data.indexOf('base64,') !== -1) {
+        base64Data = base64Data.split('base64,')[1];
+      }
+
       var decoded = Utilities.base64Decode(base64Data);
       var blob = Utilities.newBlob(decoded, 'image/jpeg', p.fileName || ('Photo_Sr' + p.sr + '.jpg'));
       var file = photosFolder.createFile(blob);
@@ -179,7 +192,7 @@ function saveAuditPhotosToDrive(auditFolderId, photos) {
       photoMap[p.sr] = file.getUrl();
     }
   } catch (err) {
-    Logger.log('Photo upload error: ' + err);
+    Logger.log('Photo upload error: ' + err.toString());
   }
   return photoMap;
 }
@@ -456,12 +469,12 @@ function createAuditDriveFolderHierarchy(auditId, dateStr) {
     var yearF   = getOrCreateFolder(records, year);
     var monthF  = getOrCreateFolder(yearF,   month);
     var auditF  = getOrCreateFolder(monthF,  auditId);
-    getOrCreateFolder(auditF, 'Photos');
+    var photosF = getOrCreateFolder(auditF, 'Photos');
 
-    return { folderId: auditF.getId(), folderUrl: auditF.getUrl() };
+    return { folderId: auditF.getId(), folderUrl: auditF.getUrl(), photosFolderId: photosF.getId() };
   } catch (err) {
     Logger.log('Drive folder error: ' + err);
-    return { folderId: '', folderUrl: '' };
+    return { folderId: '', folderUrl: '', photosFolderId: '' };
   }
 }
 

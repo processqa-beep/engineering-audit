@@ -160,6 +160,7 @@ export class GasBackendClient {
         photos,
       });
 
+      // 1. Send complete Audit via fetch POST
       try {
         await fetch(url, {
           method: 'POST',
@@ -169,6 +170,39 @@ export class GasBackendClient {
         });
       } catch (postErr) {
         console.warn('POST sync notice:', postErr);
+      }
+
+      // 2. If photos are present, also post via hidden iframe for guaranteed delivery through GAS 302 redirect
+      if (photos.length > 0 && typeof document !== 'undefined') {
+        try {
+          const iframeName = 'gas_photo_frame_' + Date.now();
+          const iframe = document.createElement('iframe');
+          iframe.name = iframeName;
+          iframe.style.display = 'none';
+          document.body.appendChild(iframe);
+
+          const form = document.createElement('form');
+          form.method = 'POST';
+          form.action = url;
+          form.target = iframeName;
+          form.style.display = 'none';
+
+          const input = document.createElement('input');
+          input.type = 'hidden';
+          input.name = 'postData';
+          input.value = payload;
+          form.appendChild(input);
+
+          document.body.appendChild(form);
+          form.submit();
+
+          setTimeout(() => {
+            form.remove();
+            iframe.remove();
+          }, 5000);
+        } catch (iframeErr) {
+          console.warn('Iframe form post notice:', iframeErr);
+        }
       }
 
       // 2. Also register header via JSONP to retrieve the live Google Drive folder link
