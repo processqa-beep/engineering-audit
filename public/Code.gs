@@ -1,9 +1,6 @@
 /**
  * PLANT ENGINEERING AUDIT PORTAL — UNIVERSAL GOOGLE APPS SCRIPT BACKEND
- * Supports BOTH:
- * 1. Native Container-Bound Web App (served at script.google.com via HtmlService)
- * 2. External Portal Client on Vercel (via JSONP / doPost)
- * With Inline Photo Embedding in Emails & Automatic Drive Folder Management
+ * Auto-Syncs Checkpoints, Dumps Photos to Drive, Sends Inline Photo Deviation Alerts
  */
 
 var SPREADSHEET_ID = "1s0a4QFIbE7uOpmSQX29279JswMvAOaX2z93kh5v36B0";
@@ -58,6 +55,12 @@ function doGet(e) {
 
     } else if (action === 'GET_CHECKPOINTS') {
       result = handleGetCheckpoints(ss);
+
+    } else if (action === 'SAVE_CHECKPOINTS_BATCH') {
+      var batchIdx   = Number(e.parameter.batchIndex) || 0;
+      var totalB     = Number(e.parameter.totalBatches) || 1;
+      var batchData  = JSON.parse(e.parameter.payload || '[]');
+      result = handleSaveCheckpointsBatch(ss, batchIdx, totalB, batchData);
 
     } else if (action === 'GET_AUDITS') {
       result = handleGetAudits(ss);
@@ -142,6 +145,55 @@ function doGet(e) {
     return ContentService.createTextOutput(callback + '(' + json + ')').setMimeType(ContentService.MimeType.JAVASCRIPT);
   }
   return ContentService.createTextOutput(json).setMimeType(ContentService.MimeType.JSON);
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// AUTO-DUMP CHECKPOINTS TO GOOGLE SHEETS (Checkpoint_Master tab)
+// ──────────────────────────────────────────────────────────────────────────────
+function handleSaveCheckpointsBatch(ss, batchIndex, totalBatches, batchData) {
+  var sheet = ss.getSheetByName('Checkpoint_Master');
+  if (!sheet) {
+    sheet = ss.insertSheet('Checkpoint_Master');
+  }
+
+  // On first batch, clear existing rows and re-write the header
+  if (batchIndex === 0) {
+    sheet.clearContents();
+    sheet.appendRow([
+      'Sr No.', 'Section', 'Sub Section', 'Line / Machine', 'Component Name',
+      'Checkpoint', 'Standard Parameter', 'Min', 'Max', 'Unit', 'Criticality', 'Active'
+    ]);
+    sheet.setFrozenRows(1);
+  }
+
+  var rows = [];
+  for (var i = 0; i < batchData.length; i++) {
+    var c = batchData[i];
+    var linesStr = (c.applicableLines && Array.isArray(c.applicableLines))
+      ? c.applicableLines.join(', ')
+      : (c.lineName || c.lineId || 'ALL');
+
+    rows.push([
+      c.srNo || (i + 1),
+      c.sectionName || c.sectionId || '',
+      c.subSectionName || c.subSectionId || '',
+      linesStr,
+      c.componentName || '',
+      c.checkpointText || '',
+      c.standardParameter || '',
+      c.minimum !== undefined && c.minimum !== null ? c.minimum : '',
+      c.maximum !== undefined && c.maximum !== null ? c.maximum : '',
+      c.unit || '',
+      c.criticality || (c.isCritical ? 'Critical' : 'Medium'),
+      (c.active !== false) ? 'Yes' : 'No'
+    ]);
+  }
+
+  if (rows.length > 0) {
+    sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, 12).setValues(rows);
+  }
+
+  return { status: 'SUCCESS', batchIndex: batchIndex, rowsAdded: rows.length };
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

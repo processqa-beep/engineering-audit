@@ -93,6 +93,54 @@ export class GasBackendClient {
     return checkpoints;
   }
 
+  // ── AUTO-DUMP CHECKPOINTS TO GOOGLE SHEETS (Checkpoint_Master) ─────────────
+  public static async saveCheckpointsToGoogleSheet(checkpoints: Checkpoint[]): Promise<boolean> {
+    const url = this.getScriptUrl();
+    const sheetId = this.getSheetId();
+    if (!url || !checkpoints || checkpoints.length === 0) return false;
+
+    const slim = checkpoints.map((c, i) => ({
+      srNo: c.srNo || i + 1,
+      sectionName: c.sectionName || c.sectionId || '',
+      subSectionName: c.subSectionName || c.subSectionId || '',
+      lineName: c.lineName || c.lineId || 'ALL',
+      applicableLines: c.applicableLines || ['ALL'],
+      componentName: (c.componentName || '').slice(0, 100),
+      checkpointText: (c.checkpointText || '').slice(0, 200),
+      standardParameter: (c.standardParameter || '').slice(0, 150),
+      minimum: c.minimum,
+      maximum: c.maximum,
+      unit: (c.unit || '').slice(0, 30),
+      criticality: c.criticality || (c.isCritical ? 'Critical' : 'Medium'),
+      active: c.active !== false,
+    }));
+
+    const BATCH_SIZE = 25;
+    const totalBatches = Math.ceil(slim.length / BATCH_SIZE);
+
+    for (let b = 0; b < totalBatches; b++) {
+      const batch = slim.slice(b * BATCH_SIZE, (b + 1) * BATCH_SIZE);
+      try {
+        await jsonpRequest<any>(
+          url,
+          {
+            action: 'SAVE_CHECKPOINTS_BATCH',
+            sheetId,
+            batchIndex: String(b),
+            totalBatches: String(totalBatches),
+            payload: JSON.stringify(batch),
+          },
+          15000
+        );
+        await new Promise((r) => setTimeout(r, 50));
+      } catch (err) {
+        console.warn(`Checkpoints batch ${b}/${totalBatches} notice:`, err);
+      }
+    }
+
+    return true;
+  }
+
   // ── SUBMIT AUDIT (Full JSONP Pipeline with Photo Chunking & Auto Email) ──────
   public static async submitAudit(
     header: AuditHeader,

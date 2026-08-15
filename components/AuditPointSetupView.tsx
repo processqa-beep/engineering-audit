@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Download,
@@ -501,17 +501,33 @@ export const AuditPointSetupView: React.FC = () => {
     }
   }, []);
 
-  const handleConfirmImport = () => {
+  useEffect(() => {
+    GasBackendClient.syncMasterData()
+      .then((data) => {
+        if (data && data.length > 0) setCheckpoints(data);
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleConfirmImport = async () => {
     if (!preview) return;
     const result = StorageEngine.importCheckpoints(preview.rows, preview.fileName);
     reload();
     setPreview(null);
     setUploadSuccess({ imported: result.imported, updated: result.updated });
     setTimeout(() => setUploadSuccess(null), 5000);
+
+    // Auto-dump all checkpoints to Google Sheets Checkpoint_Master tab
+    try {
+      const all = StorageEngine.getCheckpoints();
+      await GasBackendClient.saveCheckpointsToGoogleSheet(all);
+    } catch (dumpErr) {
+      console.warn('Auto-dump to Google Sheets notice:', dumpErr);
+    }
   };
 
   // ── Manual Add handler ────────────────────────────────────────────────────
-  const handleManualSave = (form: Partial<Checkpoint>) => {
+  const handleManualSave = async (form: Partial<Checkpoint>) => {
     const now = new Date().toISOString();
     const id = `CKP-M-${Date.now()}-${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
     const selectedSec = sections.find((s) => s.id === form.sectionId);
@@ -544,8 +560,16 @@ export const AuditPointSetupView: React.FC = () => {
     };
 
     const current = StorageEngine.getCheckpoints();
-    StorageEngine.saveCheckpoints([newCk, ...current]);
+    const updatedAll = [newCk, ...current];
+    StorageEngine.saveCheckpoints(updatedAll);
     reload();
+
+    // Auto-dump to Google Sheets Checkpoint_Master
+    try {
+      await GasBackendClient.saveCheckpointsToGoogleSheet(updatedAll);
+    } catch (dumpErr) {
+      console.warn('Auto-dump to Google Sheets notice:', dumpErr);
+    }
   };
 
   // ── Toggle active ─────────────────────────────────────────────────────────
