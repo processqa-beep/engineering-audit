@@ -1,6 +1,6 @@
 /**
  * PLANT ENGINEERING AUDIT PORTAL — GOOGLE APPS SCRIPT BACKEND
- * Architecture: Vercel (Frontend) → JSONP GET / POST → Google Apps Script → Google Sheets + Drive
+ * Architecture: Vercel (Frontend) → JSONP GET Router → Google Sheets + Drive + Email
  */
 
 var SPREADSHEET_ID = "1s0a4QFIbE7uOpmSQX29279JswMvAOaX2z93kh5v36B0";
@@ -38,7 +38,7 @@ function SETUP_PERMISSIONS() {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// ROUTER (JSONP GET)
+// ROUTER (JSONP GET — 100% Google Workspace Domain Compatible)
 // ──────────────────────────────────────────────────────────────────────────────
 function doGet(e) {
   var result;
@@ -78,6 +78,37 @@ function doGet(e) {
       var header = JSON.parse(e.parameter.payload || '{}');
       result = handleAuditHeader(ss, header);
 
+    } else if (action === 'AUDIT_RESULTS') {
+      var data = JSON.parse(e.parameter.payload || '{}');
+      result = handleAuditResults(ss, data.auditId, data.results || []);
+
+    } else if (action === 'AUDIT_ACTIONS') {
+      var data2 = JSON.parse(e.parameter.payload || '{}');
+      result = handleAuditActions(ss, data2.auditId, data2.actions || []);
+
+    } else if (action === 'SAVE_PHOTO_CHUNK') {
+      var photoId     = e.parameter.photoId;
+      var auditId     = e.parameter.auditId;
+      var folderId    = e.parameter.folderId;
+      var chunkIndex  = Number(e.parameter.chunkIndex);
+      var totalChunks = Number(e.parameter.totalChunks);
+      var chunkData   = e.parameter.chunkData || '';
+      var fileName    = e.parameter.fileName || ('Photo_' + photoId + '.jpg');
+      var srNo        = Number(e.parameter.srNo) || 1;
+
+      result = handleSavePhotoChunk(ss, auditId, folderId, photoId, chunkIndex, totalChunks, chunkData, fileName, srNo);
+
+    } else if (action === 'SEND_ALERT_EMAIL') {
+      var emailPayload = JSON.parse(e.parameter.payload || '{}');
+      sendDeviationAlertEmail(
+        emailPayload.auditId,
+        emailPayload.header || {},
+        emailPayload.actions || [],
+        emailPayload.results || [],
+        emailPayload.driveFolderUrl || ''
+      );
+      result = { status: 'SUCCESS', message: 'Deviation email sent' };
+
     } else if (action === 'UPDATE_ACTION') {
       var payload = JSON.parse(e.parameter.payload || '{}');
       result = handleUpdateAction(ss, payload);
@@ -98,112 +129,42 @@ function doGet(e) {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// ROUTER (POST — Atomic 1-Shot Audit Submission + Photo Upload + Alert Email)
-// Supports both fetch POST body and hidden form iframe POST
+// CHUNKED PHOTO SAVER (Decodes Base64 & Creates JPEG in Drive's Photos Folder)
 // ──────────────────────────────────────────────────────────────────────────────
-function doPost(e) {
-  try {
-    var raw = '';
-    if (e && e.postData && e.postData.contents) {
-      raw = e.postData.contents;
-    } else if (e && e.parameter && e.parameter.postData) {
-      raw = e.parameter.postData;
-    }
+function handleSavePhotoChunk(ss, auditId, folderId, photoId, chunkIndex, totalChunks, chunkData, fileName, srNo) {
+  var cache = CacheService.getScriptCache();
+  var key = 'photo_' + photoId + '_' + chunkIndex;
+  cache.put(key, chunkData, 600); // 10 min cache
 
-    var data = raw ? JSON.parse(raw) : {};
-    var ss   = getDatabaseSpreadsheet(e);
-    var act  = data.action || (e && e.parameter && e.parameter.action) || 'SUBMIT_AUDIT';
-
-    if (!ss) return respond({ status: 'ERROR', message: 'Spreadsheet not accessible' });
-
-    if (act === 'SUBMIT_AUDIT') {
-      var headerRes  = handleAuditHeader(ss, data.header || {});
-      var auditId    = (data.header && data.header.auditId) ? data.header.auditId : ('ENG-' + Date.now());
-      var dateStr    = (data.header && data.header.date) ? data.header.date : '';
-
-      // Save photos directly into Drive's Photos folder
-      var photoMap = {};
-      if (data.photos && data.photos.length > 0) {
-        photoMap = saveAuditPhotosToDrive(headerRes.driveFolderId, data.photos, auditId, dateStr);
-      }
-
-      // Attach Drive photo links to results
-      var resultsWithUrls = (data.results || []).map(function(r) {
-        if (photoMap[r.sr]) {
-          r.photoUrl = photoMap[r.sr];
-        }
-        return r;
-      });
-
-      var resultsRes = handleAuditResults(ss, auditId, resultsWithUrls);
-      var actionsRes = handleAuditActions(ss, auditId, data.actions || []);
-
-      // Send Deviation Alert Email if any Non-Conformance / Observations occurred
-      if (data.actions && data.actions.length > 0) {
-        try {
-          sendDeviationAlertEmail(auditId, data.header || {}, data.actions, resultsWithUrls, headerRes.driveFolderUrl);
-        } catch (mailErr) {
-          Logger.log('Deviation alert email notice: ' + mailErr);
-        }
-      }
-
-      return respond({
-        status: 'SUCCESS',
-        auditId: auditId,
-        driveFolderId: headerRes.driveFolderId,
-        driveFolderUrl: headerRes.driveFolderUrl,
-        resultsAdded: resultsRes.rowsAdded,
-        actionsAdded: actionsRes.actionsAdded,
-        photosSaved: Object.keys(photoMap).length
-      });
-    }
-
-    if (act === 'AUDIT_HEADER')  return respond(handleAuditHeader(ss, data));
-    if (act === 'UPDATE_ACTION') return respond(handleUpdateAction(ss, data));
-    return respond({ status: 'ERROR', message: 'Unknown action: ' + act });
-  } catch (err) {
-    return respond({ status: 'ERROR', message: err.toString() });
-  }
-}
-
-function respond(obj) {
-  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
-}
-
-// ──────────────────────────────────────────────────────────────────────────────
-// SAVE PHOTOS TO GOOGLE DRIVE (Photos Subfolder)
-// ──────────────────────────────────────────────────────────────────────────────
-function saveAuditPhotosToDrive(auditFolderId, photos, auditId, dateStr) {
-  var photoMap = {};
-  if (!photos || photos.length === 0) return photoMap;
-  try {
-    var auditFolder = null;
-    if (auditFolderId) {
-      try { auditFolder = DriveApp.getFolderById(auditFolderId); } catch (e) {}
-    }
-    if (!auditFolder && auditId) {
-      var folderInfo = createAuditDriveFolderHierarchy(auditId, dateStr);
-      if (folderInfo && folderInfo.folderId) {
-        auditFolder = DriveApp.getFolderById(folderInfo.folderId);
+  if (chunkIndex === totalChunks - 1) {
+    var fullBase64 = '';
+    for (var i = 0; i < totalChunks; i++) {
+      var cKey = 'photo_' + photoId + '_' + i;
+      var chunk = (i === chunkIndex) ? chunkData : cache.get(cKey);
+      if (chunk) {
+        fullBase64 += chunk;
+        cache.remove(cKey);
       }
     }
-    if (!auditFolder) return photoMap;
 
-    var photosFolder = getOrCreateFolder(auditFolder, 'Photos');
+    if (fullBase64.indexOf('base64,') !== -1) {
+      fullBase64 = fullBase64.split('base64,')[1];
+    }
+    fullBase64 = fullBase64.replace(/ /g, '+');
 
-    for (var i = 0; i < photos.length; i++) {
-      var p = photos[i];
-      var base64Data = p.photoBase64 || '';
-      if (!base64Data) continue;
-
-      if (base64Data.indexOf('base64,') !== -1) {
-        base64Data = base64Data.split('base64,')[1];
+    try {
+      var auditFolder = null;
+      if (folderId) {
+        try { auditFolder = DriveApp.getFolderById(folderId); } catch (e) {}
       }
-      // Fix URL-decoding spaces to +
-      base64Data = base64Data.replace(/ /g, '+');
+      if (!auditFolder && auditId) {
+        var folderInfo = createAuditDriveFolderHierarchy(auditId, '');
+        if (folderInfo.folderId) auditFolder = DriveApp.getFolderById(folderInfo.folderId);
+      }
+      if (!auditFolder) auditFolder = DriveApp.getRootFolder();
 
-      var decoded = Utilities.base64Decode(base64Data);
-      var fileName = p.fileName || ('Photo_Sr' + (p.sr || (i + 1)) + '.jpg');
+      var photosFolder = getOrCreateFolder(auditFolder, 'Photos');
+      var decoded = Utilities.base64Decode(fullBase64);
       var blob = Utilities.newBlob(decoded, 'image/jpeg', fileName);
       var file = photosFolder.createFile(blob);
 
@@ -211,12 +172,29 @@ function saveAuditPhotosToDrive(auditFolderId, photos, auditId, dateStr) {
         file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
       } catch (shareErr) {}
 
-      photoMap[p.sr] = file.getUrl();
+      var photoUrl = file.getUrl();
+
+      // Update Audit_Details sheet with Photo URL for this Sr No.
+      if (ss) {
+        var detailsSheet = ss.getSheetByName('Audit_Details');
+        if (detailsSheet) {
+          var data = detailsSheet.getDataRange().getValues();
+          for (var r = 1; r < data.length; r++) {
+            if (String(data[r][0]) === String(auditId) && Number(data[r][1]) === Number(srNo)) {
+              detailsSheet.getRange(r + 1, 10).setValue(photoUrl); // Column 10 is Photo URL
+              break;
+            }
+          }
+        }
+      }
+
+      return { status: 'SUCCESS', photoUrl: photoUrl, fileName: fileName };
+    } catch (err) {
+      return { status: 'ERROR', message: 'Failed to create image: ' + err.toString() };
     }
-  } catch (err) {
-    Logger.log('Photo upload error: ' + err.toString());
   }
-  return photoMap;
+
+  return { status: 'CHUNK_SAVED', chunkIndex: chunkIndex };
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

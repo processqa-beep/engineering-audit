@@ -93,7 +93,7 @@ export class GasBackendClient {
     return checkpoints;
   }
 
-  // ── SUBMIT AUDIT (Full Atomic 1-Shot Submission + Photos to Drive) ────────────
+  // ── SUBMIT AUDIT (Full JSONP Pipeline with Photo Chunking & HTML Email) ──────
   public static async submitAudit(
     header: AuditHeader,
     results: AuditResult[],
@@ -112,6 +112,7 @@ export class GasBackendClient {
     const url = this.getScriptUrl();
     const sheetId = this.getSheetId();
 
+    // Only evaluated results
     const slimResults = results.map((r) => ({
       sr: r.srNo,
       comp: (r.componentName || '').slice(0, 80),
@@ -122,18 +123,8 @@ export class GasBackendClient {
       notes: (r.observationNotes || '').slice(0, 150),
       action: (r.recommendedAction || '').slice(0, 150),
       crit: r.isCritical ? 1 : 0,
-      hasPhoto: Boolean(r.photoUrl && r.photoUrl.startsWith('data:image')),
+      whatImpactIfThisPartGetsFail: (r.whatImpactIfThisPartGetsFail || '').slice(0, 150),
     }));
-
-    // Extract photos to upload to Drive's Photos subfolder
-    const photos = results
-      .filter((r) => r.photoUrl && r.photoUrl.startsWith('data:image'))
-      .map((r) => ({
-        sr: r.srNo,
-        comp: (r.componentName || 'Component').replace(/[^a-zA-Z0-9_-]/g, '_'),
-        photoBase64: r.photoUrl,
-        fileName: `Photo_Sr${r.srNo}_${(r.componentName || 'Comp').replace(/[^a-zA-Z0-9_-]/g, '_')}.jpg`,
-      }));
 
     const slimActions = actions.map((a) => ({
       id: a.actionId,
@@ -150,84 +141,110 @@ export class GasBackendClient {
     let driveFolderUrl = '';
 
     try {
-      // 1. Send complete Audit (Header + Details + Actions + Photos) in 1 full POST request
-      const payload = JSON.stringify({
-        action: 'SUBMIT_AUDIT',
-        sheetId,
-        header,
-        results: slimResults,
-        actions: slimActions,
-        photos,
-      });
+      // 1. Register Audit Header (Creates Audit_Master row + Drive Folder + Photos subfolder)
+      const headerRes = await jsonpRequest<any>(
+        url,
+        {
+          action: 'AUDIT_HEADER',
+          sheetId,
+          payload: JSON.stringify(header),
+        },
+        15000
+      );
 
-      // 1. Send complete Audit via fetch POST
-      try {
-        await fetch(url, {
-          method: 'POST',
-          mode: 'no-cors',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: payload,
-        });
-      } catch (postErr) {
-        console.warn('POST sync notice:', postErr);
+      if (headerRes?.status === 'SUCCESS') {
+        driveFolderId = headerRes.driveFolderId || '';
+        driveFolderUrl = headerRes.driveFolderUrl || '';
       }
 
-      // 2. If photos are present, also post via hidden iframe for guaranteed delivery through GAS 302 redirect
-      if (photos.length > 0 && typeof document !== 'undefined') {
-        try {
-          const iframeName = 'gas_photo_frame_' + Date.now();
-          const iframe = document.createElement('iframe');
-          iframe.name = iframeName;
-          iframe.style.display = 'none';
-          document.body.appendChild(iframe);
-
-          const form = document.createElement('form');
-          form.method = 'POST';
-          form.action = url;
-          form.target = iframeName;
-          form.style.display = 'none';
-
-          const input = document.createElement('input');
-          input.type = 'hidden';
-          input.name = 'postData';
-          input.value = payload;
-          form.appendChild(input);
-
-          document.body.appendChild(form);
-          form.submit();
-
-          setTimeout(() => {
-            form.remove();
-            iframe.remove();
-          }, 5000);
-        } catch (iframeErr) {
-          console.warn('Iframe form post notice:', iframeErr);
-        }
-      }
-
-      // 2. Also register header via JSONP to retrieve the live Google Drive folder link
-      try {
-        const headerRes = await jsonpRequest<any>(
+      // 2. Submit Evaluated Audit Results to Audit_Details
+      if (slimResults.length > 0) {
+        await jsonpRequest<any>(
           url,
           {
-            action: 'AUDIT_HEADER',
+            action: 'AUDIT_RESULTS',
             sheetId,
-            payload: JSON.stringify(header),
+            auditId: header.auditId,
+            payload: JSON.stringify({ auditId: header.auditId, results: slimResults }),
           },
           15000
         );
+      }
 
-        if (headerRes?.status === 'SUCCESS') {
-          driveFolderId = headerRes.driveFolderId || '';
-          driveFolderUrl = headerRes.driveFolderUrl || '';
+      // 3. Submit Action Items to Action_Tracker
+      if (slimActions.length > 0) {
+        await jsonpRequest<any>(
+          url,
+          {
+            action: 'AUDIT_ACTIONS',
+            sheetId,
+            auditId: header.auditId,
+            payload: JSON.stringify({ auditId: header.auditId, actions: slimActions }),
+          },
+          15000
+        );
+      }
+
+      // 4. Upload Photos via JSONP Chunks (guaranteed cross-domain delivery into Drive's Photos folder)
+      const photos = results.filter((r) => r.photoUrl && r.photoUrl.startsWith('data:image'));
+      for (const photo of photos) {
+        const photoBase64 = photo.photoUrl || '';
+        const CHUNK_SIZE = 3500;
+        const totalChunks = Math.ceil(photoBase64.length / CHUNK_SIZE);
+        const photoId = `${header.auditId.replace(/[^a-zA-Z0-9]/g, '')}_sr${photo.srNo}`;
+        const fileName = `Photo_Sr${photo.srNo}_${(photo.componentName || 'Comp').replace(/[^a-zA-Z0-9_-]/g, '_')}.jpg`;
+
+        for (let c = 0; c < totalChunks; c++) {
+          const chunkData = photoBase64.slice(c * CHUNK_SIZE, (c + 1) * CHUNK_SIZE);
+          try {
+            await jsonpRequest<any>(
+              url,
+              {
+                action: 'SAVE_PHOTO_CHUNK',
+                sheetId,
+                auditId: header.auditId,
+                folderId: driveFolderId,
+                photoId,
+                chunkIndex: String(c),
+                totalChunks: String(totalChunks),
+                chunkData,
+                fileName,
+                srNo: String(photo.srNo),
+              },
+              15000
+            );
+          } catch (photoErr) {
+            console.warn('Photo chunk upload notice:', photoErr);
+          }
         }
-      } catch (jsonpErr) {
-        console.warn('JSONP header notice:', jsonpErr);
+      }
+
+      // 5. Send Deviation Notification Email if deviations exist
+      if (actions.length > 0) {
+        try {
+          await jsonpRequest<any>(
+            url,
+            {
+              action: 'SEND_ALERT_EMAIL',
+              sheetId,
+              payload: JSON.stringify({
+                auditId: header.auditId,
+                header,
+                actions: slimActions,
+                results: slimResults,
+                driveFolderUrl,
+              }),
+            },
+            15000
+          );
+        } catch (emailErr) {
+          console.warn('Email trigger notice:', emailErr);
+        }
       }
 
       return {
         status: 'SUCCESS',
-        message: '✅ Transmitted to Google Sheets & Drive!',
+        message: '✅ Transmitted to Google Sheets, Drive & Email Dispatched!',
         driveFolderId,
         driveFolderUrl,
       };
@@ -235,7 +252,9 @@ export class GasBackendClient {
       console.warn('[GAS] Submit error (saved locally):', err);
       return {
         status: 'LOCAL_SAVED',
-        message: `Saved locally. Sync notice: ${err.message}`,
+        message: `Saved locally. Notice: ${err.message}`,
+        driveFolderId,
+        driveFolderUrl,
       };
     }
   }

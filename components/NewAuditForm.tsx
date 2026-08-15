@@ -329,7 +329,7 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
       const img = new Image();
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        const MAX_DIM = 1200;
+        const MAX_DIM = 800;
         let width = img.width;
         let height = img.height;
 
@@ -346,7 +346,7 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
         const ctx = canvas.getContext('2d');
         if (ctx) {
           ctx.drawImage(img, 0, 0, width, height);
-          const compressedBase64 = canvas.toDataURL('image/jpeg', 0.75);
+          const compressedBase64 = canvas.toDataURL('image/jpeg', 0.6);
           setCheckpointStates((prev) => {
             const updated = [...prev];
             updated[index] = { ...updated[index], photoUrl: compressedBase64 };
