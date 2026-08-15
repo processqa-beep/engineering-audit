@@ -219,38 +219,64 @@ export class GasBackendClient {
         );
       }
 
-      // ── Step 3: Upload Photos via Safe JSONP Chunks (Creates JPEG in Drive Photos folder) ──
+      // ── Step 3: Ultra-Fast Parallel Photo Chunk Upload ───────────────────
       const photos = results.filter((r) => r.photoUrl && r.photoUrl.startsWith('data:image'));
       for (const photo of photos) {
         const photoBase64 = photo.photoUrl || '';
-        const CHUNK_SIZE = 1200;
+        const CHUNK_SIZE = 1500;
         const totalChunks = Math.ceil(photoBase64.length / CHUNK_SIZE);
         const photoId = `${header.auditId.replace(/[^a-zA-Z0-9]/g, '')}_sr${photo.srNo}`;
         const fileName = `Photo_Sr${photo.srNo}_${(photo.componentName || 'Comp').replace(/[^a-zA-Z0-9_-]/g, '_')}.jpg`;
 
-        for (let c = 0; c < totalChunks; c++) {
-          const chunkData = photoBase64.slice(c * CHUNK_SIZE, (c + 1) * CHUNK_SIZE);
-          try {
-            await jsonpRequest<any>(
-              scriptUrl,
-              {
-                action: 'SAVE_PHOTO_CHUNK',
-                sheetId,
-                auditId: header.auditId,
-                folderId: driveFolderId,
-                photoId,
-                chunkIndex: String(c),
-                totalChunks: String(totalChunks),
-                chunkData,
-                fileName,
-                srNo: String(photo.srNo),
-              },
-              15000
+        // Send intermediate chunks 0 .. totalChunks-2 concurrently
+        if (totalChunks > 1) {
+          const intermediatePromises = [];
+          for (let c = 0; c < totalChunks - 1; c++) {
+            const chunkData = photoBase64.slice(c * CHUNK_SIZE, (c + 1) * CHUNK_SIZE);
+            intermediatePromises.push(
+              jsonpRequest<any>(
+                scriptUrl,
+                {
+                  action: 'SAVE_PHOTO_CHUNK',
+                  sheetId,
+                  auditId: header.auditId,
+                  folderId: driveFolderId,
+                  photoId,
+                  chunkIndex: String(c),
+                  totalChunks: String(totalChunks),
+                  chunkData,
+                  fileName,
+                  srNo: String(photo.srNo),
+                },
+                12000
+              ).catch((e) => console.warn(`Chunk ${c} notice:`, e))
             );
-            await new Promise((resolve) => setTimeout(resolve, 40));
-          } catch (photoErr) {
-            console.warn(`Photo chunk ${c}/${totalChunks} notice:`, photoErr);
           }
+          await Promise.all(intermediatePromises);
+        }
+
+        // Send final chunk to trigger image assembly in Drive
+        const lastIdx = totalChunks - 1;
+        const lastChunkData = photoBase64.slice(lastIdx * CHUNK_SIZE, (lastIdx + 1) * CHUNK_SIZE);
+        try {
+          await jsonpRequest<any>(
+            scriptUrl,
+            {
+              action: 'SAVE_PHOTO_CHUNK',
+              sheetId,
+              auditId: header.auditId,
+              folderId: driveFolderId,
+              photoId,
+              chunkIndex: String(lastIdx),
+              totalChunks: String(totalChunks),
+              chunkData: lastChunkData,
+              fileName,
+              srNo: String(photo.srNo),
+            },
+            15000
+          );
+        } catch (finalChunkErr) {
+          console.warn('Final photo chunk notice:', finalChunkErr);
         }
       }
 
