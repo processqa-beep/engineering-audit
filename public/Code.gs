@@ -1,31 +1,41 @@
 /**
  * PLANT ENGINEERING AUDIT PORTAL — GOOGLE APPS SCRIPT BACKEND
  * Architecture: Vercel (Frontend) → JSONP GET → Google Apps Script → Google Sheets + Drive
- *
- * Supports BOTH:
- * 1. Container-bound scripts (created from Google Sheet -> Extensions -> Apps Script)
- * 2. Standalone scripts (created at script.google.com) - auto finds or creates Engineering_Audit_Database sheet!
  */
+
+// ──────────────────────────────────────────────────────────────────────────────
+// OPTIONAL: If using a standalone script, paste your Google Sheet ID below.
+// Example: If your Sheet URL is https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit
+// Then SPREADSHEET_ID is "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"
+// ──────────────────────────────────────────────────────────────────────────────
+var SPREADSHEET_ID = ""; 
 
 // ──────────────────────────────────────────────────────────────────────────────
 // SPREADSHEET RESOLVER — Bulletproof for Container-Bound & Standalone scripts
 // ──────────────────────────────────────────────────────────────────────────────
 function getDatabaseSpreadsheet(e) {
-  // 1. Try active spreadsheet (container-bound)
+  // 1. Try hardcoded SPREADSHEET_ID at top of file
+  try {
+    if (SPREADSHEET_ID && SPREADSHEET_ID.trim().length > 5) {
+      return SpreadsheetApp.openById(SPREADSHEET_ID.trim());
+    }
+  } catch (err) {}
+
+  // 2. Try explicit sheet ID passed in request params from Web App
+  try {
+    var explicitId = (e && e.parameter && e.parameter.sheetId) ? e.parameter.sheetId.trim() : '';
+    if (explicitId && explicitId.length > 5) {
+      return SpreadsheetApp.openById(explicitId);
+    }
+  } catch (err) {}
+
+  // 3. Try active spreadsheet (container-bound script)
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     if (ss) return ss;
   } catch (err) {}
 
-  // 2. Try explicit sheet ID passed in request params
-  try {
-    var explicitId = (e && e.parameter && e.parameter.sheetId) ? e.parameter.sheetId.trim() : '';
-    if (explicitId) {
-      return SpreadsheetApp.openById(explicitId);
-    }
-  } catch (err) {}
-
-  // 3. Search Drive for existing "Engineering_Audit_Database" spreadsheet
+  // 4. Search Drive for existing "Engineering_Audit_Database" spreadsheet
   try {
     var files = DriveApp.getFilesByName('Engineering_Audit_Database');
     while (files.hasNext()) {
@@ -36,7 +46,7 @@ function getDatabaseSpreadsheet(e) {
     }
   } catch (err) {}
 
-  // 4. Create new spreadsheet in Drive root if none found
+  // 5. Create new spreadsheet in Drive root if none found
   try {
     var newSS = SpreadsheetApp.create('Engineering_Audit_Database');
     return newSS;
@@ -46,27 +56,48 @@ function getDatabaseSpreadsheet(e) {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
+// ONE-TIME PERMISSIONS HELPER
+// Select "SETUP_PERMISSIONS" in top toolbar and click "Run (▶)" to authorize!
+// ──────────────────────────────────────────────────────────────────────────────
+function SETUP_PERMISSIONS() {
+  Logger.log("Testing Spreadsheet & Drive permissions...");
+  var ss = getDatabaseSpreadsheet();
+  if (ss) {
+    Logger.log("✅ SUCCESS! Connected to: " + ss.getName() + " (ID: " + ss.getId() + ")");
+    Logger.log("URL: " + ss.getUrl());
+  } else {
+    Logger.log("⚠️ Could not open spreadsheet. Please paste your Google Sheet ID in SPREADSHEET_ID at line 10.");
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 // ROUTER (JSONP GET)
 // ──────────────────────────────────────────────────────────────────────────────
 function doGet(e) {
   var result;
   try {
-    var action   = (e.parameter && e.parameter.action) ? e.parameter.action : 'PING';
-    var callback = (e.parameter && e.parameter.callback) ? e.parameter.callback : null;
+    var action   = (e && e.parameter && e.parameter.action) ? e.parameter.action : 'PING';
+    var callback = (e && e.parameter && e.parameter.callback) ? e.parameter.callback : null;
     var ss       = getDatabaseSpreadsheet(e);
 
-    if (!ss && action !== 'SEND_TEST_EMAIL') {
+    if (action === 'SEND_TEST_EMAIL') {
+      var email = (e.parameter && e.parameter.email) ? e.parameter.email : 'mehul.chikhaliya@borosil.com';
+      sendTestNotificationEmail(email);
+      result = { status: 'SUCCESS', message: 'Test email sent to ' + email };
+
+    } else if (!ss) {
       result = {
         status: 'ERROR',
-        message: 'Could not connect to Google Sheet. If using standalone Apps Script, run the script once in Apps Script editor to grant Drive permissions.'
+        message: 'Google Sheet not found. Please paste your Google Sheet ID into SPREADSHEET_ID at line 10 of Code.gs.'
       };
+
     } else if (action === 'PING') {
       result = {
         status: 'SUCCESS',
-        message: 'Connected to ' + ss.getName(),
-        sheetName: ss.getName(),
-        sheetId: ss.getId(),
-        sheetUrl: ss.getUrl(),
+        message: 'Connected to ' + (ss.getName ? ss.getName() : 'Google Sheet'),
+        sheetName: ss.getName ? ss.getName() : 'Google Sheet',
+        sheetId: ss.getId ? ss.getId() : '',
+        sheetUrl: ss.getUrl ? ss.getUrl() : '',
         timestamp: new Date().toISOString()
       };
 
@@ -78,11 +109,6 @@ function doGet(e) {
 
     } else if (action === 'GET_ACTIONS') {
       result = handleGetActions(ss);
-
-    } else if (action === 'SEND_TEST_EMAIL') {
-      var email = (e.parameter && e.parameter.email) ? e.parameter.email : 'mehul.chikhaliya@borosil.com';
-      sendTestNotificationEmail(email);
-      result = { status: 'SUCCESS', message: 'Test email sent to ' + email };
 
     } else if (action === 'AUDIT_HEADER') {
       var header = JSON.parse(e.parameter.payload || '{}');
@@ -115,7 +141,6 @@ function doGet(e) {
   return ContentService.createTextOutput(json).setMimeType(ContentService.MimeType.JSON);
 }
 
-// doPost kept for completeness
 function doPost(e) {
   try {
     var ss   = getDatabaseSpreadsheet(e);
@@ -136,9 +161,6 @@ function respond(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// STEP 1 — AUDIT HEADER
-// ──────────────────────────────────────────────────────────────────────────────
 function handleAuditHeader(ss, header) {
   var sheet = ss.getSheetByName('Audit_Master');
   if (!sheet) {
@@ -189,9 +211,6 @@ function handleAuditHeader(ss, header) {
   return { status: 'SUCCESS', auditId: header.auditId, driveFolderId: folderInfo.folderId, driveFolderUrl: folderInfo.folderUrl };
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// STEP 2 — AUDIT RESULTS BATCH
-// ──────────────────────────────────────────────────────────────────────────────
 function handleAuditResults(ss, auditId, results) {
   var sheet = ss.getSheetByName('Audit_Details');
   if (!sheet) {
@@ -231,9 +250,6 @@ function handleAuditResults(ss, auditId, results) {
   return { status: 'SUCCESS', auditId: auditId, rowsAdded: results.length };
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// STEP 3 — AUDIT ACTIONS
-// ──────────────────────────────────────────────────────────────────────────────
 function handleAuditActions(ss, auditId, actions) {
   if (!actions || actions.length === 0) return { status: 'SUCCESS', message: 'No actions to save.' };
 
@@ -281,9 +297,6 @@ function handleAuditActions(ss, auditId, actions) {
   return { status: 'SUCCESS', auditId: auditId, actionsAdded: actions.length };
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// READ CHECKPOINTS from Checkpoint_Master tab
-// ──────────────────────────────────────────────────────────────────────────────
 function handleGetCheckpoints(ss) {
   var sheet = ss.getSheetByName('Checkpoint_Master');
   if (!sheet) sheet = ss.getSheetByName('Checkpoints') || ss.getSheets()[0];
@@ -357,9 +370,6 @@ function handleGetCheckpoints(ss) {
   return { status: 'SUCCESS', checkpoints: checkpoints, total: checkpoints.length };
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// READ AUDITS from Audit_Master
-// ──────────────────────────────────────────────────────────────────────────────
 function handleGetAudits(ss) {
   var sheet = ss.getSheetByName('Audit_Master');
   if (!sheet) return { status: 'SUCCESS', audits: [] };
@@ -373,9 +383,6 @@ function handleGetAudits(ss) {
   return { status: 'SUCCESS', audits: audits };
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// READ ACTIONS from Action_Tracker
-// ──────────────────────────────────────────────────────────────────────────────
 function handleGetActions(ss) {
   var sheet = ss.getSheetByName('Action_Tracker');
   if (!sheet) return { status: 'SUCCESS', actions: [] };
@@ -390,9 +397,6 @@ function handleGetActions(ss) {
   return { status: 'SUCCESS', actions: actions };
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// UPDATE ACTION STATUS
-// ──────────────────────────────────────────────────────────────────────────────
 function handleUpdateAction(ss, data) {
   var sheet = ss.getSheetByName('Action_Tracker');
   if (!sheet) return { status: 'ERROR', message: 'Action_Tracker sheet not found' };
@@ -409,10 +413,6 @@ function handleUpdateAction(ss, data) {
   return { status: 'ERROR', message: 'Action ID not found: ' + data.actionId };
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// GOOGLE DRIVE — Create folder hierarchy
-// Engineering Audit System / Audit Records / 2026 / August / AuditID / Photos
-// ──────────────────────────────────────────────────────────────────────────────
 function createAuditDriveFolderHierarchy(auditId, dateStr) {
   try {
     var monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -439,9 +439,6 @@ function getOrCreateFolder(parent, name) {
   return it.hasNext() ? it.next() : parent.createFolder(name);
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// EMAIL NOTIFICATIONS
-// ──────────────────────────────────────────────────────────────────────────────
 function sendDeviationAlertEmail(auditId, actions) {
   var criticals = actions.filter(function(a) { return a.priority === 'Critical'; });
   if (criticals.length === 0) return;
