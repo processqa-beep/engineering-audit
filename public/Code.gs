@@ -119,11 +119,12 @@ function doPost(e) {
     if (act === 'SUBMIT_AUDIT') {
       var headerRes  = handleAuditHeader(ss, data.header || {});
       var auditId    = (data.header && data.header.auditId) ? data.header.auditId : ('ENG-' + Date.now());
+      var dateStr    = (data.header && data.header.date) ? data.header.date : '';
 
       // Save photos directly into Drive's Photos folder
       var photoMap = {};
-      if (data.photos && data.photos.length > 0 && headerRes.driveFolderId) {
-        photoMap = saveAuditPhotosToDrive(headerRes.driveFolderId, data.photos);
+      if (data.photos && data.photos.length > 0) {
+        photoMap = saveAuditPhotosToDrive(headerRes.driveFolderId, data.photos, auditId, dateStr);
       }
 
       // Attach Drive photo links to results
@@ -163,11 +164,20 @@ function respond(obj) {
 // ──────────────────────────────────────────────────────────────────────────────
 // SAVE PHOTOS TO GOOGLE DRIVE (Photos Subfolder)
 // ──────────────────────────────────────────────────────────────────────────────
-function saveAuditPhotosToDrive(auditFolderId, photos) {
+function saveAuditPhotosToDrive(auditFolderId, photos, auditId, dateStr) {
   var photoMap = {};
   if (!photos || photos.length === 0) return photoMap;
   try {
-    var auditFolder = auditFolderId ? DriveApp.getFolderById(auditFolderId) : null;
+    var auditFolder = null;
+    if (auditFolderId) {
+      try { auditFolder = DriveApp.getFolderById(auditFolderId); } catch (e) {}
+    }
+    if (!auditFolder && auditId) {
+      var folderInfo = createAuditDriveFolderHierarchy(auditId, dateStr);
+      if (folderInfo && folderInfo.folderId) {
+        auditFolder = DriveApp.getFolderById(folderInfo.folderId);
+      }
+    }
     if (!auditFolder) return photoMap;
 
     var photosFolder = getOrCreateFolder(auditFolder, 'Photos');
@@ -180,9 +190,12 @@ function saveAuditPhotosToDrive(auditFolderId, photos) {
       if (base64Data.indexOf('base64,') !== -1) {
         base64Data = base64Data.split('base64,')[1];
       }
+      // Fix URL-decoding spaces to +
+      base64Data = base64Data.replace(/ /g, '+');
 
       var decoded = Utilities.base64Decode(base64Data);
-      var blob = Utilities.newBlob(decoded, 'image/jpeg', p.fileName || ('Photo_Sr' + p.sr + '.jpg'));
+      var fileName = p.fileName || ('Photo_Sr' + (p.sr || (i + 1)) + '.jpg');
+      var blob = Utilities.newBlob(decoded, 'image/jpeg', fileName);
       var file = photosFolder.createFile(blob);
 
       try {
