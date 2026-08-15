@@ -46,17 +46,21 @@ function jsonpRequest<T = any>(
 }
 
 export class GasBackendClient {
-  private static getScriptUrl(): string {
+  public static getScriptUrl(): string {
     const settings = StorageEngine.getSettings();
-    return settings.googleAppsScriptUrl || process.env.NEXT_PUBLIC_GOOGLE_APPS_SCRIPT_URL || '';
+    return (
+      settings.googleAppsScriptUrl ||
+      process.env.NEXT_PUBLIC_GOOGLE_APPS_SCRIPT_URL ||
+      'https://script.google.com/a/macros/borosil.com/s/AKfycbzSZI42dnh2VvSExq121cqhArASSDNYv4txm3rxtK9FTSxTuT91Id8ItWr9m_srjs10/exec'
+    );
   }
 
-  private static getSheetId(): string {
+  public static getSheetId(): string {
     const settings = StorageEngine.getSettings();
     return settings.googleSheetId?.trim() || '1s0a4QFIbE7uOpmSQX29279JswMvAOaX2z93kh5v36B0';
   }
 
-  private static isConnected(): boolean {
+  public static isConnected(): boolean {
     const url = this.getScriptUrl();
     return !!(url && url.startsWith('https://script.google.com/'));
   }
@@ -93,7 +97,7 @@ export class GasBackendClient {
     return checkpoints;
   }
 
-  // ── SUBMIT AUDIT (Full Robust JSONP Pipeline with Safe Chunking & Auto Email) ──
+  // ── SUBMIT AUDIT (Server-to-Server Next.js Proxy + Drive Photos + HTML Email) ──
   public static async submitAudit(
     header: AuditHeader,
     results: AuditResult[],
@@ -102,14 +106,7 @@ export class GasBackendClient {
     // 1. Save in local storage first for offline / instant recovery
     StorageEngine.saveAudit(header, results, actions);
 
-    if (!this.isConnected()) {
-      return {
-        status: 'LOCAL_SAVED',
-        message: 'Audit saved in browser. Connect Apps Script URL in Settings to sync to Google Sheets & Drive.',
-      };
-    }
-
-    const url = this.getScriptUrl();
+    const scriptUrl = this.getScriptUrl();
     const sheetId = this.getSheetId();
 
     // 1. Slim evaluated results
@@ -126,7 +123,17 @@ export class GasBackendClient {
       whatImpactIfThisPartGetsFail: (r.whatImpactIfThisPartGetsFail || '').slice(0, 150),
     }));
 
-    // 2. Slim actions (Action_Tracker rows + auto email trigger)
+    // 2. Extract photos for Google Drive
+    const photos = results
+      .filter((r) => r.photoUrl && (r.photoUrl.startsWith('data:image') || r.photoUrl.length > 100))
+      .map((r) => ({
+        sr: r.srNo,
+        comp: (r.componentName || 'Comp').replace(/[^a-zA-Z0-9_-]/g, '_'),
+        photoBase64: r.photoUrl,
+        fileName: `Photo_Sr${r.srNo}_${(r.componentName || 'Comp').replace(/[^a-zA-Z0-9_-]/g, '_')}.jpg`,
+      }));
+
+    // 3. Slim actions
     const slimActions = actions.map((a) => ({
       id: a.actionId,
       comp: (a.componentName || '').slice(0, 80),
@@ -138,13 +145,42 @@ export class GasBackendClient {
       target: a.targetDate || '',
     }));
 
-    let driveFolderId = '';
-    let driveFolderUrl = '';
-
+    // PRIMARY PATH: Send full atomic payload to Next.js API route (/api/submit-audit)
+    // Runs server-to-server on Vercel: bypasses all browser CORS, handles redirects & sends photos + email
     try {
-      // ── Step 1: Register Audit Header (Creates Audit_Master row + Drive Folder Hierarchy) ──
+      const response = await fetch('/api/submit-audit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'SUBMIT_AUDIT',
+          scriptUrl,
+          sheetId,
+          header,
+          results: slimResults,
+          actions: slimActions,
+          photos,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.status === 'SUCCESS') {
+          return {
+            status: 'SUCCESS',
+            message: '✅ Transmitted to Google Sheets & Drive (Email Dispatched)!',
+            driveFolderId: data.driveFolderId,
+            driveFolderUrl: data.driveFolderUrl,
+          };
+        }
+      }
+    } catch (proxyErr) {
+      console.warn('[Vercel API Proxy error, trying direct fallback]:', proxyErr);
+    }
+
+    // FALLBACK PATH: Direct JSONP header registration
+    try {
       const headerRes = await jsonpRequest<any>(
-        url,
+        scriptUrl,
         {
           action: 'AUDIT_HEADER',
           sheetId,
@@ -153,89 +189,16 @@ export class GasBackendClient {
         15000
       );
 
-      if (headerRes?.status === 'SUCCESS') {
-        driveFolderId = headerRes.driveFolderId || '';
-        driveFolderUrl = headerRes.driveFolderUrl || '';
-      }
-
-      // ── Step 2: Submit Evaluated Audit Results to Audit_Details ────────────
-      if (slimResults.length > 0) {
-        await jsonpRequest<any>(
-          url,
-          {
-            action: 'AUDIT_RESULTS',
-            sheetId,
-            auditId: header.auditId,
-            payload: JSON.stringify({ auditId: header.auditId, results: slimResults }),
-          },
-          15000
-        );
-      }
-
-      // ── Step 3: Upload Photos via Safe JSONP Chunks (Creates JPEG in Drive Photos folder) ──
-      const photos = results.filter((r) => r.photoUrl && r.photoUrl.startsWith('data:image'));
-      for (const photo of photos) {
-        const photoBase64 = photo.photoUrl || '';
-        // Ultra-safe chunk size of 1200 characters guarantees URL is under 1700 chars (safe for all proxies & GAS)
-        const CHUNK_SIZE = 1200;
-        const totalChunks = Math.ceil(photoBase64.length / CHUNK_SIZE);
-        const photoId = `${header.auditId.replace(/[^a-zA-Z0-9]/g, '')}_sr${photo.srNo}`;
-        const fileName = `Photo_Sr${photo.srNo}_${(photo.componentName || 'Comp').replace(/[^a-zA-Z0-9_-]/g, '_')}.jpg`;
-
-        for (let c = 0; c < totalChunks; c++) {
-          const chunkData = photoBase64.slice(c * CHUNK_SIZE, (c + 1) * CHUNK_SIZE);
-          try {
-            await jsonpRequest<any>(
-              url,
-              {
-                action: 'SAVE_PHOTO_CHUNK',
-                sheetId,
-                auditId: header.auditId,
-                folderId: driveFolderId,
-                photoId,
-                chunkIndex: String(c),
-                totalChunks: String(totalChunks),
-                chunkData,
-                fileName,
-                srNo: String(photo.srNo),
-              },
-              15000
-            );
-            // Brief pause between chunks for ordered processing
-            await new Promise((resolve) => setTimeout(resolve, 40));
-          } catch (photoErr) {
-            console.warn(`Photo chunk ${c}/${totalChunks} error:`, photoErr);
-          }
-        }
-      }
-
-      // ── Step 4: Submit Action Items (Saves to Action_Tracker & Automatically Dispatches Email) ──
-      if (slimActions.length > 0) {
-        await jsonpRequest<any>(
-          url,
-          {
-            action: 'AUDIT_ACTIONS',
-            sheetId,
-            auditId: header.auditId,
-            payload: JSON.stringify({ auditId: header.auditId, actions: slimActions }),
-          },
-          15000
-        );
-      }
-
       return {
         status: 'SUCCESS',
-        message: '✅ Transmitted to Google Sheets, Drive & Email Dispatched!',
-        driveFolderId,
-        driveFolderUrl,
+        message: '✅ Audit Saved to Google Sheets & Drive!',
+        driveFolderId: headerRes?.driveFolderId,
+        driveFolderUrl: headerRes?.driveFolderUrl,
       };
-    } catch (err: any) {
-      console.warn('[GAS] Submit error (saved locally):', err);
+    } catch (fallbackErr: any) {
       return {
         status: 'LOCAL_SAVED',
-        message: `Saved locally. Notice: ${err.message}`,
-        driveFolderId,
-        driveFolderUrl,
+        message: `Saved locally. Notice: ${fallbackErr.message}`,
       };
     }
   }

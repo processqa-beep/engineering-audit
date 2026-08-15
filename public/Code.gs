@@ -1,6 +1,6 @@
 /**
  * PLANT ENGINEERING AUDIT PORTAL — GOOGLE APPS SCRIPT BACKEND
- * Architecture: Vercel (Frontend) → JSONP GET Router → Google Sheets + Drive + Email
+ * Architecture: Vercel (/api/submit-audit Node.js proxy) → Google Apps Script → Google Sheets + Drive + Email
  */
 
 var SPREADSHEET_ID = "1s0a4QFIbE7uOpmSQX29279JswMvAOaX2z93kh5v36B0";
@@ -38,7 +38,82 @@ function SETUP_PERMISSIONS() {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// ROUTER (JSONP GET — 100% Compatible with Corporate Google Workspace)
+// ROUTER (POST — Atomic Server-to-Server Full Submission from Next.js API)
+// ──────────────────────────────────────────────────────────────────────────────
+function doPost(e) {
+  try {
+    var raw = '';
+    if (e && e.postData && e.postData.contents) {
+      raw = e.postData.contents;
+    } else if (e && e.parameter && e.parameter.postData) {
+      raw = e.parameter.postData;
+    }
+
+    var data = raw ? JSON.parse(raw) : {};
+    var ss   = getDatabaseSpreadsheet(e);
+    var act  = data.action || (e && e.parameter && e.parameter.action) || 'SUBMIT_AUDIT';
+
+    if (!ss) return respond({ status: 'ERROR', message: 'Spreadsheet not accessible' });
+
+    if (act === 'SUBMIT_AUDIT') {
+      var headerRes  = handleAuditHeader(ss, data.header || {});
+      var auditId    = (data.header && data.header.auditId) ? data.header.auditId : ('ENG-' + Date.now());
+      var dateStr    = (data.header && data.header.date) ? data.header.date : '';
+
+      // 1. Save all attached inspection photos directly into Google Drive's Photos folder
+      var photoMap = {};
+      if (data.photos && data.photos.length > 0) {
+        photoMap = saveAuditPhotosToDrive(headerRes.driveFolderId, data.photos, auditId, dateStr);
+      }
+
+      // 2. Attach Google Drive photo links to results
+      var resultsWithUrls = (data.results || []).map(function(r) {
+        if (photoMap[r.sr]) {
+          r.photoUrl = photoMap[r.sr];
+        }
+        return r;
+      });
+
+      // 3. Write evaluated checkpoint rows to Audit_Details
+      var resultsRes = handleAuditResults(ss, auditId, resultsWithUrls);
+
+      // 4. Write action items to Action_Tracker
+      var actionsRes = handleAuditActions(ss, auditId, data.actions || []);
+
+      // 5. Send Stylized HTML Deviation Email if deviations exist
+      if (data.actions && data.actions.length > 0) {
+        try {
+          sendDeviationAlertEmail(auditId, data.header || {}, data.actions, resultsWithUrls, headerRes.driveFolderUrl);
+        } catch (mailErr) {
+          Logger.log('Deviation alert email notice: ' + mailErr);
+        }
+      }
+
+      return respond({
+        status: 'SUCCESS',
+        auditId: auditId,
+        driveFolderId: headerRes.driveFolderId,
+        driveFolderUrl: headerRes.driveFolderUrl,
+        resultsAdded: resultsRes.rowsAdded,
+        actionsAdded: actionsRes.actionsAdded,
+        photosSaved: Object.keys(photoMap).length
+      });
+    }
+
+    if (act === 'AUDIT_HEADER')  return respond(handleAuditHeader(ss, data));
+    if (act === 'UPDATE_ACTION') return respond(handleUpdateAction(ss, data));
+    return respond({ status: 'ERROR', message: 'Unknown action: ' + act });
+  } catch (err) {
+    return respond({ status: 'ERROR', message: err.toString() });
+  }
+}
+
+function respond(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// ROUTER (GET / JSONP Router for Read & Test actions)
 // ──────────────────────────────────────────────────────────────────────────────
 function doGet(e) {
   var result;
@@ -78,26 +153,6 @@ function doGet(e) {
       var header = JSON.parse(e.parameter.payload || '{}');
       result = handleAuditHeader(ss, header);
 
-    } else if (action === 'AUDIT_RESULTS') {
-      var data = JSON.parse(e.parameter.payload || '{}');
-      result = handleAuditResults(ss, data.auditId, data.results || []);
-
-    } else if (action === 'AUDIT_ACTIONS') {
-      var data2 = JSON.parse(e.parameter.payload || '{}');
-      result = handleAuditActions(ss, data2.auditId, data2.actions || []);
-
-    } else if (action === 'SAVE_PHOTO_CHUNK') {
-      var photoId     = e.parameter.photoId;
-      var auditId     = e.parameter.auditId;
-      var folderId    = e.parameter.folderId;
-      var chunkIndex  = Number(e.parameter.chunkIndex);
-      var totalChunks = Number(e.parameter.totalChunks);
-      var chunkData   = e.parameter.chunkData || '';
-      var fileName    = e.parameter.fileName || ('Photo_' + photoId + '.jpg');
-      var srNo        = Number(e.parameter.srNo) || 1;
-
-      result = handleSavePhotoChunk(ss, auditId, folderId, photoId, chunkIndex, totalChunks, chunkData, fileName, srNo);
-
     } else if (action === 'UPDATE_ACTION') {
       var payload = JSON.parse(e.parameter.payload || '{}');
       result = handleUpdateAction(ss, payload);
@@ -118,42 +173,38 @@ function doGet(e) {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// CHUNKED PHOTO SAVER (Decodes Base64 & Creates JPEG in Drive's Photos Folder)
+// SAVE PHOTOS TO GOOGLE DRIVE (Photos Subfolder)
 // ──────────────────────────────────────────────────────────────────────────────
-function handleSavePhotoChunk(ss, auditId, folderId, photoId, chunkIndex, totalChunks, chunkData, fileName, srNo) {
-  var cache = CacheService.getScriptCache();
-  var key = 'photo_' + photoId + '_' + chunkIndex;
-  cache.put(key, chunkData, 600); // 10 min cache
-
-  if (chunkIndex === totalChunks - 1) {
-    var fullBase64 = '';
-    for (var i = 0; i < totalChunks; i++) {
-      var cKey = 'photo_' + photoId + '_' + i;
-      var chunk = (i === chunkIndex) ? chunkData : cache.get(cKey);
-      if (chunk) {
-        fullBase64 += chunk;
-        cache.remove(cKey);
+function saveAuditPhotosToDrive(auditFolderId, photos, auditId, dateStr) {
+  var photoMap = {};
+  if (!photos || photos.length === 0) return photoMap;
+  try {
+    var auditFolder = null;
+    if (auditFolderId) {
+      try { auditFolder = DriveApp.getFolderById(auditFolderId); } catch (e) {}
+    }
+    if (!auditFolder && auditId) {
+      var folderInfo = createAuditDriveFolderHierarchy(auditId, dateStr);
+      if (folderInfo && folderInfo.folderId) {
+        auditFolder = DriveApp.getFolderById(folderInfo.folderId);
       }
     }
+    if (!auditFolder) return photoMap;
 
-    if (fullBase64.indexOf('base64,') !== -1) {
-      fullBase64 = fullBase64.split('base64,')[1];
-    }
-    fullBase64 = fullBase64.replace(/ /g, '+');
+    var photosFolder = getOrCreateFolder(auditFolder, 'Photos');
 
-    try {
-      var auditFolder = null;
-      if (folderId) {
-        try { auditFolder = DriveApp.getFolderById(folderId); } catch (e) {}
+    for (var i = 0; i < photos.length; i++) {
+      var p = photos[i];
+      var base64Data = p.photoBase64 || '';
+      if (!base64Data) continue;
+
+      if (base64Data.indexOf('base64,') !== -1) {
+        base64Data = base64Data.split('base64,')[1];
       }
-      if (!auditFolder && auditId) {
-        var folderInfo = createAuditDriveFolderHierarchy(auditId, '');
-        if (folderInfo.folderId) auditFolder = DriveApp.getFolderById(folderInfo.folderId);
-      }
-      if (!auditFolder) auditFolder = DriveApp.getRootFolder();
+      base64Data = base64Data.replace(/ /g, '+');
 
-      var photosFolder = getOrCreateFolder(auditFolder, 'Photos');
-      var decoded = Utilities.base64Decode(fullBase64);
+      var decoded = Utilities.base64Decode(base64Data);
+      var fileName = p.fileName || ('Photo_Sr' + (p.sr || (i + 1)) + '.jpg');
       var blob = Utilities.newBlob(decoded, 'image/jpeg', fileName);
       var file = photosFolder.createFile(blob);
 
@@ -161,29 +212,12 @@ function handleSavePhotoChunk(ss, auditId, folderId, photoId, chunkIndex, totalC
         file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
       } catch (shareErr) {}
 
-      var photoUrl = file.getUrl();
-
-      // Update Audit_Details sheet with Photo URL for this Sr No.
-      if (ss) {
-        var detailsSheet = ss.getSheetByName('Audit_Details');
-        if (detailsSheet) {
-          var data = detailsSheet.getDataRange().getValues();
-          for (var r = 1; r < data.length; r++) {
-            if (String(data[r][0]) === String(auditId) && Number(data[r][1]) === Number(srNo)) {
-              detailsSheet.getRange(r + 1, 10).setValue(photoUrl); // Column 10 is Photo URL
-              break;
-            }
-          }
-        }
-      }
-
-      return { status: 'SUCCESS', photoUrl: photoUrl, fileName: fileName };
-    } catch (err) {
-      return { status: 'ERROR', message: 'Failed to create image: ' + err.toString() };
+      photoMap[p.sr] = file.getUrl();
     }
+  } catch (err) {
+    Logger.log('Photo upload error: ' + err.toString());
   }
-
-  return { status: 'CHUNK_SAVED', chunkIndex: chunkIndex };
+  return photoMap;
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -282,7 +316,7 @@ function handleAuditResults(ss, auditId, results) {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// STEP 3 — AUDIT ACTIONS (Saves to Action_Tracker & Automatically Sends Email)
+// STEP 3 — AUDIT ACTIONS
 // ──────────────────────────────────────────────────────────────────────────────
 function handleAuditActions(ss, auditId, actions) {
   if (!actions || actions.length === 0) return { status: 'SUCCESS', message: 'No actions to save.' };
@@ -319,37 +353,6 @@ function handleAuditActions(ss, auditId, actions) {
 
   if (rows.length > 0) {
     sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
-  }
-
-  // AUTOMATICALLY DISPATCH DEVIATION EMAIL DIRECTLY FROM GAS
-  try {
-    var masterSheet = ss.getSheetByName('Audit_Master');
-    var headerInfo = { auditId: auditId };
-    var driveFolderUrl = '';
-
-    if (masterSheet) {
-      var mData = masterSheet.getDataRange().getValues();
-      for (var m = mData.length - 1; m >= 1; m--) {
-        if (String(mData[m][0]) === String(auditId)) {
-          headerInfo = {
-            auditId: mData[m][0],
-            date: mData[m][1],
-            sectionName: mData[m][3],
-            subSectionName: mData[m][4],
-            lineName: mData[m][5],
-            equipmentName: mData[m][6],
-            auditorName: mData[m][7],
-            driveFolderUrl: mData[m][16]
-          };
-          driveFolderUrl = mData[m][16];
-          break;
-        }
-      }
-    }
-
-    sendDeviationAlertEmail(auditId, headerInfo, actions, [], driveFolderUrl);
-  } catch (emailErr) {
-    Logger.log('Auto-email error: ' + emailErr.toString());
   }
 
   return { status: 'SUCCESS', auditId: auditId, actionsAdded: rows.length };
