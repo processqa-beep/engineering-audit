@@ -93,6 +93,7 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
     header: AuditHeader;
     results: AuditResult[];
     actions: ActionItem[];
+    syncResult?: { status: string; message: string; driveFolderId?: string; driveFolderUrl?: string };
   } | null>(null);
 
   // Cascading Sub-Sections for selected Section
@@ -487,14 +488,16 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
         createdAt: now.toISOString(),
       }));
 
+    let syncResult: { status: string; message: string; driveFolderId?: string; driveFolderUrl?: string } | undefined;
     try {
-      await GasBackendClient.submitAudit(header, results, actions);
-    } catch (err) {
+      syncResult = await GasBackendClient.submitAudit(header, results, actions);
+    } catch (err: any) {
       console.warn('Network sync notice:', err);
+      syncResult = { status: 'LOCAL_SAVED', message: err?.message || 'Sync error. Saved locally.' };
     }
 
     setSubmitting(false);
-    setLastSubmittedAudit({ header, results, actions });
+    setLastSubmittedAudit({ header, results, actions, syncResult });
 
     if (summary.overall !== 'FAIL') {
       try {
@@ -967,6 +970,38 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
                   <strong className="text-indigo-700 font-mono">{lastSubmittedAudit.header.compliancePercent.toFixed(1)}%</strong>
                 </div>
               </div>
+
+              {/* Live Sync Status Feedback */}
+              {lastSubmittedAudit.syncResult?.status === 'SUCCESS' ? (
+                <div className="p-3 bg-emerald-50 border border-emerald-300 text-emerald-900 rounded-2xl text-xs space-y-1 font-semibold">
+                  <div className="flex items-center space-x-1.5 text-emerald-800 font-extrabold">
+                    <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>Transmitted to Google Sheets &amp; Drive!</span>
+                  </div>
+                  <p className="text-[11px] text-emerald-700">Audit_Master, Audit_Details, and Action_Tracker updated.</p>
+                  {lastSubmittedAudit.syncResult.driveFolderUrl && (
+                    <a
+                      href={lastSubmittedAudit.syncResult.driveFolderUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center space-x-1 text-indigo-700 hover:text-indigo-900 underline font-extrabold text-[11px] pt-1"
+                    >
+                      <span>📁 Open Folder in Google Drive</span>
+                      <span className="text-[9px]">↗</span>
+                    </a>
+                  )}
+                </div>
+              ) : (
+                <div className="p-3 bg-amber-50 border border-amber-300 text-amber-900 rounded-2xl text-xs space-y-1 font-semibold">
+                  <div className="flex items-center space-x-1.5 text-amber-800 font-extrabold">
+                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>Saved in Browser (Local Storage)</span>
+                  </div>
+                  <p className="text-[11px] text-amber-700 leading-snug">
+                    {lastSubmittedAudit.syncResult?.message || 'Google Apps Script URL is not connected in Settings.'}
+                  </p>
+                </div>
+              )}
 
               {/* Export Buttons */}
               <div className="space-y-2 pt-1">

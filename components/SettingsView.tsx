@@ -87,7 +87,8 @@ export const SettingsView: React.FC = () => {
           document.getElementById(cb)?.remove();
           resolve(res);
         };
-        const qs = Object.entries({ ...extraParams, action, callback: cb, _t: String(Date.now()) })
+        const sheetIdParam = (settings.googleSheetId || '').trim();
+        const qs = Object.entries({ ...extraParams, action, ...(sheetIdParam ? { sheetId: sheetIdParam } : {}), callback: cb, _t: String(Date.now()) })
           .map(([k,v]) => encodeURIComponent(k)+'='+encodeURIComponent(v)).join('&');
         const s = document.createElement('script');
         s.id = cb;
@@ -184,172 +185,427 @@ export const SettingsView: React.FC = () => {
   };
 
   const codeGsSnippet = `/**
- * ENGINEERING AUDIT SYSTEM - GOOGLE APPS SCRIPT BACKEND
- * PROCESS QA & EQUIPMENT HEALTH PORTAL
- * --------------------------------------------------------------------------
- * Executed by: process.qa@borosil.com
- * Access: Anyone or Anyone within Borosil
+ * PLANT ENGINEERING AUDIT PORTAL — GOOGLE APPS SCRIPT BACKEND
+ * Architecture: Vercel (Frontend) → JSONP GET → Google Apps Script → Google Sheets + Drive
+ *
+ * Supports BOTH:
+ * 1. Container-bound scripts (created from Google Sheet -> Extensions -> Apps Script)
+ * 2. Standalone scripts (created at script.google.com) - auto finds or creates Engineering_Audit_Database sheet!
  */
 
-var SYSTEM_FOLDER_NAME = "Engineering Audit System";
-var DEFAULT_RECIPIENT_EMAILS = ["mehul.chikhaliya@borosil.com", "process.qa@borosil.com"];
-
-function doGet(e) {
-  var params = e ? e.parameter : {};
-  var action = params.action || "PING";
-  var callback = params.callback;
-  var response = { success: true, timestamp: new Date().toISOString() };
-  
+// ──────────────────────────────────────────────────────────────────────────────
+// SPREADSHEET RESOLVER
+// ──────────────────────────────────────────────────────────────────────────────
+function getDatabaseSpreadsheet(e) {
   try {
-    var ss = getOrCreateMasterSpreadsheet();
-    if (action === "SUBMIT_AUDIT" && params.payload) {
-      var postData = JSON.parse(params.payload);
-      response = handleSubmitAudit(ss, postData.auditHeader, postData.auditResults, postData.actions);
-    } else if (action === "PING") {
-      response.message = "Process QA Engineering Audit Google Apps Script API Online!";
-      response.spreadsheetId = ss.getId();
-      response.spreadsheetUrl = ss.getUrl();
-    } else if (action === "TEST_EMAIL") {
-      var targetEmail = params.email || "mehul.chikhaliya@borosil.com";
-      sendProcessQaEmailDirect(
-        targetEmail + ",process.qa@borosil.com",
-        "✅ [Process QA Audit Test] Connection Verified for " + targetEmail,
-        "Hello Mehul Chikhaliya,\\n\\nThis is a test notification from your Engineering Audit System running under process.qa@borosil.com.\\n\\nYour Google Apps Script Web App API is connected successfully, and emails are sending properly to " + targetEmail + "!\\n\\nProcess QA Department",
-        null
-      );
-      response.message = "Test email sent successfully to " + targetEmail + " and process.qa@borosil.com";
-    } else if (action === "GET_SECTIONS") { response.data = readSheetData(ss, "Sections"); }
-    else if (action === "GET_LINES") { response.data = readSheetData(ss, "Lines"); }
-    else if (action === "GET_EQUIPMENT") { response.data = readSheetData(ss, "Equipment"); }
-    else if (action === "GET_COMPONENTS") { response.data = readSheetData(ss, "Components"); }
-    else if (action === "GET_CHECKPOINTS") { response.data = readSheetData(ss, "Checkpoints"); }
-    else if (action === "GET_AUDITS") { response.data = readSheetData(ss, "Audits"); }
-    else if (action === "GET_ACTIONS") { response.data = readSheetData(ss, "Actions"); }
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    if (ss) return ss;
+  } catch (err) {}
+
+  try {
+    var explicitId = (e && e.parameter && e.parameter.sheetId) ? e.parameter.sheetId.trim() : '';
+    if (explicitId) {
+      return SpreadsheetApp.openById(explicitId);
+    }
+  } catch (err) {}
+
+  try {
+    var files = DriveApp.getFilesByName('Engineering_Audit_Database');
+    while (files.hasNext()) {
+      var file = files.next();
+      if (file.getMimeType() === MimeType.GOOGLE_SHEETS) {
+        return SpreadsheetApp.open(file);
+      }
+    }
+  } catch (err) {}
+
+  try {
+    var newSS = SpreadsheetApp.create('Engineering_Audit_Database');
+    return newSS;
+  } catch (err) {}
+
+  return null;
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// ROUTER (JSONP GET)
+// ──────────────────────────────────────────────────────────────────────────────
+function doGet(e) {
+  var result;
+  try {
+    var action   = (e.parameter && e.parameter.action) ? e.parameter.action : 'PING';
+    var callback = (e.parameter && e.parameter.callback) ? e.parameter.callback : null;
+    var ss       = getDatabaseSpreadsheet(e);
+
+    if (!ss && action !== 'SEND_TEST_EMAIL') {
+      result = {
+        status: 'ERROR',
+        message: 'Could not connect to Google Sheet. If using standalone Apps Script, run the script once in Apps Script editor to grant Drive permissions.'
+      };
+    } else if (action === 'PING') {
+      result = {
+        status: 'SUCCESS',
+        message: 'Connected to ' + ss.getName(),
+        sheetName: ss.getName(),
+        sheetId: ss.getId(),
+        sheetUrl: ss.getUrl(),
+        timestamp: new Date().toISOString()
+      };
+
+    } else if (action === 'GET_CHECKPOINTS' || action === 'getMasterData' || action === 'syncMasterData') {
+      result = handleGetCheckpoints(ss);
+
+    } else if (action === 'GET_AUDITS' || action === 'getAuditHistory') {
+      result = handleGetAudits(ss);
+
+    } else if (action === 'GET_ACTIONS') {
+      result = handleGetActions(ss);
+
+    } else if (action === 'SEND_TEST_EMAIL') {
+      var email = (e.parameter && e.parameter.email) ? e.parameter.email : 'mehul.chikhaliya@borosil.com';
+      sendTestNotificationEmail(email);
+      result = { status: 'SUCCESS', message: 'Test email sent to ' + email };
+
+    } else if (action === 'AUDIT_HEADER') {
+      var header = JSON.parse(e.parameter.payload || '{}');
+      result = handleAuditHeader(ss, header);
+
+    } else if (action === 'AUDIT_RESULTS') {
+      var data = JSON.parse(e.parameter.payload || '{}');
+      result = handleAuditResults(ss, data.auditId, data.results || []);
+
+    } else if (action === 'AUDIT_ACTIONS') {
+      var data2 = JSON.parse(e.parameter.payload || '{}');
+      result = handleAuditActions(ss, data2.auditId, data2.actions || []);
+
+    } else if (action === 'UPDATE_ACTION') {
+      var payload = JSON.parse(e.parameter.payload || '{}');
+      result = handleUpdateAction(ss, payload);
+
+    } else {
+      result = { status: 'ERROR', message: 'Unknown action: ' + action };
+    }
+
   } catch (err) {
-    response.success = false; response.error = err.toString();
+    result = { status: 'ERROR', message: err.toString() };
   }
-  
+
+  var json = JSON.stringify(result);
   if (callback) {
-    return ContentService.createTextOutput(callback + "(" + JSON.stringify(response) + ")").setMimeType(ContentService.MimeType.JAVASCRIPT);
+    return ContentService.createTextOutput(callback + '(' + json + ')').setMimeType(ContentService.MimeType.JAVASCRIPT);
   }
-  return ContentService.createTextOutput(JSON.stringify(response)).setMimeType(ContentService.MimeType.JSON);
+  return ContentService.createTextOutput(json).setMimeType(ContentService.MimeType.JSON);
 }
 
 function doPost(e) {
-  var response = { success: true, timestamp: new Date().toISOString() };
   try {
-    var postData;
-    if (e && e.postData && e.postData.contents) {
-      try { postData = JSON.parse(e.postData.contents); } catch(err) { if (e.parameter && e.parameter.payload) postData = JSON.parse(e.parameter.payload); }
-    } else if (e && e.parameter && e.parameter.payload) { postData = JSON.parse(e.parameter.payload); }
-    
-    var action = postData.action;
-    var ss = getOrCreateMasterSpreadsheet();
-    if (action === "SUBMIT_AUDIT") {
-      response = handleSubmitAudit(ss, postData.auditHeader, postData.auditResults, postData.actions);
-    } else if (action === "UPLOAD_PHOTO") {
-      response = handleUploadPhoto(postData.base64Data, postData.fileName, postData.folderId);
-    } else if (action === "UPDATE_ACTION") {
-      response = handleUpdateAction(ss, postData.actionItem);
-    }
+    var ss   = getDatabaseSpreadsheet(e);
+    var data = (e.postData && e.postData.contents) ? JSON.parse(e.postData.contents) : {};
+    var act  = data.action || 'AUDIT_HEADER';
+    if (!ss) return respond({ status: 'ERROR', message: 'Spreadsheet not accessible' });
+    if (act === 'AUDIT_HEADER')  return respond(handleAuditHeader(ss, data));
+    if (act === 'AUDIT_RESULTS') return respond(handleAuditResults(ss, data.auditId, data.results || []));
+    if (act === 'AUDIT_ACTIONS') return respond(handleAuditActions(ss, data.auditId, data.actions || []));
+    if (act === 'UPDATE_ACTION') return respond(handleUpdateAction(ss, data));
+    return respond({ status: 'ERROR', message: 'Unknown action' });
   } catch (err) {
-    response.success = false; response.error = err.toString();
+    return respond({ status: 'ERROR', message: err.toString() });
   }
-  return ContentService.createTextOutput(JSON.stringify(response)).setMimeType(ContentService.MimeType.JSON);
 }
 
-function getOrCreateMasterFolder() {
-  var folders = DriveApp.getFoldersByName(SYSTEM_FOLDER_NAME);
-  if (folders.hasNext()) return folders.next();
-  var main = DriveApp.createFolder(SYSTEM_FOLDER_NAME);
-  main.createFolder("Master Data"); main.createFolder("Audit Records"); main.createFolder("Photos"); main.createFolder("Reports"); main.createFolder("Backup");
-  return main;
+function respond(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
 
-function getOrCreateMasterSpreadsheet() {
-  var main = getOrCreateMasterFolder();
-  var files = main.getFilesByName("Engineering_Audit_Database");
-  if (files.hasNext()) return SpreadsheetApp.open(files.next());
-  var ss = SpreadsheetApp.create("Engineering_Audit_Database");
-  var ssFile = DriveApp.getFileById(ss.getId());
-  var masterFolder = main.getFoldersByName("Master Data").next();
-  ssFile.moveTo(masterFolder);
-  ["Sections","Lines","Equipment","Components","Checkpoints","Audit_Templates","Employees","Audits","Audit_Results","Actions","Photo_Records","Mail_Configs","Settings"].forEach(function(t){
-    if (!ss.getSheetByName(t)) ss.insertSheet(t);
-  });
-  return ss;
+function handleAuditHeader(ss, header) {
+  var sheet = ss.getSheetByName('Audit_Master');
+  if (!sheet) {
+    sheet = ss.insertSheet('Audit_Master');
+    sheet.appendRow([
+      'Audit ID','Date','Time','Section','Sub-Section','Line','Equipment',
+      'Auditor','Total Points','OK','NG','Observation','N/A','Compliance %',
+      'Overall Status','Drive Folder ID','Drive Folder URL','Submitted At'
+    ]);
+    sheet.setFrozenRows(1);
+  }
+
+  var folderInfo = createAuditDriveFolderHierarchy(header.auditId, header.date);
+
+  var data   = sheet.getDataRange().getValues();
+  var rowIdx = -1;
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === String(header.auditId)) { rowIdx = i + 1; break; }
+  }
+
+  var row = [
+    header.auditId,
+    header.date,
+    header.time,
+    header.sectionName  || header.sectionId,
+    header.subSectionName || header.subSectionId,
+    header.lineName     || header.lineId,
+    header.equipmentName || header.equipmentId,
+    header.auditorName,
+    header.totalCheckpoints,
+    header.okCount,
+    header.ngCount,
+    header.obsCount,
+    header.naCount,
+    header.compliancePercent,
+    header.overallStatus,
+    folderInfo.folderId,
+    folderInfo.folderUrl,
+    new Date().toISOString()
+  ];
+
+  if (rowIdx > 0) {
+    sheet.getRange(rowIdx, 1, 1, row.length).setValues([row]);
+  } else {
+    sheet.appendRow(row);
+  }
+
+  return { status: 'SUCCESS', auditId: header.auditId, driveFolderId: folderInfo.folderId, driveFolderUrl: folderInfo.folderUrl };
 }
 
-function handleSubmitAudit(ss, header, results, actions) {
-  if (!header) header = {};
-  if (!results) results = [];
-  if (!actions) actions = [];
+function handleAuditResults(ss, auditId, results) {
+  var sheet = ss.getSheetByName('Audit_Details');
+  if (!sheet) {
+    sheet = ss.insertSheet('Audit_Details');
+    sheet.appendRow([
+      'Audit ID','Sr No.','Section','Sub-Section','Line','Equipment','Component',
+      'Checkpoint','Standard Parameter','Actual Value','Status',
+      'Observation Notes','Recommended Action','Photo URL',
+      'Critical','Auditor','Timestamp'
+    ]);
+    sheet.setFrozenRows(1);
+  }
 
-  var auditId = header.auditId || ("ENG-" + Date.now());
-  var dateStr = header.date || new Date().toISOString().substring(0, 10);
-  var year = new Date(dateStr).getFullYear().toString();
-  var monthNames = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-  var month = monthNames[new Date(dateStr).getMonth()];
-  var mainFolder = getOrCreateMasterFolder();
-  var auditFolder = getOrCreateSubfolder(getOrCreateSubfolder(getOrCreateSubfolder(getOrCreateSubfolder(mainFolder, "Audit Records"), year), month), auditId);
-  header.driveFolderId = auditFolder.getId();
-  appendObjectToSheet(ss, "Audits", header);
-  if (results) results.forEach(function(r) { appendObjectToSheet(ss, "Audit_Results", r); });
-  if (actions) actions.forEach(function(a) { appendObjectToSheet(ss, "Actions", a); });
+  for (var i = 0; i < results.length; i++) {
+    var r = results[i];
+    sheet.appendRow([
+      auditId,
+      r.srNo      || (i + 1),
+      r.sectionName    || '',
+      r.subSectionName || '',
+      r.lineName       || '',
+      r.equipmentName  || '',
+      r.componentName  || '',
+      r.checkpointText || '',
+      r.standardParameter || '',
+      r.actualValue    || '',
+      r.status         || '',
+      r.observationNotes  || '',
+      r.recommendedAction || '',
+      r.photoUrl       || '',
+      r.isCritical ? 'Yes' : 'No',
+      r.auditor        || '',
+      r.timestamp      || new Date().toISOString()
+    ]);
+  }
 
-  sendProcessQaAuditHtmlEmails(ss, header, results, actions);
-  return { success: true, driveFolderId: auditFolder.getId(), driveFolderUrl: auditFolder.getUrl() };
+  return { status: 'SUCCESS', auditId: auditId, rowsAdded: results.length };
 }
 
-function sendProcessQaAuditHtmlEmails(ss, header, results, actions) {
+function handleAuditActions(ss, auditId, actions) {
+  if (!actions || actions.length === 0) return { status: 'SUCCESS', message: 'No actions to save.' };
+
+  var sheet = ss.getSheetByName('Action_Tracker');
+  if (!sheet) {
+    sheet = ss.insertSheet('Action_Tracker');
+    sheet.appendRow([
+      'Action ID','Audit ID','Section','Sub-Section','Line','Equipment','Component',
+      'Checkpoint','Observation','Recommended Action','Priority','Status',
+      'Target Date','Responsible Person','Closure Remark','Closure Photo','Closed Date','Created At'
+    ]);
+    sheet.setFrozenRows(1);
+  }
+
+  for (var i = 0; i < actions.length; i++) {
+    var a = actions[i];
+    sheet.appendRow([
+      a.actionId || ('ACT-' + Date.now() + '-' + i),
+      auditId,
+      a.sectionName    || '',
+      a.subSectionName || '',
+      a.lineName       || '',
+      a.equipmentName  || '',
+      a.componentName  || '',
+      a.checkpointText || '',
+      a.observation    || '',
+      a.recommendedAction || '',
+      a.priority       || 'Medium',
+      a.status         || 'Open',
+      a.targetDate     || '',
+      '',
+      '',
+      '',
+      '',
+      new Date().toISOString()
+    ]);
+  }
+
   try {
-    var mailConfigs = readSheetData(ss, "Mail_Configs");
-    var recipients = ["mehul.chikhaliya@borosil.com", "process.qa@borosil.com"];
-    if (mailConfigs) {
-      mailConfigs.forEach(function(cfg) {
-        if (cfg.active === true || cfg.active === "true") {
-          if (cfg.email && recipients.indexOf(cfg.email) === -1) recipients.push(cfg.email);
-        }
-      });
+    sendDeviationAlertEmail(auditId, actions);
+  } catch (mailErr) {
+    Logger.log('Email error: ' + mailErr);
+  }
+
+  return { status: 'SUCCESS', auditId: auditId, actionsAdded: actions.length };
+}
+
+function handleGetCheckpoints(ss) {
+  var sheet = ss.getSheetByName('Checkpoint_Master');
+  if (!sheet) sheet = ss.getSheetByName('Checkpoints') || ss.getSheets()[0];
+
+  var data = sheet.getDataRange().getValues();
+  if (data.length <= 1) return { status: 'SUCCESS', checkpoints: [] };
+
+  var headers = data[0].map(function(h) { return String(h).toLowerCase().trim(); });
+
+  function col(names) {
+    for (var n = 0; n < names.length; n++) {
+      for (var h = 0; h < headers.length; h++) {
+        if (headers[h] === names[n] || headers[h].indexOf(names[n]) >= 0) return h;
+      }
     }
-    
-    var lineName = (header.lineName || "Tempered Line 4") + " (" + (header.sectionName || "Grinding") + ")";
-    var auditorName = header.auditorName || "Mehul Chikhaliya";
-    var dateStr = header.date || new Date().toISOString().substring(0, 10);
-    var overallStatus = header.overallStatus || "FAIL";
-    var totalPoints = header.totalCheckpoints !== undefined ? header.totalCheckpoints : (results ? results.length : 0);
-    var okCount = header.okCount !== undefined ? header.okCount : (results ? results.filter(function(r){ return r.status === "OK"; }).length : 0);
-    var ngCount = header.ngCount !== undefined ? header.ngCount : (actions ? actions.length : 0);
-    var passRate = header.compliancePercent !== undefined ? Number(header.compliancePercent).toFixed(1) : "0.0";
+    return -1;
+  }
 
-    var subject = "⚠️ [Process QA Audit Alert] DEVIATIONS FOUND: " + (header.equipmentName || "Benteler Machine") + " (" + overallStatus + ")";
-    var plainBody = "Dear Process Owner,\\n\\nPlease review audit deviations for " + lineName + ".\\n\\nProcess QA Department";
+  var srIdx    = col(['sr no.','sr no','sr_no']);
+  var secIdx   = col(['section']);
+  var subIdx   = col(['sub section','sub-section','subsection']);
+  var lineIdx  = col(['applicable lines','applicable line','lines','line / machine','line/machine','line']);
+  var compIdx  = col(['component name','component']);
+  var ckIdx    = col(['checkpoint','activities to be followed','audit point']);
+  var specIdx  = col(['standard parameter','specification','standard']);
+  var minIdx   = col(['min','minimum']);
+  var maxIdx   = col(['max','maximum']);
+  var unitIdx  = col(['unit']);
+  var critIdx  = col(['criticality','severity']);
+  var activeIdx= col(['active']);
 
-    var htmlBody = '<div style="font-family: Arial, sans-serif; max-width: 680px; margin: 0 auto; color: #1e293b; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; background-color: #ffffff;">' +
-      '<div style="background-color: #4f46e5; color: #ffffff; padding: 16px 20px; border-radius: 8px; margin-bottom: 20px;"><h2 style="margin: 0; font-size: 18px; font-weight: bold;">ENGINEERING AUDIT & EQUIPMENT HEALTH DEVIATION REPORT</h2></div>' +
-      '<p style="font-size: 13px; font-weight: bold;">Dear Process Owner,</p><p style="font-size: 13px; color: #475569;">Please review the following deviations identified during today\'s process audit:</p>' +
-      '<table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 12px;">' +
-        '<tr><td style="padding: 8px; font-weight: bold; background-color: #f8fafc; border: 1px solid #cbd5e1;">Area / Line</td><td style="padding: 8px; border: 1px solid #cbd5e1; font-weight: bold; color: #4f46e5;">' + lineName + '</td><td style="padding: 8px; font-weight: bold; background-color: #f8fafc; border: 1px solid #cbd5e1;">Auditor</td><td style="padding: 8px; border: 1px solid #cbd5e1; font-weight: bold;">' + auditorName + '</td></tr>' +
-        '<tr><td style="padding: 8px; font-weight: bold; background-color: #f8fafc; border: 1px solid #cbd5e1;">Equipment</td><td style="padding: 8px; border: 1px solid #cbd5e1; font-weight: bold;">' + (header.equipmentName || "Benteler Double Edger") + '</td><td style="padding: 8px; font-weight: bold; background-color: #f8fafc; border: 1px solid #cbd5e1;">Date</td><td style="padding: 8px; border: 1px solid #cbd5e1;">' + dateStr + '</td></tr>' +
-      '</table>' +
-      '<table style="width: 100%; text-align: center; margin-bottom: 24px;"><tr>' +
-        '<td style="background-color: #f1f5f9; padding: 12px; border-radius: 8px;"><span style="font-size: 20px; font-weight: 800;">' + totalPoints + '</span><br/><span style="font-size: 10px;">TOTAL POINTS</span></td>' +
-        '<td style="background-color: #dcfce7; padding: 12px; border-radius: 8px;"><span style="font-size: 20px; font-weight: 800; color: #15803d;">' + okCount + '</span><br/><span style="font-size: 10px; color: #166534;">PASS</span></td>' +
-        '<td style="background-color: #ffe4e6; padding: 12px; border-radius: 8px;"><span style="font-size: 20px; font-weight: 800; color: #be123c;">' + ngCount + '</span><br/><span style="font-size: 10px; color: #9f1239;">DEVIATIONS</span></td>' +
-        '<td style="background-color: #e0e7ff; padding: 12px; border-radius: 8px;"><span style="font-size: 20px; font-weight: 800; color: #4338ca;">' + passRate + '%</span><br/><span style="font-size: 10px; color: #3730a3;">PASS RATE</span></td>' +
-      '</tr></table>' +
-      '<h3 style="color: #be123c; font-size: 14px;">DEVIATION FINDINGS & ACTION TABLE</h3>' +
-      '<table style="width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 20px;"><thead><tr style="background-color: #f8fafc;"><th style="padding: 8px; border: 1px solid #cbd5e1;">#</th><th style="padding: 8px; border: 1px solid #cbd5e1;">Audit Point</th><th style="padding: 8px; border: 1px solid #cbd5e1;">Specification</th><th style="padding: 8px; border: 1px solid #cbd5e1;">Actual Value</th><th style="padding: 8px; border: 1px solid #cbd5e1;">Severity</th><th style="padding: 8px; border: 1px solid #cbd5e1;">Photo / Remarks</th></tr></thead><tbody>';
+  var checkpoints = [];
+  for (var i = 1; i < data.length; i++) {
+    var row = data[i];
+    var ck  = ckIdx >= 0 ? String(row[ckIdx]).trim() : '';
+    if (!ck) continue;
 
-    var ngResults = results ? results.filter(function(r){ return r.status === "NG"; }) : [];
-    if (ngResults.length === 0 && actions) {
-      actions.forEach(function(act, idx) {
-        htmlBody += '<tr><td style="padding: 8px; border: 1px solid #cbd5e1;">' + (idx + 1) + '</td><td style="padding: 8px; border: 1px solid #cbd5e1; font-weight: bold;">' + (act.componentName || "Component") + '</td><td style="padding: 8px; border: 1px solid #cbd5e1;">Specification</td><td style="padding: 8px; border: 1px solid #cbd5e1; color: #be123c;">' + (act.observation || "NG") + '</td><td style="padding: 8px; border: 1px solid #cbd5e1;">' + (act.priority || "HIGH") + '</td><td style="padding: 8px; border: 1px solid #cbd5e1;">' + (act.recommendedAction || "") + '</td></tr>';
-      });
-    } else if (ngResults.length > 0) {
-      ngResults.forEach(function(res, idx) {
-        var photoHtml = res.photoUrl ? '<br/><img src="' + res.photoUrl + '" style="max-width: 140px; max-height: 100px; border-radius: 6px; border: 1px solid #cbd5e1; margin-top: 6px; display: block;"/>' : '';
-        htmlBody += '<tr><td style="padding: 8px; border: 1px solid #cbd5e1;">' + (idx + 1) + '</td><td style="padding: 8px; border: 1px solid #cbd5e1; font-weight: bold;">' + (res.componentName || "Component") + '<br/><span style="font-weight: normal; color: #64748b;">' + (res.checkpointText || "") + '</span></td><td style="padding: 8px; border: 1px solid #cbd5e1;">' + (res.standardRange || "N/A") + '</td><td style="padding: 8px; border: 1px solid #cbd5e1; color: #be123c;">' + (res.actualValue || "NG") + '</td><td style="padding: 8px; border: 1px solid #cbd5e1;">' + (res.isCritical ? "CRITICAL" : "MEDIUM") + '</td><td style="padding: 8px; border: 1px solid #cbd5e1;">' + (res.observationNotes || res.recommendedAction || "") + photoHtml + '</td></tr>';
+    var isActiveRaw = activeIdx >= 0 ? String(row[activeIdx]).trim().toLowerCase() : 'yes';
+    if (isActiveRaw === 'no' || isActiveRaw === 'false') continue;
+
+    var linesRaw = lineIdx >= 0 ? String(row[lineIdx]).trim() : 'ALL';
+    var appLines = (!linesRaw || linesRaw.toLowerCase() === 'all')
+      ? ['ALL']
+      : linesRaw.split(/[,;]+/).map(function(s) { return s.trim(); }).filter(function(s) { return s.length > 0; });
+
+    var crit = critIdx >= 0 ? String(row[critIdx]).trim() : 'Medium';
+
+    checkpoints.push({
+      id:               'CKP-GS-' + i,
+      srNo:             srIdx >= 0 ? (Number(row[srIdx]) || i) : i,
+      sectionId:        secIdx >= 0 ? String(row[secIdx]).trim() : '',
+      sectionName:      secIdx >= 0 ? String(row[secIdx]).trim() : '',
+      subSectionId:     subIdx >= 0 ? String(row[subIdx]).trim() : '',
+      subSectionName:   subIdx >= 0 ? String(row[subIdx]).trim() : '',
+      lineId:           appLines[0] || 'ALL',
+      lineName:         appLines[0] || 'ALL',
+      componentName:    compIdx >= 0 ? String(row[compIdx]).trim() : '',
+      checkpointText:   ck,
+      standardParameter: specIdx >= 0 ? String(row[specIdx]).trim() : '',
+      parameterType:    (minIdx >= 0 && row[minIdx] !== '') || (maxIdx >= 0 && row[maxIdx] !== '') ? 'NUMBER' : 'OK_NG',
+      minimum:          minIdx >= 0 && row[minIdx] !== '' ? Number(row[minIdx]) : undefined,
+      maximum:          maxIdx >= 0 && row[maxIdx] !== '' ? Number(row[maxIdx]) : undefined,
+      unit:             unitIdx >= 0 ? String(row[unitIdx]).trim() : '',
+      applicableLines:  appLines,
+      criticality:      crit,
+      isCritical:       crit.toLowerCase() === 'critical',
+      active:           true
+    });
+  }
+
+  return { status: 'SUCCESS', checkpoints: checkpoints, total: checkpoints.length };
+}
+
+function handleGetAudits(ss) {
+  var sheet = ss.getSheetByName('Audit_Master');
+  if (!sheet) return { status: 'SUCCESS', audits: [] };
+  var data = sheet.getDataRange().getValues();
+  if (data.length <= 1) return { status: 'SUCCESS', audits: [] };
+  var audits = [];
+  for (var i = data.length - 1; i >= 1; i--) {
+    var r = data[i];
+    audits.push({ auditId: r[0], date: r[1], section: r[3], subSection: r[4], line: r[5], auditor: r[7], compliance: r[13], status: r[14] });
+  }
+  return { status: 'SUCCESS', audits: audits };
+}
+
+function handleGetActions(ss) {
+  var sheet = ss.getSheetByName('Action_Tracker');
+  if (!sheet) return { status: 'SUCCESS', actions: [] };
+  var data = sheet.getDataRange().getValues();
+  if (data.length <= 1) return { status: 'SUCCESS', actions: [] };
+  var actions = [];
+  for (var i = 1; i < data.length; i++) {
+    var r = data[i];
+    if (!r[0]) continue;
+    actions.push({ actionId: r[0], auditId: r[1], section: r[2], component: r[6], checkpoint: r[7], status: r[11], priority: r[10] });
+  }
+  return { status: 'SUCCESS', actions: actions };
+}
+
+function handleUpdateAction(ss, data) {
+  var sheet = ss.getSheetByName('Action_Tracker');
+  if (!sheet) return { status: 'ERROR', message: 'Action_Tracker sheet not found' };
+  var values = sheet.getDataRange().getValues();
+  for (var i = 1; i < values.length; i++) {
+    if (String(values[i][0]) === String(data.actionId)) {
+      if (data.status)         sheet.getRange(i + 1, 12).setValue(data.status);
+      if (data.closureRemark)  sheet.getRange(i + 1, 15).setValue(data.closureRemark);
+      if (data.closurePhotoUrl) sheet.getRange(i + 1, 16).setValue(data.closurePhotoUrl);
+      if (data.status === 'Closed') sheet.getRange(i + 1, 17).setValue(new Date().toISOString().substring(0, 10));
+      return { status: 'SUCCESS' };
+    }
+  }
+  return { status: 'ERROR', message: 'Action ID not found: ' + data.actionId };
+}
+
+function createAuditDriveFolderHierarchy(auditId, dateStr) {
+  try {
+    var monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    var year  = dateStr ? dateStr.substring(0, 4) : String(new Date().getFullYear());
+    var mIdx  = dateStr ? (Number(dateStr.substring(5, 7)) - 1) : new Date().getMonth();
+    var month = monthNames[mIdx] || 'Unknown';
+
+    var root    = getOrCreateFolder(DriveApp.getRootFolder(),   'Engineering Audit System');
+    var records = getOrCreateFolder(root,    'Audit Records');
+    var yearF   = getOrCreateFolder(records, year);
+    var monthF  = getOrCreateFolder(yearF,   month);
+    var auditF  = getOrCreateFolder(monthF,  auditId);
+    getOrCreateFolder(auditF, 'Photos');
+
+    return { folderId: auditF.getId(), folderUrl: auditF.getUrl() };
+  } catch (err) {
+    Logger.log('Drive folder error: ' + err);
+    return { folderId: '', folderUrl: '' };
+  }
+}
+
+function getOrCreateFolder(parent, name) {
+  var it = parent.getFoldersByName(name);
+  return it.hasNext() ? it.next() : parent.createFolder(name);
+}
+
+function sendDeviationAlertEmail(auditId, actions) {
+  var criticals = actions.filter(function(a) { return a.priority === 'Critical'; });
+  if (criticals.length === 0) return;
+
+  var subject = '⚠️ CRITICAL AUDIT DEVIATION — ' + auditId;
+  var body    = 'Critical deviations found in Audit ' + auditId + ':\n\n';
+  criticals.forEach(function(a, i) {
+    body += (i + 1) + '. Component: ' + a.componentName + '\n';
+    body += '   Checkpoint: ' + a.checkpointText + '\n';
+    body += '   Observation: ' + a.observation + '\n\n';
+  });
       });
     }
 

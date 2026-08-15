@@ -54,6 +54,11 @@ export class GasBackendClient {
     return settings.googleAppsScriptUrl || process.env.NEXT_PUBLIC_GOOGLE_APPS_SCRIPT_URL || '';
   }
 
+  private static getSheetId(): string {
+    const settings = StorageEngine.getSettings();
+    return settings.googleSheetId?.trim() || '';
+  }
+
   private static isConnected(): boolean {
     const url = this.getScriptUrl();
     return !!(url && url.startsWith('https://script.google.com/'));
@@ -67,7 +72,7 @@ export class GasBackendClient {
       return { success: false, message: 'Invalid URL. Must start with https://script.google.com/' };
     }
     try {
-      const res = await jsonpRequest<any>(url, { action: 'PING' }, 10000);
+      const res = await jsonpRequest<any>(url, { action: 'PING', sheetId: this.getSheetId() }, 10000);
       if (res?.status === 'SUCCESS') {
         return { success: true, message: `Connected ✓  Sheet: "${res.sheetName}"`, sheetName: res.sheetName };
       }
@@ -80,7 +85,7 @@ export class GasBackendClient {
   // ── FETCH CHECKPOINTS ───────────────────────────────────────────────────────
   public static async fetchCheckpointsFromGoogleSheet(): Promise<Checkpoint[]> {
     if (!this.isConnected()) throw new Error('Apps Script URL not connected in Settings.');
-    const res = await jsonpRequest<any>(this.getScriptUrl(), { action: 'GET_CHECKPOINTS' }, 20000);
+    const res = await jsonpRequest<any>(this.getScriptUrl(), { action: 'GET_CHECKPOINTS', sheetId: this.getSheetId() }, 20000);
     if (res?.status === 'SUCCESS' && Array.isArray(res.checkpoints)) return res.checkpoints;
     throw new Error(res?.message || 'Failed to read checkpoints from Google Sheet.');
   }
@@ -129,6 +134,7 @@ export class GasBackendClient {
         url,
         {
           action: 'AUDIT_HEADER',
+          sheetId: this.getSheetId(),
           payload: JSON.stringify(header),
         },
         20000
