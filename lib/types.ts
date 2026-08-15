@@ -4,7 +4,7 @@ export type ParameterType = 'OK_NG' | 'NUMBER' | 'PERCENTAGE' | 'TEXT' | 'YES_NO
 
 export type StatusType = 'OK' | 'NG' | 'Observation' | 'N/A';
 
-export type OverallStatusType = 'PASS' | 'PASS WITH OBSERVATIONS' | 'FAIL';
+export type OverallStatusType = 'PASS' | 'PASS WITH OBSERVATIONS' | 'FAIL' | 'PENDING';
 
 export type ActionPriority = 'Critical' | 'Major' | 'Minor' | 'High' | 'Medium' | 'Low';
 
