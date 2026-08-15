@@ -3,8 +3,6 @@ import { StorageEngine } from './storageEngine';
 
 // ──────────────────────────────────────────────────────────────────────────────
 // JSONP helper — sends a <script> tag GET request to Google Apps Script.
-// This is the ONLY reliable way to call GAS from a browser cross-origin.
-// fetch() / XMLHttpRequest with JSON body are blocked by CORS on GAS Web Apps.
 // ──────────────────────────────────────────────────────────────────────────────
 function jsonpRequest<T = any>(
   scriptUrl: string,
@@ -31,7 +29,6 @@ function jsonpRequest<T = any>(
       resolve(res);
     };
 
-    // Build query string — each value is individually encoded
     const qs = Object.entries({ ...params, callback: cbName, _t: String(Date.now()) })
       .map(([k, v]) => encodeURIComponent(k) + '=' + encodeURIComponent(v))
       .join('&');
@@ -97,17 +94,6 @@ export class GasBackendClient {
   }
 
   // ── SUBMIT AUDIT ────────────────────────────────────────────────────────────
-  /**
-   * Submits an audit to Google Sheets + Drive in 3 separate small requests:
-   *   1. AUDIT_HEADER  — summary row in Audit_Master sheet
-   *   2. AUDIT_RESULTS — checkpoint results in batches of 10 rows
-   *   3. AUDIT_ACTIONS — NG action items in Action_Tracker sheet
-   *
-   * WHY CHUNKS?
-   * One giant JSONP GET URL with 100+ checkpoints serialised = 50,000+ chars.
-   * Google Apps Script silently drops requests over ~8,000 chars.
-   * Batching keeps every URL under 3,000 chars — always within GAS limits.
-   */
   public static async submitAudit(
     header: AuditHeader,
     results: AuditResult[],
@@ -147,27 +133,19 @@ export class GasBackendClient {
         errors.push('Header: ' + (headerRes?.message || 'Failed'));
       }
 
-      // ── Step 2: Submit results in batches of 10 ────────────────────────────
-      const BATCH = 10;
+      // ── Step 2: Submit results in ultra-light batches of 5 (avoids URL overflow) ──
+      const BATCH = 5;
       for (let i = 0; i < results.length; i += BATCH) {
         const batch = results.slice(i, i + BATCH).map((r) => ({
-          auditId: r.auditId,
-          srNo: r.srNo,
-          sectionName: r.sectionName,
-          subSectionName: r.subSectionName,
-          lineName: r.lineName,
-          equipmentName: r.equipmentName,
-          componentName: r.componentName,
-          checkpointText: r.checkpointText,
-          standardParameter: r.standardParameter,
-          actualValue: r.actualValue,
+          sr: r.srNo,
+          comp: (r.componentName || '').slice(0, 80),
+          ck: (r.checkpointText || '').slice(0, 150),
+          std: (r.standardParameter || '').slice(0, 80),
+          val: (r.actualValue || '').slice(0, 50),
           status: r.status,
-          observationNotes: r.observationNotes,
-          recommendedAction: r.recommendedAction,
-          photoUrl: r.photoUrl || '',
-          isCritical: r.isCritical,
-          auditor: r.auditor,
-          timestamp: r.timestamp,
+          notes: (r.observationNotes || '').slice(0, 150),
+          action: (r.recommendedAction || '').slice(0, 150),
+          crit: r.isCritical ? 1 : 0,
         }));
 
         try {
@@ -175,31 +153,29 @@ export class GasBackendClient {
             url,
             {
               action: 'AUDIT_RESULTS',
-              payload: JSON.stringify({ auditId: header.auditId, results: batch }),
+              sheetId: this.getSheetId(),
+              auditId: header.auditId,
+              payload: JSON.stringify(batch),
             },
-            20000
+            15000
           );
         } catch (batchErr: any) {
-          errors.push(`Results batch ${i / BATCH + 1}: ${batchErr.message}`);
+          console.warn(`Batch error:`, batchErr);
+          errors.push(`Batch ${Math.floor(i / BATCH) + 1}: ${batchErr.message}`);
         }
       }
 
       // ── Step 3: Submit action items ────────────────────────────────────────
       if (actions && actions.length > 0) {
         const slimActions = actions.map((a) => ({
-          actionId: a.actionId,
-          auditId: a.auditId,
-          sectionName: a.sectionName,
-          subSectionName: a.subSectionName,
-          lineName: a.lineName,
-          equipmentName: a.equipmentName,
-          componentName: a.componentName,
-          checkpointText: a.checkpointText,
-          observation: a.observation,
-          recommendedAction: a.recommendedAction,
-          priority: a.priority,
-          status: a.status,
-          targetDate: a.targetDate,
+          id: a.actionId,
+          comp: (a.componentName || '').slice(0, 80),
+          ck: (a.checkpointText || '').slice(0, 150),
+          obs: (a.observation || '').slice(0, 150),
+          act: (a.recommendedAction || '').slice(0, 150),
+          prio: a.priority || 'Medium',
+          status: a.status || 'Open',
+          target: a.targetDate || '',
         }));
 
         try {
@@ -207,9 +183,11 @@ export class GasBackendClient {
             url,
             {
               action: 'AUDIT_ACTIONS',
-              payload: JSON.stringify({ auditId: header.auditId, actions: slimActions }),
+              sheetId: this.getSheetId(),
+              auditId: header.auditId,
+              payload: JSON.stringify(slimActions),
             },
-            20000
+            15000
           );
         } catch (actErr: any) {
           errors.push('Actions: ' + actErr.message);
@@ -252,7 +230,11 @@ export class GasBackendClient {
     try {
       await jsonpRequest<any>(
         this.getScriptUrl(),
-        { action: 'UPDATE_ACTION', payload: JSON.stringify({ actionId, status, closureRemark, closurePhotoUrl }) },
+        {
+          action: 'UPDATE_ACTION',
+          sheetId: this.getSheetId(),
+          payload: JSON.stringify({ actionId, status, closureRemark, closurePhotoUrl }),
+        },
         10000
       );
       return { status: 'SUCCESS', message: 'Action updated in Google Sheets.' };

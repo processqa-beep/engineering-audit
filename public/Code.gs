@@ -216,38 +216,37 @@ function handleAuditResults(ss, auditId, results) {
   if (!sheet) {
     sheet = ss.insertSheet('Audit_Details');
     sheet.appendRow([
-      'Audit ID','Sr No.','Section','Sub-Section','Line','Equipment','Component',
-      'Checkpoint','Standard Parameter','Actual Value','Status',
-      'Observation Notes','Recommended Action','Photo URL',
-      'Critical','Auditor','Timestamp'
+      'Audit ID','Sr No.','Component','Checkpoint','Standard Parameter',
+      'Actual Value','Status','Observation Notes','Recommended Action',
+      'Critical','Timestamp'
     ]);
     sheet.setFrozenRows(1);
   }
 
+  var nowStr = new Date().toISOString();
+  var rows = [];
   for (var i = 0; i < results.length; i++) {
     var r = results[i];
-    sheet.appendRow([
+    rows.push([
       auditId,
-      r.srNo      || (i + 1),
-      r.sectionName    || '',
-      r.subSectionName || '',
-      r.lineName       || '',
-      r.equipmentName  || '',
-      r.componentName  || '',
-      r.checkpointText || '',
-      r.standardParameter || '',
-      r.actualValue    || '',
-      r.status         || '',
-      r.observationNotes  || '',
-      r.recommendedAction || '',
-      r.photoUrl       || '',
-      r.isCritical ? 'Yes' : 'No',
-      r.auditor        || '',
-      r.timestamp      || new Date().toISOString()
+      r.sr || r.srNo || (i + 1),
+      r.comp || r.componentName || '',
+      r.ck || r.checkpointText || '',
+      r.std || r.standardParameter || '',
+      r.val || r.actualValue || '',
+      r.status || '',
+      r.notes || r.observationNotes || '',
+      r.action || r.recommendedAction || '',
+      (r.crit === 1 || r.isCritical === true || r.isCritical === 'Yes') ? 'Yes' : 'No',
+      nowStr
     ]);
   }
 
-  return { status: 'SUCCESS', auditId: auditId, rowsAdded: results.length };
+  if (rows.length > 0) {
+    sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
+  }
+
+  return { status: 'SUCCESS', auditId: auditId, rowsAdded: rows.length };
 }
 
 function handleAuditActions(ss, auditId, actions) {
@@ -257,35 +256,34 @@ function handleAuditActions(ss, auditId, actions) {
   if (!sheet) {
     sheet = ss.insertSheet('Action_Tracker');
     sheet.appendRow([
-      'Action ID','Audit ID','Section','Sub-Section','Line','Equipment','Component',
-      'Checkpoint','Observation','Recommended Action','Priority','Status',
-      'Target Date','Responsible Person','Closure Remark','Closure Photo','Closed Date','Created At'
+      'Action ID','Audit ID','Component','Checkpoint','Observation',
+      'Recommended Action','Priority','Status','Target Date','Closure Remark','Closed Date','Created At'
     ]);
     sheet.setFrozenRows(1);
   }
 
+  var nowStr = new Date().toISOString();
+  var rows = [];
   for (var i = 0; i < actions.length; i++) {
     var a = actions[i];
-    sheet.appendRow([
-      a.actionId || ('ACT-' + Date.now() + '-' + i),
+    rows.push([
+      a.id || a.actionId || ('ACT-' + Date.now() + '-' + i),
       auditId,
-      a.sectionName    || '',
-      a.subSectionName || '',
-      a.lineName       || '',
-      a.equipmentName  || '',
-      a.componentName  || '',
-      a.checkpointText || '',
-      a.observation    || '',
-      a.recommendedAction || '',
-      a.priority       || 'Medium',
-      a.status         || 'Open',
-      a.targetDate     || '',
+      a.comp || a.componentName || '',
+      a.ck || a.checkpointText || '',
+      a.obs || a.observation || '',
+      a.act || a.recommendedAction || '',
+      a.prio || a.priority || 'Medium',
+      a.status || 'Open',
+      a.target || a.targetDate || '',
       '',
       '',
-      '',
-      '',
-      new Date().toISOString()
+      nowStr
     ]);
+  }
+
+  if (rows.length > 0) {
+    sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
   }
 
   try {
@@ -294,7 +292,7 @@ function handleAuditActions(ss, auditId, actions) {
     Logger.log('Email error: ' + mailErr);
   }
 
-  return { status: 'SUCCESS', auditId: auditId, actionsAdded: actions.length };
+  return { status: 'SUCCESS', auditId: auditId, actionsAdded: rows.length };
 }
 
 function handleGetCheckpoints(ss) {
