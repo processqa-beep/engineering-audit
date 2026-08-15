@@ -269,6 +269,8 @@ export interface SystemSettings {
   googleSheetId: string;
   googleDriveFolderId: string;
   googleAppsScriptUrl: string;
+  serviceAccountEmail?: string;
+  serviceAccountPrivateKey?: string;
   autoBackupEnabled: boolean;
   lastBackupDate: string;
   companyName: string;

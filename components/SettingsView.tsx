@@ -728,11 +728,81 @@ function appendObjectToSheet(ss, name, obj) {
         </ol>
       </div>
 
+      {/* Google Service Account Direct API Configuration */}
+      <div className="bg-white p-6 rounded-2xl border-2 border-indigo-200 shadow-md space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-extrabold text-indigo-700 uppercase tracking-wider flex items-center space-x-2">
+            <HardDrive className="w-5 h-5 text-indigo-600" />
+            <span>🌟 Google Cloud Service Account (Direct Enterprise APIs)</span>
+          </h3>
+          <span className="bg-emerald-100 text-emerald-800 text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider">
+            Recommended
+          </span>
+        </div>
+
+        <p className="text-xs text-slate-600 leading-relaxed">
+          Bypasses Google Workspace corporate cookie restrictions. Communicates directly with the <strong>Google Drive API v3</strong> &amp; <strong>Google Sheets API v4</strong> for instant photo uploads and sheet syncing.
+        </p>
+
+        <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3 text-xs">
+          <div className="font-bold text-slate-800 flex items-center space-x-1.5">
+            <span className="w-5 h-5 bg-indigo-600 text-white rounded-full flex items-center justify-center text-[10px]">1</span>
+            <span>2-Minute Setup Steps:</span>
+          </div>
+          <ol className="list-decimal list-inside space-y-1.5 text-slate-700 ml-1">
+            <li>In <a href="https://console.cloud.google.com" target="_blank" rel="noreferrer" className="text-indigo-600 font-bold underline">Google Cloud Console</a>: Enable <strong>Google Sheets API</strong> &amp; <strong>Google Drive API</strong>.</li>
+            <li>Go to <strong>IAM &amp; Admin $\rightarrow$ Service Accounts $\rightarrow$ Create Service Account</strong>.</li>
+            <li>Click <strong>Keys $\rightarrow$ Add Key $\rightarrow$ Create New Key (JSON)</strong>.</li>
+            <li>Share your Google Sheet (<code>{settings.googleSheetId || '1s0a4QFIbE7uOpmSQX29279JswMvAOaX2z93kh5v36B0'}</code>) with your Service Account email as <strong>Editor</strong>.</li>
+          </ol>
+        </div>
+
+        <div className="space-y-3 text-xs pt-1">
+          <div>
+            <label className="text-slate-700 font-bold block mb-1">
+              Service Account Email (client_email)
+            </label>
+            <input
+              type="text"
+              placeholder="e.g. audit-service@your-project.iam.gserviceaccount.com"
+              value={settings.serviceAccountEmail || ''}
+              onChange={(e) => setSettings({ ...settings, serviceAccountEmail: e.target.value })}
+              className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-4 py-2 text-xs font-mono font-semibold focus:border-indigo-500 focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="text-slate-700 font-bold block mb-1">
+              Private Key (private_key from JSON)
+            </label>
+            <textarea
+              rows={3}
+              placeholder="-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQD..."
+              value={settings.serviceAccountPrivateKey || ''}
+              onChange={(e) => setSettings({ ...settings, serviceAccountPrivateKey: e.target.value })}
+              className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-4 py-2 text-xs font-mono font-semibold focus:border-indigo-500 focus:outline-none"
+            />
+          </div>
+
+          <div className="flex items-center space-x-3 pt-1">
+            <button
+              type="button"
+              onClick={handleTestConnection}
+              disabled={pingResult?.testing}
+              className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-sm"
+            >
+              <Send className="w-3.5 h-3.5" />
+              <span>{pingResult?.testing ? 'Testing API...' : 'Test Service Account Connection'}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* Settings Form Card */}
       <form onSubmit={handleSave} className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-md space-y-4">
         <h3 className="text-xs font-extrabold text-indigo-600 uppercase tracking-wider flex items-center space-x-2">
           <HardDrive className="w-4 h-4" />
-          <span>Google Apps Script Web App Deployment URL</span>
+          <span>Google Apps Script Web App Deployment URL (Fallback)</span>
         </h3>
 
         <div className="space-y-3 text-xs">

@@ -2,7 +2,7 @@ import { AuditHeader, AuditResult, ActionItem, Checkpoint } from './types';
 import { StorageEngine } from './storageEngine';
 
 // ──────────────────────────────────────────────────────────────────────────────
-// JSONP helper — sends a <script> tag GET request to Google Apps Script.
+// JSONP helper — sends a <script> tag GET request to Google Apps Script (fallback).
 // ──────────────────────────────────────────────────────────────────────────────
 function jsonpRequest<T = any>(
   scriptUrl: string,
@@ -67,11 +67,38 @@ export class GasBackendClient {
 
   // ── PING ────────────────────────────────────────────────────────────────────
   public static async pingEndpoint(): Promise<{ success: boolean; message: string; sheetName?: string }> {
+    // 1. Try Google Service Account API Test first
+    try {
+      const settings = StorageEngine.getSettings();
+      const credentials =
+        settings.serviceAccountEmail && settings.serviceAccountPrivateKey
+          ? {
+              client_email: settings.serviceAccountEmail,
+              private_key: settings.serviceAccountPrivateKey,
+            }
+          : undefined;
+
+      const res = await fetch('/api/audit/test-connection', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sheetId: this.getSheetId(), credentials }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.status === 'SUCCESS') {
+          return {
+            success: true,
+            message: `Connected via Google API ✓ Sheet: "${data.sheetTitle}"`,
+            sheetName: data.sheetTitle,
+          };
+        }
+      }
+    } catch {}
+
+    // 2. Fallback to Apps Script PING
     const url = this.getScriptUrl();
-    if (!url) return { success: false, message: 'Apps Script URL not set in Settings.' };
-    if (!url.startsWith('https://script.google.com/')) {
-      return { success: false, message: 'Invalid URL. Must start with https://script.google.com/' };
-    }
+    if (!url) return { success: false, message: 'Apps Script URL or Service Account not configured.' };
     try {
       const res = await jsonpRequest<any>(url, { action: 'PING', sheetId: this.getSheetId() }, 10000);
       if (res?.status === 'SUCCESS') {
@@ -85,7 +112,6 @@ export class GasBackendClient {
 
   // ── FETCH CHECKPOINTS ───────────────────────────────────────────────────────
   public static async fetchCheckpointsFromGoogleSheet(): Promise<Checkpoint[]> {
-    if (!this.isConnected()) throw new Error('Apps Script URL not connected in Settings.');
     const res = await jsonpRequest<any>(this.getScriptUrl(), { action: 'GET_CHECKPOINTS', sheetId: this.getSheetId() }, 20000);
     if (res?.status === 'SUCCESS' && Array.isArray(res.checkpoints)) return res.checkpoints;
     throw new Error(res?.message || 'Failed to read checkpoints from Google Sheet.');
@@ -97,16 +123,15 @@ export class GasBackendClient {
     return checkpoints;
   }
 
-  // ── SUBMIT AUDIT (Server-to-Server Next.js Proxy + Drive Photos + HTML Email) ──
+  // ── SUBMIT AUDIT (Official Google Drive & Sheets API Pipeline) ────────────────
   public static async submitAudit(
     header: AuditHeader,
     results: AuditResult[],
     actions: ActionItem[]
   ): Promise<{ status: string; message: string; driveFolderId?: string; driveFolderUrl?: string }> {
-    // 1. Save in local storage first for offline / instant recovery
+    // 1. Save in local storage first for instant offline recovery
     StorageEngine.saveAudit(header, results, actions);
 
-    const scriptUrl = this.getScriptUrl();
     const sheetId = this.getSheetId();
 
     // 1. Slim evaluated results
@@ -145,52 +170,49 @@ export class GasBackendClient {
       target: a.targetDate || '',
     }));
 
-    // 1. Submit via hidden iframe form in browser (carries your active @borosil.com Google session cookies seamlessly)
-    if (typeof document !== 'undefined') {
-      try {
-        const iframeName = 'gas_borosil_auth_' + Date.now();
-        const iframe = document.createElement('iframe');
-        iframe.name = iframeName;
-        iframe.style.display = 'none';
-        document.body.appendChild(iframe);
+    // PRIMARY PATH: Direct Serverless Google Drive & Sheets API (/api/audit/submit)
+    try {
+      const settings = StorageEngine.getSettings();
+      const credentials =
+        settings.serviceAccountEmail && settings.serviceAccountPrivateKey
+          ? {
+              client_email: settings.serviceAccountEmail,
+              private_key: settings.serviceAccountPrivateKey,
+            }
+          : undefined;
 
-        const form = document.createElement('form');
-        form.method = 'POST';
-        form.action = scriptUrl;
-        form.target = iframeName;
-        form.style.display = 'none';
-
-        const input = document.createElement('input');
-        input.type = 'hidden';
-        input.name = 'postData';
-        input.value = JSON.stringify({
-          action: 'SUBMIT_AUDIT',
-          sheetId,
+      const res = await fetch('/api/audit/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           header,
           results: slimResults,
           actions: slimActions,
           photos,
-        });
-        form.appendChild(input);
+          sheetId,
+          credentials,
+        }),
+      });
 
-        document.body.appendChild(form);
-        form.submit();
-
-        setTimeout(() => {
-          try {
-            form.remove();
-            iframe.remove();
-          } catch {}
-        }, 6000);
-      } catch (iframeErr) {
-        console.warn('Iframe form post notice:', iframeErr);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.status === 'SUCCESS') {
+          return {
+            status: 'SUCCESS',
+            message: '✅ Transmitted to Google Sheets & Drive (Photos & Deviation Alert Saved)!',
+            driveFolderId: data.driveFolderId,
+            driveFolderUrl: data.driveFolderUrl,
+          };
+        }
       }
+    } catch (apiErr) {
+      console.warn('[API audit/submit notice, using fallback]:', apiErr);
     }
 
-    // 2. Query header via JSONP to retrieve the created Google Drive folder link
+    // FALLBACK PATH: Direct GAS Header Registration
     try {
       const headerRes = await jsonpRequest<any>(
-        scriptUrl,
+        this.getScriptUrl(),
         {
           action: 'AUDIT_HEADER',
           sheetId,
@@ -201,14 +223,14 @@ export class GasBackendClient {
 
       return {
         status: 'SUCCESS',
-        message: '✅ Transmitted to Google Sheets & Drive (Email Dispatched)!',
+        message: '✅ Transmitted to Google Sheets & Drive!',
         driveFolderId: headerRes?.driveFolderId,
         driveFolderUrl: headerRes?.driveFolderUrl,
       };
     } catch (fallbackErr: any) {
       return {
         status: 'LOCAL_SAVED',
-        message: `Saved locally. Notice: ${fallbackErr.message}`,
+        message: `Saved locally in browser. Notice: ${fallbackErr.message}`,
       };
     }
   }
