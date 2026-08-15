@@ -23,6 +23,7 @@ import {
   ChevronDown,
   Layers,
   Sparkles,
+  Send,
 } from 'lucide-react';
 
 import { StorageEngine } from '../lib/storageEngine';
@@ -463,6 +464,8 @@ export const AuditPointSetupView: React.FC = () => {
   const [showManualAdd, setShowManualAdd] = useState(false);
 
   const [syncingCloud, setSyncingCloud] = useState(false);
+  const [dumpingCloud, setDumpingCloud] = useState(false);
+  const [dumpProgress, setDumpProgress] = useState<string | null>(null);
 
   const reload = () => setCheckpoints(StorageEngine.getCheckpoints());
 
@@ -480,6 +483,28 @@ export const AuditPointSetupView: React.FC = () => {
       alert(`Cloud sync notice: ${err?.message || err}`);
     } finally {
       setSyncingCloud(false);
+    }
+  };
+
+  const handleDumpToCloud = async () => {
+    const current = StorageEngine.getCheckpoints();
+    if (current.length === 0) {
+      alert('No checkpoints found to dump. Please upload checkpoints or add points first.');
+      return;
+    }
+    setDumpingCloud(true);
+    setDumpProgress(`Starting upload of ${current.length} checkpoints to Google Sheets...`);
+    try {
+      await GasBackendClient.saveCheckpointsToGoogleSheet(current, (cur, tot) => {
+        const pct = Math.round((cur / tot) * 100);
+        setDumpProgress(`Dumping to Google Sheets Checkpoint_Master: ${cur}/${tot} points (${pct}%)...`);
+      });
+      setDumpProgress(`✓ All ${current.length} checkpoints successfully saved into Google Sheets Checkpoint_Master tab!`);
+      setTimeout(() => setDumpProgress(null), 6000);
+    } catch (err: any) {
+      setDumpProgress(`Notice while saving: ${err?.message || err}`);
+    } finally {
+      setDumpingCloud(false);
     }
   };
 
@@ -518,11 +543,21 @@ export const AuditPointSetupView: React.FC = () => {
     setTimeout(() => setUploadSuccess(null), 5000);
 
     // Auto-dump all checkpoints to Google Sheets Checkpoint_Master tab
+    const all = StorageEngine.getCheckpoints();
+    setDumpingCloud(true);
+    setDumpProgress(`Auto-saving ${all.length} checkpoints to Google Sheets...`);
     try {
-      const all = StorageEngine.getCheckpoints();
-      await GasBackendClient.saveCheckpointsToGoogleSheet(all);
+      await GasBackendClient.saveCheckpointsToGoogleSheet(all, (cur, tot) => {
+        const pct = Math.round((cur / tot) * 100);
+        setDumpProgress(`Saving to Google Sheet Checkpoint_Master: ${cur}/${tot} (${pct}%)...`);
+      });
+      setDumpProgress(`✓ All ${all.length} checkpoints successfully saved to Google Sheets Checkpoint_Master tab!`);
+      setTimeout(() => setDumpProgress(null), 6000);
     } catch (dumpErr) {
       console.warn('Auto-dump to Google Sheets notice:', dumpErr);
+      setDumpProgress(null);
+    } finally {
+      setDumpingCloud(false);
     }
   };
 
@@ -659,6 +694,16 @@ export const AuditPointSetupView: React.FC = () => {
             </label>
 
             <button
+              onClick={handleDumpToCloud}
+              disabled={dumpingCloud}
+              className="flex items-center space-x-1.5 px-4 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-300 rounded-2xl font-extrabold text-xs transition shadow-sm"
+              title="Save / push all checkpoints directly to Google Sheets Checkpoint_Master tab"
+            >
+              <Send className={`w-4 h-4 text-indigo-600 ${dumpingCloud ? 'animate-pulse' : ''}`} />
+              <span>{dumpingCloud ? 'Saving to Google Sheet...' : 'Dump All to Google Sheet'}</span>
+            </button>
+
+            <button
               onClick={() => setShowManualAdd(true)}
               className="flex items-center space-x-1.5 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl font-extrabold text-xs transition border border-slate-200"
             >
@@ -667,6 +712,14 @@ export const AuditPointSetupView: React.FC = () => {
             </button>
           </div>
         </div>
+
+        {/* Live Dump Progress Banner */}
+        {dumpProgress && (
+          <div className="mt-4 bg-indigo-50 border border-indigo-200 rounded-2xl px-4 py-3 flex items-center space-x-2 text-xs font-bold text-indigo-800 animate-fade-in">
+            <RefreshCw className={`w-4 h-4 text-indigo-600 ${dumpingCloud ? 'animate-spin' : ''}`} />
+            <span>{dumpProgress}</span>
+          </div>
+        )}
 
         {/* Upload Success Banner */}
         {uploadSuccess && (

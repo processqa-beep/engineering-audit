@@ -152,9 +152,9 @@ export const initialMailConfigs: MailConfig[] = [];
 // ──────────────────────────────────────────────────────────────────────────────
 export const defaultSettings: SystemSettings = {
   googleSheetId: '1s0a4QFIbE7uOpmSQX29279JswMvAOaX2z93kh5v36B0',
-  googleDriveFolderId: '',
-  googleAppsScriptUrl: '',
-  autoBackupEnabled: false,
+  googleDriveFolderId: 'Engineering Audit System',
+  googleAppsScriptUrl: 'https://script.google.com/a/macros/borosil.com/s/AKfycbzSZI42dnh2VvSExq121cqhArASSDNYv4txm3rxtK9FTSxTuT91Id8ItWr9m_srjs10/exec',
+  autoBackupEnabled: true,
   lastBackupDate: '',
   companyName: 'Borosil Renewables Ltd.',
   defaultSection: 'GR',

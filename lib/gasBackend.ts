@@ -94,7 +94,10 @@ export class GasBackendClient {
   }
 
   // ── AUTO-DUMP CHECKPOINTS TO GOOGLE SHEETS (Checkpoint_Master) ─────────────
-  public static async saveCheckpointsToGoogleSheet(checkpoints: Checkpoint[]): Promise<boolean> {
+  public static async saveCheckpointsToGoogleSheet(
+    checkpoints: Checkpoint[],
+    onProgress?: (current: number, total: number) => void
+  ): Promise<boolean> {
     const url = this.getScriptUrl();
     const sheetId = this.getSheetId();
     if (!url || !checkpoints || checkpoints.length === 0) return false;
@@ -105,17 +108,17 @@ export class GasBackendClient {
       subSectionName: c.subSectionName || c.subSectionId || '',
       lineName: c.lineName || c.lineId || 'ALL',
       applicableLines: c.applicableLines || ['ALL'],
-      componentName: (c.componentName || '').slice(0, 100),
-      checkpointText: (c.checkpointText || '').slice(0, 200),
-      standardParameter: (c.standardParameter || '').slice(0, 150),
+      componentName: (c.componentName || '').slice(0, 80),
+      checkpointText: (c.checkpointText || '').slice(0, 150),
+      standardParameter: (c.standardParameter || '').slice(0, 80),
       minimum: c.minimum,
       maximum: c.maximum,
-      unit: (c.unit || '').slice(0, 30),
+      unit: (c.unit || '').slice(0, 20),
       criticality: c.criticality || (c.isCritical ? 'Critical' : 'Medium'),
       active: c.active !== false,
     }));
 
-    const BATCH_SIZE = 25;
+    const BATCH_SIZE = 5;
     const totalBatches = Math.ceil(slim.length / BATCH_SIZE);
 
     for (let b = 0; b < totalBatches; b++) {
@@ -130,9 +133,12 @@ export class GasBackendClient {
             totalBatches: String(totalBatches),
             payload: JSON.stringify(batch),
           },
-          15000
+          20000
         );
-        await new Promise((r) => setTimeout(r, 50));
+        if (onProgress) {
+          onProgress(Math.min((b + 1) * BATCH_SIZE, slim.length), slim.length);
+        }
+        await new Promise((r) => setTimeout(r, 60));
       } catch (err) {
         console.warn(`Checkpoints batch ${b}/${totalBatches} notice:`, err);
       }
