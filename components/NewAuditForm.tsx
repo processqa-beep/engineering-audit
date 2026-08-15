@@ -252,7 +252,7 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
           impactOfFailure: ck.impactOfFailure,
           recommendedAction: ck.recommendedAction,
         },
-        status: 'OK',
+        status: '' as any,
         actualValue: '',
         observationNotes: '',
         recommendedAction: ck.recommendedAction || '',
@@ -360,23 +360,37 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
   };
 
   const summary = useMemo(() => {
-    const total = checkpointStates.length;
-    const okCount = checkpointStates.filter((s) => s.status === 'OK').length;
-    const ngCount = checkpointStates.filter((s) => s.status === 'NG').length;
-    const obsCount = checkpointStates.filter((s) => s.status === 'Observation').length;
-    const naCount = checkpointStates.filter((s) => s.status === 'N/A').length;
+    // Only count checkpoints that have been evaluated / updated by the auditor
+    const evaluatedStates = checkpointStates.filter((s) => s.status && s.status !== ('' as any));
+    const total = evaluatedStates.length;
+    const okCount = evaluatedStates.filter((s) => s.status === 'OK').length;
+    const ngCount = evaluatedStates.filter((s) => s.status === 'NG').length;
+    const obsCount = evaluatedStates.filter((s) => s.status === 'Observation').length;
+    const naCount = evaluatedStates.filter((s) => s.status === 'N/A').length;
 
     const compliance = total > 0 ? (okCount / total) * 100 : 100;
-    const hasCriticalNG = checkpointStates.some((s) => s.status === 'NG' && s.checkpoint.isCritical);
+    const hasCriticalNG = evaluatedStates.some((s) => s.status === 'NG' && s.checkpoint.isCritical);
 
     let overall: OverallStatusType = 'PASS';
-    if (hasCriticalNG || ngCount > 0) {
+    if (total === 0) {
+      overall = 'PENDING';
+    } else if (hasCriticalNG || ngCount > 0) {
       overall = 'FAIL';
     } else if (obsCount > 0) {
       overall = 'PASS WITH OBSERVATIONS';
     }
 
-    return { total, okCount, ngCount, obsCount, naCount, compliance, overall, hasCriticalNG };
+    return {
+      total,
+      okCount,
+      ngCount,
+      obsCount,
+      naCount,
+      compliance,
+      overall,
+      hasCriticalNG,
+      totalAvailable: checkpointStates.length,
+    };
   }, [checkpointStates]);
 
   const handleSaveDraft = () => {
@@ -416,8 +430,11 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
       alert('Please select a Section.');
       return;
     }
-    if (checkpointStates.length === 0) {
-      alert('No checkpoints available for the selected section & sub-section.');
+
+    // Only submit updated / evaluated components
+    const evaluatedStates = checkpointStates.filter((cs) => cs.status && cs.status !== ('' as any));
+    if (evaluatedStates.length === 0) {
+      alert('Please evaluate at least one component / checkpoint before submitting.');
       return;
     }
 
@@ -461,8 +478,8 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
       updatedAt: now.toISOString(),
     };
 
-    // Save Complete Snapshot of Checkpoint Information for Historical Protection
-    const results: AuditResult[] = checkpointStates.map((cs, idx) => ({
+    // Save ONLY updated / evaluated checkpoints so untouched ones are left blank and not dumped
+    const results: AuditResult[] = evaluatedStates.map((cs, idx) => ({
       id: `RES-${auditId}-${idx + 1}`,
       auditId,
       checkpointId: cs.checkpoint.id,
@@ -717,8 +734,9 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
             groupedComponentSections.map((group, compIdx) => {
               const comp = group.component;
               const totalInComp = group.items.length;
-              const okInComp = group.items.filter((item) => item.state.status === 'OK').length;
-              const passRateInComp = totalInComp > 0 ? (okInComp / totalInComp) * 100 : 100;
+              const evaluatedInComp = group.items.filter((item) => item.state.status && item.state.status !== ('' as any));
+              const okInComp = evaluatedInComp.filter((item) => item.state.status === 'OK').length;
+              const passRateInComp = evaluatedInComp.length > 0 ? (okInComp / evaluatedInComp.length) * 100 : 0;
 
               return (
                 <div
@@ -757,8 +775,10 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
                         <span>📷 Component Reference Photo</span>
                       </button>
 
-                      <span className="text-emerald-700 font-bold bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-200/60">
-                        Pass Rate: {passRateInComp.toFixed(0)}% ({okInComp}/{totalInComp} OK)
+                      <span className="text-slate-700 font-bold bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200">
+                        {evaluatedInComp.length > 0
+                          ? `Pass Rate: ${passRateInComp.toFixed(0)}% (${okInComp}/${evaluatedInComp.length} OK)`
+                          : `Not Evaluated (0/${totalInComp})`}
                       </span>
                     </div>
                   </div>
@@ -833,7 +853,7 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
                               {/* 6. Status Selector */}
                               <td className="px-4 py-4 text-center">
                                 <select
-                                  value={state.status}
+                                  value={state.status || ''}
                                   onChange={(e) => handleStatusChange(originalIndex, e.target.value as StatusType)}
                                   className={`px-3 py-1.5 rounded-xl text-xs font-extrabold focus:outline-none cursor-pointer transition shadow-xs ${
                                     state.status === 'OK'
@@ -842,9 +862,12 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
                                       ? 'bg-rose-100 text-rose-800 border border-rose-300'
                                       : state.status === 'Observation'
                                       ? 'bg-amber-100 text-amber-800 border border-amber-300'
-                                      : 'bg-slate-100 text-slate-700 border border-slate-300'
+                                      : state.status === 'N/A'
+                                      ? 'bg-slate-100 text-slate-700 border border-slate-300'
+                                      : 'bg-white text-slate-400 border border-dashed border-slate-300 hover:border-slate-400'
                                   }`}
                                 >
+                                  <option value="">-- Select --</option>
                                   <option value="OK">OK</option>
                                   <option value="NG">NG</option>
                                   <option value="Observation">Observation</option>
