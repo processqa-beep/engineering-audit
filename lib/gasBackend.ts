@@ -93,13 +93,13 @@ export class GasBackendClient {
     return checkpoints;
   }
 
-  // ── SUBMIT AUDIT (Full JSONP Pipeline with Photo Chunking & HTML Email) ──────
+  // ── SUBMIT AUDIT (Full Robust JSONP Pipeline with Safe Chunking & Auto Email) ──
   public static async submitAudit(
     header: AuditHeader,
     results: AuditResult[],
     actions: ActionItem[]
   ): Promise<{ status: string; message: string; driveFolderId?: string; driveFolderUrl?: string }> {
-    // 1. Always save in local storage first for offline / instant recovery
+    // 1. Save in local storage first for offline / instant recovery
     StorageEngine.saveAudit(header, results, actions);
 
     if (!this.isConnected()) {
@@ -112,7 +112,7 @@ export class GasBackendClient {
     const url = this.getScriptUrl();
     const sheetId = this.getSheetId();
 
-    // Only evaluated results
+    // 1. Slim evaluated results
     const slimResults = results.map((r) => ({
       sr: r.srNo,
       comp: (r.componentName || '').slice(0, 80),
@@ -126,6 +126,7 @@ export class GasBackendClient {
       whatImpactIfThisPartGetsFail: (r.whatImpactIfThisPartGetsFail || '').slice(0, 150),
     }));
 
+    // 2. Slim actions (Action_Tracker rows + auto email trigger)
     const slimActions = actions.map((a) => ({
       id: a.actionId,
       comp: (a.componentName || '').slice(0, 80),
@@ -141,7 +142,7 @@ export class GasBackendClient {
     let driveFolderUrl = '';
 
     try {
-      // 1. Register Audit Header (Creates Audit_Master row + Drive Folder + Photos subfolder)
+      // ── Step 1: Register Audit Header (Creates Audit_Master row + Drive Folder Hierarchy) ──
       const headerRes = await jsonpRequest<any>(
         url,
         {
@@ -157,7 +158,7 @@ export class GasBackendClient {
         driveFolderUrl = headerRes.driveFolderUrl || '';
       }
 
-      // 2. Submit Evaluated Audit Results to Audit_Details
+      // ── Step 2: Submit Evaluated Audit Results to Audit_Details ────────────
       if (slimResults.length > 0) {
         await jsonpRequest<any>(
           url,
@@ -171,25 +172,12 @@ export class GasBackendClient {
         );
       }
 
-      // 3. Submit Action Items to Action_Tracker
-      if (slimActions.length > 0) {
-        await jsonpRequest<any>(
-          url,
-          {
-            action: 'AUDIT_ACTIONS',
-            sheetId,
-            auditId: header.auditId,
-            payload: JSON.stringify({ auditId: header.auditId, actions: slimActions }),
-          },
-          15000
-        );
-      }
-
-      // 4. Upload Photos via JSONP Chunks (guaranteed cross-domain delivery into Drive's Photos folder)
+      // ── Step 3: Upload Photos via Safe JSONP Chunks (Creates JPEG in Drive Photos folder) ──
       const photos = results.filter((r) => r.photoUrl && r.photoUrl.startsWith('data:image'));
       for (const photo of photos) {
         const photoBase64 = photo.photoUrl || '';
-        const CHUNK_SIZE = 3500;
+        // Ultra-safe chunk size of 1200 characters guarantees URL is under 1700 chars (safe for all proxies & GAS)
+        const CHUNK_SIZE = 1200;
         const totalChunks = Math.ceil(photoBase64.length / CHUNK_SIZE);
         const photoId = `${header.auditId.replace(/[^a-zA-Z0-9]/g, '')}_sr${photo.srNo}`;
         const fileName = `Photo_Sr${photo.srNo}_${(photo.componentName || 'Comp').replace(/[^a-zA-Z0-9_-]/g, '_')}.jpg`;
@@ -213,33 +201,26 @@ export class GasBackendClient {
               },
               15000
             );
+            // Brief pause between chunks for ordered processing
+            await new Promise((resolve) => setTimeout(resolve, 40));
           } catch (photoErr) {
-            console.warn('Photo chunk upload notice:', photoErr);
+            console.warn(`Photo chunk ${c}/${totalChunks} error:`, photoErr);
           }
         }
       }
 
-      // 5. Send Deviation Notification Email if deviations exist
-      if (actions.length > 0) {
-        try {
-          await jsonpRequest<any>(
-            url,
-            {
-              action: 'SEND_ALERT_EMAIL',
-              sheetId,
-              payload: JSON.stringify({
-                auditId: header.auditId,
-                header,
-                actions: slimActions,
-                results: slimResults,
-                driveFolderUrl,
-              }),
-            },
-            15000
-          );
-        } catch (emailErr) {
-          console.warn('Email trigger notice:', emailErr);
-        }
+      // ── Step 4: Submit Action Items (Saves to Action_Tracker & Automatically Dispatches Email) ──
+      if (slimActions.length > 0) {
+        await jsonpRequest<any>(
+          url,
+          {
+            action: 'AUDIT_ACTIONS',
+            sheetId,
+            auditId: header.auditId,
+            payload: JSON.stringify({ auditId: header.auditId, actions: slimActions }),
+          },
+          15000
+        );
       }
 
       return {
@@ -288,7 +269,7 @@ export class GasBackendClient {
   public static async sendTestEmail(email: string): Promise<boolean> {
     if (!this.isConnected()) return false;
     try {
-      const res = await jsonpRequest<any>(this.getScriptUrl(), { action: 'SEND_TEST_EMAIL', email }, 10000);
+      const res = await jsonpRequest<any>(this.getScriptUrl(), { action: 'SEND_TEST_EMAIL', email }, 15000);
       return res?.status === 'SUCCESS';
     } catch { return false; }
   }

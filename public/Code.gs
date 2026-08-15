@@ -38,7 +38,7 @@ function SETUP_PERMISSIONS() {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// ROUTER (JSONP GET — 100% Google Workspace Domain Compatible)
+// ROUTER (JSONP GET — 100% Compatible with Corporate Google Workspace)
 // ──────────────────────────────────────────────────────────────────────────────
 function doGet(e) {
   var result;
@@ -50,7 +50,7 @@ function doGet(e) {
     if (action === 'SEND_TEST_EMAIL') {
       var email = (e.parameter && e.parameter.email) ? e.parameter.email : 'mehul.chikhaliya@borosil.com';
       sendTestNotificationEmail(email);
-      result = { status: 'SUCCESS', message: 'Test email sent to ' + email };
+      result = { status: 'SUCCESS', message: 'Test deviation report email sent to ' + email };
 
     } else if (!ss) {
       result = { status: 'ERROR', message: 'Could not open Google Sheet with ID: ' + SPREADSHEET_ID };
@@ -97,17 +97,6 @@ function doGet(e) {
       var srNo        = Number(e.parameter.srNo) || 1;
 
       result = handleSavePhotoChunk(ss, auditId, folderId, photoId, chunkIndex, totalChunks, chunkData, fileName, srNo);
-
-    } else if (action === 'SEND_ALERT_EMAIL') {
-      var emailPayload = JSON.parse(e.parameter.payload || '{}');
-      sendDeviationAlertEmail(
-        emailPayload.auditId,
-        emailPayload.header || {},
-        emailPayload.actions || [],
-        emailPayload.results || [],
-        emailPayload.driveFolderUrl || ''
-      );
-      result = { status: 'SUCCESS', message: 'Deviation email sent' };
 
     } else if (action === 'UPDATE_ACTION') {
       var payload = JSON.parse(e.parameter.payload || '{}');
@@ -293,7 +282,7 @@ function handleAuditResults(ss, auditId, results) {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// STEP 3 — AUDIT ACTIONS
+// STEP 3 — AUDIT ACTIONS (Saves to Action_Tracker & Automatically Sends Email)
 // ──────────────────────────────────────────────────────────────────────────────
 function handleAuditActions(ss, auditId, actions) {
   if (!actions || actions.length === 0) return { status: 'SUCCESS', message: 'No actions to save.' };
@@ -330,6 +319,37 @@ function handleAuditActions(ss, auditId, actions) {
 
   if (rows.length > 0) {
     sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
+  }
+
+  // AUTOMATICALLY DISPATCH DEVIATION EMAIL DIRECTLY FROM GAS
+  try {
+    var masterSheet = ss.getSheetByName('Audit_Master');
+    var headerInfo = { auditId: auditId };
+    var driveFolderUrl = '';
+
+    if (masterSheet) {
+      var mData = masterSheet.getDataRange().getValues();
+      for (var m = mData.length - 1; m >= 1; m--) {
+        if (String(mData[m][0]) === String(auditId)) {
+          headerInfo = {
+            auditId: mData[m][0],
+            date: mData[m][1],
+            sectionName: mData[m][3],
+            subSectionName: mData[m][4],
+            lineName: mData[m][5],
+            equipmentName: mData[m][6],
+            auditorName: mData[m][7],
+            driveFolderUrl: mData[m][16]
+          };
+          driveFolderUrl = mData[m][16];
+          break;
+        }
+      }
+    }
+
+    sendDeviationAlertEmail(auditId, headerInfo, actions, [], driveFolderUrl);
+  } catch (emailErr) {
+    Logger.log('Auto-email error: ' + emailErr.toString());
   }
 
   return { status: 'SUCCESS', auditId: auditId, actionsAdded: rows.length };
