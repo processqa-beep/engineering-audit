@@ -145,13 +145,29 @@ function doPost(e) {
   try {
     var ss   = getDatabaseSpreadsheet(e);
     var data = (e.postData && e.postData.contents) ? JSON.parse(e.postData.contents) : {};
-    var act  = data.action || 'AUDIT_HEADER';
+    var act  = data.action || 'SUBMIT_AUDIT';
     if (!ss) return respond({ status: 'ERROR', message: 'Spreadsheet not accessible' });
+
+    if (act === 'SUBMIT_AUDIT') {
+      var headerRes  = handleAuditHeader(ss, data.header || {});
+      var auditId    = (data.header && data.header.auditId) ? data.header.auditId : ('ENG-' + Date.now());
+      var resultsRes = handleAuditResults(ss, auditId, data.results || []);
+      var actionsRes = handleAuditActions(ss, auditId, data.actions || []);
+      return respond({
+        status: 'SUCCESS',
+        auditId: auditId,
+        driveFolderId: headerRes.driveFolderId,
+        driveFolderUrl: headerRes.driveFolderUrl,
+        resultsAdded: resultsRes.rowsAdded,
+        actionsAdded: actionsRes.actionsAdded
+      });
+    }
+
     if (act === 'AUDIT_HEADER')  return respond(handleAuditHeader(ss, data));
     if (act === 'AUDIT_RESULTS') return respond(handleAuditResults(ss, data.auditId, data.results || []));
     if (act === 'AUDIT_ACTIONS') return respond(handleAuditActions(ss, data.auditId, data.actions || []));
     if (act === 'UPDATE_ACTION') return respond(handleUpdateAction(ss, data));
-    return respond({ status: 'ERROR', message: 'Unknown action' });
+    return respond({ status: 'ERROR', message: 'Unknown action: ' + act });
   } catch (err) {
     return respond({ status: 'ERROR', message: err.toString() });
   }
