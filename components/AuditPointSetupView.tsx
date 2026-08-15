@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 
 import { StorageEngine } from '../lib/storageEngine';
+import { GasBackendClient } from '../lib/gasBackend';
 import { downloadAuditPointTemplate } from '../lib/excelTemplate';
 import { parseCheckpointExcel, formatSpec } from '../lib/checkpointImporter';
 import {
@@ -461,7 +462,26 @@ export const AuditPointSetupView: React.FC = () => {
   // Manual Add Modal
   const [showManualAdd, setShowManualAdd] = useState(false);
 
+  const [syncingCloud, setSyncingCloud] = useState(false);
+
   const reload = () => setCheckpoints(StorageEngine.getCheckpoints());
+
+  const handleSyncFromCloud = async () => {
+    setSyncingCloud(true);
+    try {
+      const data = await GasBackendClient.syncMasterData();
+      if (data && data.length > 0) {
+        setCheckpoints(data);
+        alert(`✓ Successfully synced ${data.length} checkpoints from Google Sheets!`);
+      } else {
+        alert('No checkpoints returned from Google Sheet Checkpoint_Master tab.');
+      }
+    } catch (err: any) {
+      alert(`Cloud sync notice: ${err?.message || err}`);
+    } finally {
+      setSyncingCloud(false);
+    }
+  };
 
   // ── Upload handler ───────────────────────────────────────────────────────
   const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -586,6 +606,16 @@ export const AuditPointSetupView: React.FC = () => {
 
           {/* Toolbar Buttons */}
           <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <button
+              onClick={handleSyncFromCloud}
+              disabled={syncingCloud}
+              className="flex items-center space-x-1.5 px-4 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-2xl font-extrabold text-xs transition shadow-sm"
+              title="Sync checkpoints from Checkpoint_Master sheet in Google Sheets"
+            >
+              <RefreshCw className={`w-4 h-4 text-emerald-600 ${syncingCloud ? 'animate-spin' : ''}`} />
+              <span>{syncingCloud ? 'Syncing...' : 'Sync from Google Sheet'}</span>
+            </button>
+
             <button
               onClick={() => downloadAuditPointTemplate()}
               className="flex items-center space-x-1.5 px-4 py-2.5 bg-white border-2 border-indigo-200 hover:border-indigo-400 text-indigo-700 rounded-2xl font-extrabold text-xs transition shadow-sm"

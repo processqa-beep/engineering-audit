@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import {
   ClipboardCheck,
@@ -22,6 +22,7 @@ import {
   ArrowLeft,
   Image as ImageIcon,
   Save,
+  RefreshCw,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { StorageEngine } from '../lib/storageEngine';
@@ -70,7 +71,27 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
   const allSubSections = useMemo(() => StorageEngine.getSubSections(), []);
   const allLines = useMemo(() => StorageEngine.getLines(), []);
   const allEquipment = useMemo(() => StorageEngine.getEquipment(), []);
-  const allCheckpoints = useMemo(() => StorageEngine.getCheckpoints(), []);
+  const [allCheckpoints, setAllCheckpoints] = useState<Checkpoint[]>(() => StorageEngine.getCheckpoints());
+  const [syncingCloud, setSyncingCloud] = useState<boolean>(false);
+
+  // Auto-sync master checkpoints from Google Sheets on load
+  const syncCheckpointsFromGoogleSheet = useCallback(async () => {
+    setSyncingCloud(true);
+    try {
+      const cloudCheckpoints = await GasBackendClient.syncMasterData();
+      if (cloudCheckpoints && cloudCheckpoints.length > 0) {
+        setAllCheckpoints(cloudCheckpoints);
+      }
+    } catch (err) {
+      console.log('[Cloud Checkpoints Sync notice]:', err);
+    } finally {
+      setSyncingCloud(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    syncCheckpointsFromGoogleSheet();
+  }, [syncCheckpointsFromGoogleSheet]);
 
   // Form Header State
   const [sectionId, setSectionId] = useState<string>(initialDraft?.header?.sectionId || '');
@@ -566,25 +587,37 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
           </p>
         </div>
 
-        {sectionId && (
-          <div className="flex items-center space-x-2 shrink-0">
-            <button
-              onClick={handleSaveDraft}
-              className="flex items-center space-x-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl text-xs font-extrabold transition border border-slate-200"
-            >
-              <Save className="w-3.5 h-3.5 text-indigo-600" />
-              <span>Save Draft</span>
-            </button>
+        <div className="flex items-center space-x-2 shrink-0">
+          <button
+            onClick={syncCheckpointsFromGoogleSheet}
+            disabled={syncingCloud}
+            className="flex items-center space-x-1.5 px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-2xl text-xs font-extrabold transition border border-indigo-200"
+            title="Sync all audit checkpoints from Google Sheets Checkpoint_Master tab"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-indigo-600 ${syncingCloud ? 'animate-spin' : ''}`} />
+            <span>{syncingCloud ? 'Syncing...' : 'Sync Checkpoints'}</span>
+          </button>
 
-            <button
-              onClick={() => setSectionId('')}
-              className="flex items-center space-x-1.5 px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-2xl text-xs font-extrabold transition border border-indigo-200/80"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              <span>Change Section</span>
-            </button>
-          </div>
-        )}
+          {sectionId && (
+            <>
+              <button
+                onClick={handleSaveDraft}
+                className="flex items-center space-x-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl text-xs font-extrabold transition border border-slate-200"
+              >
+                <Save className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Save Draft</span>
+              </button>
+
+              <button
+                onClick={() => setSectionId('')}
+                className="flex items-center space-x-1.5 px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-2xl text-xs font-extrabold transition border border-indigo-200/80"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span>Change Section</span>
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       {/* STEP 1: SECTION SELECTION PROMPT */}
