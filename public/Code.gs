@@ -1,198 +1,150 @@
 /**
- * PLANT ENGINEERING AUDIT PORTAL — GOOGLE APPS SCRIPT BACKEND
- * Architecture: Vercel (/api/submit-audit Node.js proxy) → Google Apps Script → Google Sheets + Drive + Email
+ * PLANT ENGINEERING AUDIT PORTAL — NATIVE GOOGLE APPS SCRIPT BACKEND
+ * 100% IT Policy Compliant (Runs natively inside Borosil Google Workspace)
  */
 
 var SPREADSHEET_ID = "1s0a4QFIbE7uOpmSQX29279JswMvAOaX2z93kh5v36B0";
 
-function getDatabaseSpreadsheet(e) {
+function getDatabaseSpreadsheet() {
   try {
     if (SPREADSHEET_ID && SPREADSHEET_ID.trim().length > 5) {
       return SpreadsheetApp.openById(SPREADSHEET_ID.trim());
     }
   } catch (err) {}
-
   try {
-    var explicitId = (e && e.parameter && e.parameter.sheetId) ? e.parameter.sheetId.trim() : '';
-    if (explicitId && explicitId.length > 5) {
-      return SpreadsheetApp.openById(explicitId);
-    }
+    return SpreadsheetApp.getActiveSpreadsheet();
   } catch (err) {}
-
-  try {
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
-    if (ss) return ss;
-  } catch (err) {}
-
   return null;
 }
 
-function SETUP_PERMISSIONS() {
-  Logger.log("Testing Spreadsheet & Drive permissions...");
-  var ss = getDatabaseSpreadsheet();
-  if (ss) {
-    Logger.log("✅ SUCCESS! Connected to: " + ss.getName() + " (ID: " + ss.getId() + ")");
-  } else {
-    Logger.log("⚠️ Could not open spreadsheet.");
-  }
-}
-
 // ──────────────────────────────────────────────────────────────────────────────
-// ROUTER (POST — Atomic Server-to-Server Full Submission from Next.js API)
-// ──────────────────────────────────────────────────────────────────────────────
-function doPost(e) {
-  try {
-    var raw = '';
-    if (e && e.postData && e.postData.contents) {
-      raw = e.postData.contents;
-    } else if (e && e.parameter && e.parameter.postData) {
-      raw = e.parameter.postData;
-    }
-
-    var data = raw ? JSON.parse(raw) : {};
-    var ss   = getDatabaseSpreadsheet(e);
-    var act  = data.action || (e && e.parameter && e.parameter.action) || 'SUBMIT_AUDIT';
-
-    if (!ss) return respond({ status: 'ERROR', message: 'Spreadsheet not accessible' });
-
-    if (act === 'SUBMIT_AUDIT') {
-      var headerRes  = handleAuditHeader(ss, data.header || {});
-      var auditId    = (data.header && data.header.auditId) ? data.header.auditId : ('ENG-' + Date.now());
-      var dateStr    = (data.header && data.header.date) ? data.header.date : '';
-
-      // 1. Save all attached inspection photos directly into Google Drive's Photos folder
-      var photoMap = {};
-      if (data.photos && data.photos.length > 0) {
-        photoMap = saveAuditPhotosToDrive(headerRes.driveFolderId, data.photos, auditId, dateStr);
-      }
-
-      // 2. Attach Google Drive photo links to results
-      var resultsWithUrls = (data.results || []).map(function(r) {
-        if (photoMap[r.sr]) {
-          r.photoUrl = photoMap[r.sr];
-        }
-        return r;
-      });
-
-      // 3. Write evaluated checkpoint rows to Audit_Details
-      var resultsRes = handleAuditResults(ss, auditId, resultsWithUrls);
-
-      // 4. Write action items to Action_Tracker
-      var actionsRes = handleAuditActions(ss, auditId, data.actions || []);
-
-      // 5. Send Stylized HTML Deviation Email if deviations exist
-      if (data.actions && data.actions.length > 0) {
-        try {
-          sendDeviationAlertEmail(auditId, data.header || {}, data.actions, resultsWithUrls, headerRes.driveFolderUrl);
-        } catch (mailErr) {
-          Logger.log('Deviation alert email notice: ' + mailErr);
-        }
-      }
-
-      return respond({
-        status: 'SUCCESS',
-        auditId: auditId,
-        driveFolderId: headerRes.driveFolderId,
-        driveFolderUrl: headerRes.driveFolderUrl,
-        resultsAdded: resultsRes.rowsAdded,
-        actionsAdded: actionsRes.actionsAdded,
-        photosSaved: Object.keys(photoMap).length
-      });
-    }
-
-    if (act === 'AUDIT_HEADER')  return respond(handleAuditHeader(ss, data));
-    if (act === 'UPDATE_ACTION') return respond(handleUpdateAction(ss, data));
-    return respond({ status: 'ERROR', message: 'Unknown action: ' + act });
-  } catch (err) {
-    return respond({ status: 'ERROR', message: err.toString() });
-  }
-}
-
-function respond(obj) {
-  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
-}
-
-// ──────────────────────────────────────────────────────────────────────────────
-// ROUTER (GET / JSONP Router for Read & Test actions)
+// SERVE THE WEB APPLICATION
 // ──────────────────────────────────────────────────────────────────────────────
 function doGet(e) {
-  var result;
-  try {
-    var action   = (e && e.parameter && e.parameter.action) ? e.parameter.action : 'PING';
-    var callback = (e && e.parameter && e.parameter.callback) ? e.parameter.callback : null;
-    var ss       = getDatabaseSpreadsheet(e);
-
-    if (action === 'SEND_TEST_EMAIL') {
-      var email = (e.parameter && e.parameter.email) ? e.parameter.email : 'mehul.chikhaliya@borosil.com';
-      sendTestNotificationEmail(email);
-      result = { status: 'SUCCESS', message: 'Test deviation report email sent to ' + email };
-
-    } else if (!ss) {
-      result = { status: 'ERROR', message: 'Could not open Google Sheet with ID: ' + SPREADSHEET_ID };
-
-    } else if (action === 'PING') {
-      result = {
-        status: 'SUCCESS',
-        message: 'Connected to ' + (ss.getName ? ss.getName() : 'Google Sheet'),
-        sheetName: ss.getName ? ss.getName() : 'Google Sheet',
-        sheetId: ss.getId ? ss.getId() : SPREADSHEET_ID,
-        sheetUrl: ss.getUrl ? ss.getUrl() : '',
-        timestamp: new Date().toISOString()
-      };
-
-    } else if (action === 'GET_CHECKPOINTS' || action === 'getMasterData' || action === 'syncMasterData') {
-      result = handleGetCheckpoints(ss);
-
-    } else if (action === 'GET_AUDITS' || action === 'getAuditHistory') {
-      result = handleGetAudits(ss);
-
-    } else if (action === 'GET_ACTIONS') {
-      result = handleGetActions(ss);
-
-    } else if (action === 'AUDIT_HEADER') {
-      var header = JSON.parse(e.parameter.payload || '{}');
-      result = handleAuditHeader(ss, header);
-
-    } else if (action === 'UPDATE_ACTION') {
-      var payload = JSON.parse(e.parameter.payload || '{}');
-      result = handleUpdateAction(ss, payload);
-
-    } else {
-      result = { status: 'ERROR', message: 'Unknown action: ' + action };
-    }
-
-  } catch (err) {
-    result = { status: 'ERROR', message: err.toString() };
-  }
-
-  var json = JSON.stringify(result);
-  if (callback) {
-    return ContentService.createTextOutput(callback + '(' + json + ')').setMimeType(ContentService.MimeType.JAVASCRIPT);
-  }
-  return ContentService.createTextOutput(json).setMimeType(ContentService.MimeType.JSON);
+  return HtmlService.createHtmlOutputFromFile('index')
+    .setTitle('BRL Engineering Audit Portal')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1.0');
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// SAVE PHOTOS TO GOOGLE DRIVE (Photos Subfolder)
+// CLIENT API: SUBMIT AUDIT WITH PHOTOS & EMAIL
 // ──────────────────────────────────────────────────────────────────────────────
-function saveAuditPhotosToDrive(auditFolderId, photos, auditId, dateStr) {
+function submitAuditFromClient(payload) {
+  try {
+    var ss = getDatabaseSpreadsheet();
+    if (!ss) throw new Error("Could not access Google Spreadsheet with ID: " + SPREADSHEET_ID);
+
+    var header  = payload.header || {};
+    var results = payload.results || [];
+    var actions = payload.actions || [];
+    var photos  = payload.photos || [];
+
+    var auditId = header.auditId || ('ENG-' + Date.now());
+    var dateStr = header.date || new Date().toISOString().substring(0, 10);
+
+    // 1. Create Google Drive Folder Hierarchy
+    var folderInfo = createAuditDriveFolderHierarchy(auditId, dateStr);
+    header.driveFolderId = folderInfo.folderId;
+    header.driveFolderUrl = folderInfo.folderUrl;
+
+    // 2. Save Photos directly into Drive's Photos Folder
+    var photoMap = {};
+    if (photos && photos.length > 0) {
+      photoMap = saveAuditPhotosToDrive(folderInfo.photosFolderId, photos);
+    }
+
+    // 3. Attach Drive Photo URLs to results
+    for (var i = 0; i < results.length; i++) {
+      var sr = results[i].sr || results[i].srNo;
+      if (photoMap[sr]) {
+        results[i].photoUrl = photoMap[sr];
+      }
+    }
+
+    // 4. Save to Google Sheets
+    handleAuditHeader(ss, header, folderInfo);
+    handleAuditResults(ss, auditId, results);
+    handleAuditActions(ss, auditId, actions);
+
+    // 5. Send Stylized HTML Deviation Email if deviations exist
+    if (actions && actions.length > 0) {
+      try {
+        sendDeviationAlertEmail(auditId, header, actions, results, folderInfo.folderUrl);
+      } catch (mailErr) {
+        Logger.log("Email error: " + mailErr.toString());
+      }
+    }
+
+    return {
+      status: 'SUCCESS',
+      auditId: auditId,
+      driveFolderId: folderInfo.folderId,
+      driveFolderUrl: folderInfo.folderUrl,
+      photosSaved: Object.keys(photoMap).length,
+      resultsSaved: results.length,
+      actionsSaved: actions.length
+    };
+  } catch (err) {
+    Logger.log("Submission error: " + err.toString());
+    return { status: 'ERROR', message: err.toString() };
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// CLIENT API: FETCH CHECKPOINTS
+// ──────────────────────────────────────────────────────────────────────────────
+function getCheckpointsFromClient() {
+  try {
+    var ss = getDatabaseSpreadsheet();
+    if (!ss) return { status: 'ERROR', message: 'Spreadsheet not accessible' };
+    return handleGetCheckpoints(ss);
+  } catch (err) {
+    return { status: 'ERROR', message: err.toString() };
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// CLIENT API: FETCH AUDIT HISTORY & ACTIONS
+// ──────────────────────────────────────────────────────────────────────────────
+function getAuditHistoryFromClient() {
+  try {
+    var ss = getDatabaseSpreadsheet();
+    if (!ss) return { status: 'ERROR', message: 'Spreadsheet not accessible' };
+    return handleGetAudits(ss);
+  } catch (err) {
+    return { status: 'ERROR', message: err.toString() };
+  }
+}
+
+function getActionsFromClient() {
+  try {
+    var ss = getDatabaseSpreadsheet();
+    if (!ss) return { status: 'ERROR', message: 'Spreadsheet not accessible' };
+    return handleGetActions(ss);
+  } catch (err) {
+    return { status: 'ERROR', message: err.toString() };
+  }
+}
+
+function updateActionFromClient(data) {
+  try {
+    var ss = getDatabaseSpreadsheet();
+    if (!ss) return { status: 'ERROR', message: 'Spreadsheet not accessible' };
+    return handleUpdateAction(ss, data);
+  } catch (err) {
+    return { status: 'ERROR', message: err.toString() };
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// GOOGLE DRIVE PHOTOS MANAGER
+// ──────────────────────────────────────────────────────────────────────────────
+function saveAuditPhotosToDrive(photosFolderId, photos) {
   var photoMap = {};
   if (!photos || photos.length === 0) return photoMap;
   try {
-    var auditFolder = null;
-    if (auditFolderId) {
-      try { auditFolder = DriveApp.getFolderById(auditFolderId); } catch (e) {}
-    }
-    if (!auditFolder && auditId) {
-      var folderInfo = createAuditDriveFolderHierarchy(auditId, dateStr);
-      if (folderInfo && folderInfo.folderId) {
-        auditFolder = DriveApp.getFolderById(folderInfo.folderId);
-      }
-    }
-    if (!auditFolder) return photoMap;
-
-    var photosFolder = getOrCreateFolder(auditFolder, 'Photos');
-
+    var photosFolder = DriveApp.getFolderById(photosFolderId);
     for (var i = 0; i < photos.length; i++) {
       var p = photos[i];
       var base64Data = p.photoBase64 || '';
@@ -215,15 +167,41 @@ function saveAuditPhotosToDrive(auditFolderId, photos, auditId, dateStr) {
       photoMap[p.sr] = file.getUrl();
     }
   } catch (err) {
-    Logger.log('Photo upload error: ' + err.toString());
+    Logger.log('Photo save error: ' + err.toString());
   }
   return photoMap;
 }
 
+function createAuditDriveFolderHierarchy(auditId, dateStr) {
+  try {
+    var monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    var year  = dateStr ? dateStr.substring(0, 4) : String(new Date().getFullYear());
+    var mIdx  = dateStr ? (Number(dateStr.substring(5, 7)) - 1) : new Date().getMonth();
+    var month = monthNames[mIdx] || 'Unknown';
+
+    var root    = getOrCreateFolder(DriveApp.getRootFolder(), 'Engineering Audit System');
+    var records = getOrCreateFolder(root, 'Audit Records');
+    var yearF   = getOrCreateFolder(records, year);
+    var monthF  = getOrCreateFolder(yearF, month);
+    var auditF  = getOrCreateFolder(monthF, auditId);
+    var photosF = getOrCreateFolder(auditF, 'Photos');
+
+    return { folderId: auditF.getId(), folderUrl: auditF.getUrl(), photosFolderId: photosF.getId() };
+  } catch (err) {
+    Logger.log('Drive folder error: ' + err);
+    return { folderId: '', folderUrl: '', photosFolderId: '' };
+  }
+}
+
+function getOrCreateFolder(parent, name) {
+  var it = parent.getFoldersByName(name);
+  return it.hasNext() ? it.next() : parent.createFolder(name);
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
-// STEP 1 — AUDIT HEADER
+// GOOGLE SHEETS HANDLERS
 // ──────────────────────────────────────────────────────────────────────────────
-function handleAuditHeader(ss, header) {
+function handleAuditHeader(ss, header, folderInfo) {
   var sheet = ss.getSheetByName('Audit_Master');
   if (!sheet) {
     sheet = ss.insertSheet('Audit_Master');
@@ -235,21 +213,13 @@ function handleAuditHeader(ss, header) {
     sheet.setFrozenRows(1);
   }
 
-  var folderInfo = createAuditDriveFolderHierarchy(header.auditId, header.date);
-
-  var data   = sheet.getDataRange().getValues();
-  var rowIdx = -1;
-  for (var i = 1; i < data.length; i++) {
-    if (String(data[i][0]) === String(header.auditId)) { rowIdx = i + 1; break; }
-  }
-
   var row = [
     header.auditId,
     header.date,
     header.time,
-    header.sectionName  || header.sectionId,
+    header.sectionName || header.sectionId,
     header.subSectionName || header.subSectionId,
-    header.lineName     || header.lineId,
+    header.lineName || header.lineId,
     header.equipmentName || header.equipmentId,
     header.auditorName,
     header.totalCheckpoints,
@@ -264,19 +234,11 @@ function handleAuditHeader(ss, header) {
     new Date().toISOString()
   ];
 
-  if (rowIdx > 0) {
-    sheet.getRange(rowIdx, 1, 1, row.length).setValues([row]);
-  } else {
-    sheet.appendRow(row);
-  }
-
-  return { status: 'SUCCESS', auditId: header.auditId, driveFolderId: folderInfo.folderId, driveFolderUrl: folderInfo.folderUrl };
+  sheet.appendRow(row);
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// STEP 2 — AUDIT RESULTS (Only Evaluated Checkpoints Saved)
-// ──────────────────────────────────────────────────────────────────────────────
 function handleAuditResults(ss, auditId, results) {
+  if (!results || results.length === 0) return;
   var sheet = ss.getSheetByName('Audit_Details');
   if (!sheet) {
     sheet = ss.insertSheet('Audit_Details');
@@ -308,19 +270,11 @@ function handleAuditResults(ss, auditId, results) {
     ]);
   }
 
-  if (rows.length > 0) {
-    sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
-  }
-
-  return { status: 'SUCCESS', auditId: auditId, rowsAdded: rows.length };
+  sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// STEP 3 — AUDIT ACTIONS
-// ──────────────────────────────────────────────────────────────────────────────
 function handleAuditActions(ss, auditId, actions) {
-  if (!actions || actions.length === 0) return { status: 'SUCCESS', message: 'No actions to save.' };
-
+  if (!actions || actions.length === 0) return;
   var sheet = ss.getSheetByName('Action_Tracker');
   if (!sheet) {
     sheet = ss.insertSheet('Action_Tracker');
@@ -351,11 +305,7 @@ function handleAuditActions(ss, auditId, actions) {
     ]);
   }
 
-  if (rows.length > 0) {
-    sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
-  }
-
-  return { status: 'SUCCESS', auditId: auditId, actionsAdded: rows.length };
+  sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
 }
 
 function handleGetCheckpoints(ss) {
@@ -439,7 +389,7 @@ function handleGetAudits(ss) {
   var audits = [];
   for (var i = data.length - 1; i >= 1; i--) {
     var r = data[i];
-    audits.push({ auditId: r[0], date: r[1], section: r[3], subSection: r[4], line: r[5], auditor: r[7], compliance: r[13], status: r[14] });
+    audits.push({ auditId: r[0], date: r[1], section: r[3], subSection: r[4], line: r[5], auditor: r[7], compliance: r[13], status: r[14], folderUrl: r[16] });
   }
   return { status: 'SUCCESS', audits: audits };
 }
@@ -453,7 +403,7 @@ function handleGetActions(ss) {
   for (var i = 1; i < data.length; i++) {
     var r = data[i];
     if (!r[0]) continue;
-    actions.push({ actionId: r[0], auditId: r[1], section: r[2], component: r[6], checkpoint: r[7], status: r[11], priority: r[10] });
+    actions.push({ actionId: r[0], auditId: r[1], component: r[2], checkpoint: r[3], observation: r[4], recommendedAction: r[5], priority: r[6], status: r[7], targetDate: r[8] });
   }
   return { status: 'SUCCESS', actions: actions };
 }
@@ -464,40 +414,13 @@ function handleUpdateAction(ss, data) {
   var values = sheet.getDataRange().getValues();
   for (var i = 1; i < values.length; i++) {
     if (String(values[i][0]) === String(data.actionId)) {
-      if (data.status)         sheet.getRange(i + 1, 12).setValue(data.status);
-      if (data.closureRemark)  sheet.getRange(i + 1, 15).setValue(data.closureRemark);
-      if (data.closurePhotoUrl) sheet.getRange(i + 1, 16).setValue(data.closurePhotoUrl);
-      if (data.status === 'Closed') sheet.getRange(i + 1, 17).setValue(new Date().toISOString().substring(0, 10));
+      if (data.status)         sheet.getRange(i + 1, 8).setValue(data.status);
+      if (data.closureRemark)  sheet.getRange(i + 1, 10).setValue(data.closureRemark);
+      if (data.status === 'Closed') sheet.getRange(i + 1, 11).setValue(new Date().toISOString().substring(0, 10));
       return { status: 'SUCCESS' };
     }
   }
   return { status: 'ERROR', message: 'Action ID not found: ' + data.actionId };
-}
-
-function createAuditDriveFolderHierarchy(auditId, dateStr) {
-  try {
-    var monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-    var year  = dateStr ? dateStr.substring(0, 4) : String(new Date().getFullYear());
-    var mIdx  = dateStr ? (Number(dateStr.substring(5, 7)) - 1) : new Date().getMonth();
-    var month = monthNames[mIdx] || 'Unknown';
-
-    var root    = getOrCreateFolder(DriveApp.getRootFolder(),   'Engineering Audit System');
-    var records = getOrCreateFolder(root,    'Audit Records');
-    var yearF   = getOrCreateFolder(records, year);
-    var monthF  = getOrCreateFolder(yearF,   month);
-    var auditF  = getOrCreateFolder(monthF,  auditId);
-    var photosF = getOrCreateFolder(auditF, 'Photos');
-
-    return { folderId: auditF.getId(), folderUrl: auditF.getUrl(), photosFolderId: photosF.getId() };
-  } catch (err) {
-    Logger.log('Drive folder error: ' + err);
-    return { folderId: '', folderUrl: '', photosFolderId: '' };
-  }
-}
-
-function getOrCreateFolder(parent, name) {
-  var it = parent.getFoldersByName(name);
-  return it.hasNext() ? it.next() : parent.createFolder(name);
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -521,7 +444,7 @@ function sendDeviationAlertEmail(auditId, header, actions, results, driveFolderU
   var matchingResult = null;
   if (results && results.length > 0) {
     for (var r = 0; r < results.length; r++) {
-      if (results[r].comp === singleAction.comp || results[r].ck === singleAction.ck) {
+      if (results[r].comp === singleAction.comp || results[r].ck === singleAction.ck || results[r].sr === singleAction.sr) {
         matchingResult = results[r];
         break;
       }
@@ -530,7 +453,6 @@ function sendDeviationAlertEmail(auditId, header, actions, results, driveFolderU
 
   var subject = (criticalCount > 0 ? '⚠️ CRITICAL DEVIATION' : '⚠️ AUDIT DEVIATION') + ' — ' + auditId + ' (' + section + ')';
 
-  // Build rows for multiple deviations table
   var deviationRowsHtml = '';
   for (var i = 0; i < actions.length; i++) {
     var act = actions[i];
@@ -545,19 +467,17 @@ function sendDeviationAlertEmail(auditId, header, actions, results, driveFolderU
       '</tr>';
   }
 
-  // Single Deviation parameters
   var compName = singleAction.comp || singleAction.componentName || 'Component';
   var ckText = singleAction.ck || singleAction.checkpointText || 'Checkpoint';
-  var stdParam = (matchingResult && matchingResult.std) ? matchingResult.std : 'Standard Parameter';
+  var stdParam = (matchingResult && matchingResult.std) ? matchingResult.std : (matchingResult && matchingResult.standardParameter ? matchingResult.standardParameter : 'Standard Parameter');
   var actVal = (matchingResult && matchingResult.val) ? matchingResult.val : (singleAction.obs || 'NG');
   var crit = singleAction.prio || singleAction.priority || 'Medium';
   var obs = singleAction.obs || singleAction.observation || 'Deviation observed during audit';
-  var failImpact = (matchingResult && matchingResult.whatImpactIfThisPartGetsFail) ? matchingResult.whatImpactIfThisPartGetsFail : ((matchingResult && matchingResult.impactOfFailure) ? matchingResult.impactOfFailure : 'Equipment wear / operational stoppage');
+  var failImpact = (matchingResult && matchingResult.whatImpactIfThisPartGetsFail) ? matchingResult.whatImpactIfThisPartGetsFail : 'Equipment wear / operational stoppage';
   var corrAction = singleAction.act || singleAction.recommendedAction || 'Perform corrective maintenance';
   var targetDate = singleAction.target || singleAction.targetDate || 'Immediate';
   var photoUrl = (matchingResult && matchingResult.photoUrl) ? matchingResult.photoUrl : '';
 
-  // Construct complete stylized HTML email
   var html = '<!DOCTYPE html>' +
 '<html lang="en">' +
 '<head>' +
@@ -649,10 +569,7 @@ function sendDeviationAlertEmail(auditId, header, actions, results, driveFolderU
 '        <div class="photo"><img src="' + photoUrl + '" alt="Deviation Photo"></div>' +
 '    </div>';
     }
-  }
-
-  // Multiple Deviations table
-  if (!isSingle) {
+  } else {
     html += '<div class="section">' +
 '        <div class="section-title">Deviation Summary</div>' +
 '        <table>' +
@@ -687,29 +604,4 @@ function sendDeviationAlertEmail(auditId, header, actions, results, driveFolderU
   } catch (e) {
     Logger.log('MailApp error: ' + e.toString());
   }
-}
-
-function sendTestNotificationEmail(email) {
-  var target = email || 'mehul.chikhaliya@borosil.com';
-  var testActions = [{
-    id: 'ACT-TEST-1',
-    comp: 'Spindle Bearing Unit',
-    ck: 'Check spindle vibration & temperature levels',
-    obs: 'Elevated temperature 65°C detected during run',
-    act: 'Inspect lubrication & check bearing clearance',
-    prio: 'Critical',
-    status: 'Open',
-    target: '2026-08-20'
-  }];
-
-  var testHeader = {
-    date: new Date().toISOString().substring(0, 10),
-    auditorName: 'Mehul Chikhaliya',
-    sectionName: 'Grinding (M1)',
-    subSectionName: 'Edger Section',
-    lineName: 'BL#1',
-    equipmentName: 'Benteler Edger'
-  };
-
-  sendDeviationAlertEmail('ENG-TEST-' + Date.now(), testHeader, testActions, [], 'https://docs.google.com/spreadsheets/d/' + SPREADSHEET_ID);
 }

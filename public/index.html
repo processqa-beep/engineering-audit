@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BRL Engineering Audit Portal</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Google Fonts: Inter -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+    .custom-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+    .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    .custom-scroll::-webkit-scrollbar-track { background: #f1f5f9; }
+  </style>
+</head>
+<body class="text-slate-800 min-h-screen flex flex-col antialiased selection:bg-indigo-500 selection:text-white">
+
+  <!-- TOP APP BAR -->
+  <header class="bg-slate-900 text-white sticky top-0 z-50 border-b border-slate-800 shadow-md">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-cyan-500 flex items-center justify-center shadow-md">
+            <i class="fa-solid fa-clipboard-check text-white text-lg"></i>
+          </div>
+          <div>
+            <h1 class="text-base font-extrabold tracking-tight text-white leading-tight">BOROSIL RENEWABLES</h1>
+            <p class="text-[10px] text-slate-400 font-semibold tracking-wider uppercase">Plant Engineering Audit Portal</p>
+          </div>
+        </div>
+
+        <!-- Navigation Tabs -->
+        <nav class="flex items-center space-x-1 sm:space-x-2">
+          <button onclick="switchTab('newAudit')" id="tabBtn-newAudit" class="tab-btn px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-2 bg-indigo-600 text-white">
+            <i class="fa-solid fa-plus-circle"></i>
+            <span class="hidden sm:inline">New Audit</span>
+          </button>
+          <button onclick="switchTab('actions')" id="tabBtn-actions" class="tab-btn px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-2 text-slate-300 hover:bg-slate-800">
+            <i class="fa-solid fa-triangle-exclamation"></i>
+            <span class="hidden sm:inline">Action Tracker</span>
+            <span id="openActionsBadge" class="hidden bg-rose-500 text-white text-[10px] px-1.5 py-0.2 rounded-full font-extrabold">0</span>
+          </button>
+          <button onclick="switchTab('history')" id="tabBtn-history" class="tab-btn px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-2 text-slate-300 hover:bg-slate-800">
+            <i class="fa-solid fa-clock-rotate-left"></i>
+            <span class="hidden sm:inline">History</span>
+          </button>
+        </nav>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN CONTAINER -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+    <!-- ══════════════════════════════════════════════════════════════════════════ -->
+    <!-- TAB 1: NEW AUDIT FORM -->
+    <!-- ══════════════════════════════════════════════════════════════════════════ -->
+    <div id="tabContent-newAudit" class="space-y-6">
+      
+      <!-- STICKY SUMMARY SCORECARD -->
+      <div class="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-sm sticky top-20 z-40">
+        <div class="grid grid-cols-2 sm:grid-cols-6 gap-3 items-center">
+          <div class="p-3 bg-slate-50 rounded-xl border border-slate-100">
+            <p class="text-[10px] font-bold text-slate-500 uppercase">Evaluated</p>
+            <p id="statEvaluated" class="text-lg font-black text-slate-900 mt-0.5">0 / 0</p>
+          </div>
+          <div class="p-3 bg-emerald-50 rounded-xl border border-emerald-100">
+            <p class="text-[10px] font-bold text-emerald-700 uppercase">OK Points</p>
+            <p id="statOk" class="text-lg font-black text-emerald-800 mt-0.5">0</p>
+          </div>
+          <div class="p-3 bg-rose-50 rounded-xl border border-rose-100">
+            <p class="text-[10px] font-bold text-rose-700 uppercase">NG (Deviations)</p>
+            <p id="statNg" class="text-lg font-black text-rose-800 mt-0.5">0</p>
+          </div>
+          <div class="p-3 bg-amber-50 rounded-xl border border-amber-100">
+            <p class="text-[10px] font-bold text-amber-700 uppercase">Observations</p>
+            <p id="statObs" class="text-lg font-black text-amber-800 mt-0.5">0</p>
+          </div>
+          <div class="p-3 bg-indigo-50 rounded-xl border border-indigo-100 col-span-2 sm:col-span-2">
+            <div class="flex items-center justify-between">
+              <p class="text-[10px] font-bold text-indigo-700 uppercase">Compliance</p>
+              <span id="statStatusBadge" class="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-500 text-white">READY</span>
+            </div>
+            <div class="flex items-center space-x-2 mt-1">
+              <div class="flex-1 bg-indigo-100 rounded-full h-3 overflow-hidden">
+                <div id="statProgressBar" class="bg-indigo-600 h-full transition-all duration-300 rounded-full" style="width: 100%;"></div>
+              </div>
+              <span id="statCompliance" class="text-sm font-black text-indigo-900">100%</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- AUDIT HEADER METADATA CARD -->
+      <div class="bg-white rounded-2xl p-6 border border-slate-200/90 shadow-sm space-y-4">
+        <h2 class="text-sm font-extrabold text-slate-900 uppercase tracking-wider flex items-center space-x-2 border-b border-slate-100 pb-3">
+          <i class="fa-solid fa-sliders text-indigo-600"></i>
+          <span>Audit Header Parameters</span>
+        </h2>
+        
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs font-semibold">
+          <div>
+            <label class="block text-slate-600 mb-1">Audit ID</label>
+            <input type="text" id="hdrAuditId" readonly class="w-full bg-slate-100 border border-slate-200 text-slate-700 rounded-xl px-3 py-2 font-mono font-bold">
+          </div>
+          <div>
+            <label class="block text-slate-600 mb-1">Date</label>
+            <input type="date" id="hdrDate" class="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+          </div>
+          <div>
+            <label class="block text-slate-600 mb-1">Section</label>
+            <select id="hdrSection" onchange="filterCheckpoints()" class="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:outline-none font-bold">
+              <option value="ALL">All Sections</option>
+              <option value="Grinding (M1)" selected>Grinding (M1)</option>
+              <option value="Washing (M2)">Washing (M2)</option>
+              <option value="Furnace / Tempering (M3)">Furnace / Tempering (M3)</option>
+              <option value="Printing (M4)">Printing (M4)</option>
+              <option value="Cutting (M5)">Cutting (M5)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-slate-600 mb-1">Line / Machine</label>
+            <select id="hdrLine" onchange="filterCheckpoints()" class="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:outline-none font-bold">
+              <option value="ALL">All Lines</option>
+              <option value="BL#1" selected>BL#1</option>
+              <option value="BL#2">BL#2</option>
+              <option value="BL#3">BL#3</option>
+              <option value="BL#4">BL#4</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-slate-600 mb-1">Sub Section</label>
+            <input type="text" id="hdrSubSection" value="General Section" class="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3 py-2 focus:outline-none">
+          </div>
+          <div>
+            <label class="block text-slate-600 mb-1">Equipment</label>
+            <input type="text" id="hdrEquipment" value="Benteler / Bando Equipment" class="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3 py-2 focus:outline-none">
+          </div>
+          <div>
+            <label class="block text-slate-600 mb-1">Auditor Name</label>
+            <input type="text" id="hdrAuditor" value="Mehul Chikhaliya" class="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3 py-2 focus:outline-none font-bold">
+          </div>
+          <div>
+            <label class="block text-slate-600 mb-1">Shift</label>
+            <select id="hdrShift" class="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3 py-2 focus:outline-none font-bold">
+              <option value="Shift A (Morning)">Shift A (Morning)</option>
+              <option value="Shift B (Evening)">Shift B (Evening)</option>
+              <option value="Shift C (Night)">Shift C (Night)</option>
+              <option value="General Shift">General Shift</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- CHECKPOINTS CONTAINER -->
+      <div id="checkpointsContainer" class="space-y-4">
+        <!-- Rendered dynamically -->
+      </div>
+
+      <!-- SUBMIT AUDIT ACTION BAR -->
+      <div class="p-6 bg-slate-900 text-white rounded-2xl shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div>
+          <h3 class="text-base font-extrabold flex items-center space-x-2">
+            <i class="fa-solid fa-cloud-arrow-up text-cyan-400"></i>
+            <span>Submit Engineering Audit</span>
+          </h3>
+          <p class="text-xs text-slate-400 mt-0.5">Saves to Google Sheets, dumps photos to Google Drive, and dispatches deviation emails.</p>
+        </div>
+        <button id="btnSubmitAudit" onclick="handleSubmitAudit()" class="w-full sm:w-auto bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white px-8 py-3.5 rounded-xl font-extrabold text-sm shadow-lg shadow-emerald-900/40 transition flex items-center justify-center space-x-2">
+          <i class="fa-solid fa-paper-plane"></i>
+          <span>Submit Engineering Audit</span>
+        </button>
+      </div>
+
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════════════════════ -->
+    <!-- TAB 2: ACTION TRACKER -->
+    <!-- ══════════════════════════════════════════════════════════════════════════ -->
+    <div id="tabContent-actions" class="hidden space-y-4">
+      <div class="bg-white p-6 rounded-2xl border border-slate-200/90 shadow-sm flex items-center justify-between">
+        <div>
+          <h2 class="text-base font-extrabold text-slate-900 flex items-center space-x-2">
+            <i class="fa-solid fa-triangle-exclamation text-rose-600"></i>
+            <span>Action Tracker (Non-Conformance &amp; Deviations)</span>
+          </h2>
+          <p class="text-xs text-slate-500 mt-1">Track and close identified engineering audit deviations.</p>
+        </div>
+        <button onclick="loadActionsFromBackend()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-1.5">
+          <i class="fa-solid fa-arrows-rotate"></i>
+          <span>Refresh</span>
+        </button>
+      </div>
+
+      <div class="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto custom-scroll">
+          <table class="w-full text-left text-xs">
+            <thead class="bg-slate-50 border-b border-slate-200 text-slate-600 font-extrabold uppercase text-[10px] tracking-wider">
+              <tr>
+                <th class="p-3">Action ID</th>
+                <th class="p-3">Audit ID</th>
+                <th class="p-3">Component</th>
+                <th class="p-3">Checkpoint</th>
+                <th class="p-3">Observation</th>
+                <th class="p-3">Priority</th>
+                <th class="p-3">Status</th>
+                <th class="p-3">Action</th>
+              </tr>
+            </thead>
+            <tbody id="actionsTableBody" class="divide-y divide-slate-100 font-medium">
+              <tr><td colspan="8" class="p-8 text-center text-slate-400">Loading action items...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════════════════════ -->
+    <!-- TAB 3: AUDIT HISTORY -->
+    <!-- ══════════════════════════════════════════════════════════════════════════ -->
+    <div id="tabContent-history" class="hidden space-y-4">
+      <div class="bg-white p-6 rounded-2xl border border-slate-200/90 shadow-sm flex items-center justify-between">
+        <div>
+          <h2 class="text-base font-extrabold text-slate-900 flex items-center space-x-2">
+            <i class="fa-solid fa-clock-rotate-left text-indigo-600"></i>
+            <span>Audit History &amp; Records</span>
+          </h2>
+          <p class="text-xs text-slate-500 mt-1">View submitted plant engineering audits and access Drive folders.</p>
+        </div>
+        <button onclick="loadHistoryFromBackend()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-1.5">
+          <i class="fa-solid fa-arrows-rotate"></i>
+          <span>Refresh</span>
+        </button>
+      </div>
+
+      <div class="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto custom-scroll">
+          <table class="w-full text-left text-xs">
+            <thead class="bg-slate-50 border-b border-slate-200 text-slate-600 font-extrabold uppercase text-[10px] tracking-wider">
+              <tr>
+                <th class="p-3">Audit ID</th>
+                <th class="p-3">Date</th>
+                <th class="p-3">Section</th>
+                <th class="p-3">Line</th>
+                <th class="p-3">Auditor</th>
+                <th class="p-3">Compliance</th>
+                <th class="p-3">Status</th>
+                <th class="p-3">Drive Folder</th>
+              </tr>
+            </thead>
+            <tbody id="historyTableBody" class="divide-y divide-slate-100 font-medium">
+              <tr><td colspan="8" class="p-8 text-center text-slate-400">Loading audit history...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ══════════════════════════════════════════════════════════════════════════ -->
+  <!-- MODAL: SUCCESS CONFIRMATION -->
+  <!-- ══════════════════════════════════════════════════════════════════════════ -->
+  <div id="modalSuccess" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-white max-w-md w-full rounded-2xl p-6 shadow-2xl border border-slate-200 text-center space-y-4 animate-scale-in">
+      <div class="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto text-2xl shadow-inner">
+        <i class="fa-solid fa-circle-check"></i>
+      </div>
+      <div>
+        <h3 class="text-lg font-black text-slate-900">Audit Successfully Submitted!</h3>
+        <p id="modalSuccessSub" class="text-xs text-slate-500 mt-1">Data saved to Google Sheets, Photos dumped to Google Drive, and Deviation Email Dispatched.</p>
+      </div>
+      <div class="p-3 bg-slate-50 rounded-xl border border-slate-100 text-xs font-mono font-bold text-slate-700 text-left space-y-1">
+        <p>Audit ID: <span id="modalAuditId" class="text-indigo-600">ENG-20260815-001</span></p>
+        <p>Photos Uploaded: <span id="modalPhotosCount" class="text-emerald-600">0</span></p>
+        <p>Deviations Dispatched: <span id="modalNgCount" class="text-rose-600">0</span></p>
+      </div>
+      <div class="flex flex-col sm:flex-row gap-2 pt-2">
+        <a id="modalDriveBtn" href="#" target="_blank" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs py-2.5 rounded-xl transition flex items-center justify-center space-x-1.5 shadow-md">
+          <i class="fa-brands fa-google-drive"></i>
+          <span>Open Drive Folder</span>
+        </a>
+        <button onclick="closeSuccessModal()" class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs py-2.5 rounded-xl transition">
+          Done / Next Audit
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- JAVASCRIPT APPLICATION LOGIC -->
+  <script>
+    // ── DEFAULT MASTER CHECKPOINTS ──────────────────────────────────────────────
+    const DEFAULT_CHECKPOINTS = [
+      {
+        id: 'CKP-1', srNo: 1, sectionName: 'Grinding (M1)', lineName: 'BL#1',
+        componentName: 'Main Drive & Spindle Unit',
+        checkpointText: 'Check spindle vibration and operating bearing temperature',
+        standardParameter: 'Smooth run, Temp < 55°C, Vibration < 2.5 mm/s',
+        whatImpactIfThisPartGetsFail: 'Bearing seizure, machine stoppage & uneven glass edge grinding',
+        criticality: 'Critical', isCritical: true
+      },
+      {
+        id: 'CKP-2', srNo: 2, sectionName: 'Grinding (M1)', lineName: 'BL#1',
+        componentName: 'Main Drive & Spindle Unit',
+        checkpointText: 'Inspect drive belt tension and visual wear condition',
+        standardParameter: 'No fraying, deflection 8-10mm under 2kg load',
+        whatImpactIfThisPartGetsFail: 'Belt slippage leading to erratic wheel speed',
+        criticality: 'Medium', isCritical: false
+      },
+      {
+        id: 'CKP-3', srNo: 3, sectionName: 'Grinding (M1)', lineName: 'BL#1',
+        componentName: 'Coolant & Filtration System',
+        checkpointText: 'Check coolant spray nozzle alignment & pump discharge pressure',
+        standardParameter: 'Full wheel coverage, Pressure: 2.5 to 3.5 bar',
+        whatImpactIfThisPartGetsFail: 'Wheel overheating and glass edge thermal micro-cracks',
+        criticality: 'Critical', isCritical: true
+      },
+      {
+        id: 'CKP-4', srNo: 4, sectionName: 'Grinding (M1)', lineName: 'BL#1',
+        componentName: 'Conveyor & Roller Transport',
+        checkpointText: 'Inspect PU drive rollers for wear, flat spots or glass chips',
+        standardParameter: 'Zero surface damage, free synchronous rotation',
+        whatImpactIfThisPartGetsFail: 'Glass scratches and improper conveyor tracking',
+        criticality: 'Medium', isCritical: false
+      },
+      {
+        id: 'CKP-5', srNo: 5, sectionName: 'Washing (M2)', lineName: 'BL#1',
+        componentName: 'Brush Section & Drive',
+        checkpointText: 'Check top and bottom brush bristle condition and drive chains',
+        standardParameter: 'Bristles clean, uniform height, chain lubricated',
+        whatImpactIfThisPartGetsFail: 'Improper washing leading to surface defects before tempering',
+        criticality: 'Medium', isCritical: false
+      },
+      {
+        id: 'CKP-6', srNo: 6, sectionName: 'Furnace / Tempering (M3)', lineName: 'BL#1',
+        componentName: 'Quench Blower Section',
+        checkpointText: 'Inspect blower motor damper actuators & air delivery nozzles',
+        standardParameter: 'Smooth damper travel, zero air nozzle blockage',
+        whatImpactIfThisPartGetsFail: 'Uneven cooling causing glass bow, wave and breakage',
+        criticality: 'Critical', isCritical: true
+      }
+    ];
+
+    let allCheckpoints = [...DEFAULT_CHECKPOINTS];
+    let checkpointStates = [];
+
+    // ── INITIALIZATION ────────────────────────────────────────────────────────
+    window.addEventListener('DOMContentLoaded', () => {
+      initNewAudit();
+      loadCheckpointsFromBackend();
+    });
+
+    function generateAuditId() {
+      const d = new Date();
+      const yr = d.getFullYear();
+      const mo = String(d.getMonth() + 1).padStart(2, '0');
+      const da = String(d.getDate()).padStart(2, '0');
+      const rnd = Math.floor(100 + Math.random() * 900);
+      return `ENG-${yr}${mo}${da}-${rnd}`;
+    }
+
+    function initNewAudit() {
+      document.getElementById('hdrAuditId').value = generateAuditId();
+      document.getElementById('hdrDate').value = new Date().toISOString().substring(0, 10);
+      filterCheckpoints();
+    }
+
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('bg-indigo-600', 'text-white');
+        btn.classList.add('text-slate-300');
+      });
+      const activeBtn = document.getElementById(`tabBtn-${tabId}`);
+      if (activeBtn) {
+        activeBtn.classList.remove('text-slate-300');
+        activeBtn.classList.add('bg-indigo-600', 'text-white');
+      }
+
+      ['newAudit', 'actions', 'history'].forEach(id => {
+        const content = document.getElementById(`tabContent-${id}`);
+        if (content) {
+          if (id === tabId) content.classList.remove('hidden');
+          else content.classList.add('hidden');
+        }
+      });
+
+      if (tabId === 'actions') loadActionsFromBackend();
+      if (tabId === 'history') loadHistoryFromBackend();
+    }
+
+    // ── FILTER & RENDER CHECKPOINTS ───────────────────────────────────────────
+    function filterCheckpoints() {
+      const selectedSection = document.getElementById('hdrSection').value;
+      const selectedLine = document.getElementById('hdrLine').value;
+
+      const filtered = allCheckpoints.filter(ck => {
+        const matchSec = selectedSection === 'ALL' || ck.sectionName === selectedSection;
+        const matchLine = selectedLine === 'ALL' || (ck.applicableLines && ck.applicableLines.includes('ALL')) || ck.lineName === selectedLine;
+        return matchSec;
+      });
+
+      // Initialize checkpoint states with unselected status
+      checkpointStates = filtered.map(ck => ({
+        ...ck,
+        status: '',
+        actualValue: '',
+        observationNotes: '',
+        recommendedAction: '',
+        photoUrl: ''
+      }));
+
+      renderCheckpoints();
+      updateScorecard();
+    }
+
+    function renderCheckpoints() {
+      const container = document.getElementById('checkpointsContainer');
+      if (checkpointStates.length === 0) {
+        container.innerHTML = '<div class="p-8 bg-white rounded-2xl border text-center text-slate-400 font-bold text-xs">No checkpoints found for the selected section.</div>';
+        return;
+      }
+
+      // Group by component
+      const groups = {};
+      checkpointStates.forEach((item, index) => {
+        const comp = item.componentName || 'General Component';
+        if (!groups[comp]) groups[comp] = [];
+        groups[comp].push({ item, index });
+      });
+
+      let html = '';
+      Object.keys(groups).forEach(compName => {
+        html += `
+          <div class="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden">
+            <div class="bg-slate-50 px-5 py-3 border-b border-slate-200 flex items-center justify-between">
+              <h3 class="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center space-x-2">
+                <i class="fa-solid fa-cube text-indigo-600"></i>
+                <span>${compName}</span>
+              </h3>
+              <span class="text-[10px] font-extrabold bg-slate-200 text-slate-700 px-2 py-0.5 rounded-full">${groups[compName].length} Points</span>
+            </div>
+            <div class="divide-y divide-slate-100">
+        `;
+
+        groups[compName].forEach(({ item, index }) => {
+          const isEvaluated = item.status && item.status !== '';
+          const isNg = item.status === 'NG';
+          const isObs = item.status === 'Observation';
+
+          html += `
+            <div class="p-4 sm:p-5 hover:bg-slate-50/60 transition space-y-3">
+              <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                <div class="space-y-1 flex-1">
+                  <div class="flex items-center space-x-2">
+                    <span class="font-mono text-xs font-black text-slate-400">#${item.srNo || index + 1}</span>
+                    <h4 class="text-xs font-extrabold text-slate-900">${item.checkpointText}</h4>
+                    ${item.isCritical ? '<span class="bg-rose-100 text-rose-800 text-[9px] font-black px-1.5 py-0.5 rounded uppercase">Critical</span>' : ''}
+                  </div>
+                  <p class="text-xs text-slate-600 font-medium"><strong class="text-slate-700 font-bold">Standard:</strong> ${item.standardParameter}</p>
+                  ${item.whatImpactIfThisPartGetsFail ? `<p class="text-[11px] text-slate-500"><strong class="text-slate-600 font-bold">Potential Failure Impact:</strong> ${item.whatImpactIfThisPartGetsFail}</p>` : ''}
+                </div>
+
+                <!-- Status Selector -->
+                <div class="shrink-0 flex items-center space-x-2">
+                  <select onchange="updateCheckpointStatus(${index}, this.value)" class="text-xs font-extrabold rounded-xl px-3 py-2 border focus:outline-none transition ${
+                    item.status === 'OK' ? 'bg-emerald-50 border-emerald-300 text-emerald-800' :
+                    item.status === 'NG' ? 'bg-rose-50 border-rose-300 text-rose-800' :
+                    item.status === 'Observation' ? 'bg-amber-50 border-amber-300 text-amber-800' :
+                    item.status === 'N/A' ? 'bg-slate-100 border-slate-300 text-slate-700' :
+                    'bg-white border-slate-300 text-slate-500'
+                  }">
+                    <option value="" ${item.status === '' ? 'selected' : ''}>-- Select Status --</option>
+                    <option value="OK" ${item.status === 'OK' ? 'selected' : ''}>✓ OK</option>
+                    <option value="NG" ${item.status === 'NG' ? 'selected' : ''}>✗ NG (Deviation)</option>
+                    <option value="Observation" ${item.status === 'Observation' ? 'selected' : ''}>⚠ Observation</option>
+                    <option value="N/A" ${item.status === 'N/A' ? 'selected' : ''}>- N/A</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Evaluated Input Fields -->
+              ${isEvaluated ? `
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 text-xs border-t border-slate-100">
+                  <div>
+                    <label class="block text-[11px] font-bold text-slate-600 mb-1">Actual Observed Value</label>
+                    <input type="text" value="${item.actualValue}" onchange="checkpointStates[${index}].actualValue = this.value" placeholder="e.g. 48°C, OK, Loose" class="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3 py-1.5 text-xs font-semibold focus:outline-none">
+                  </div>
+                  <div>
+                    <label class="block text-[11px] font-bold text-slate-600 mb-1">Observation Notes</label>
+                    <input type="text" value="${item.observationNotes}" onchange="checkpointStates[${index}].observationNotes = this.value" placeholder="Details of observation" class="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3 py-1.5 text-xs font-semibold focus:outline-none ${isNg ? 'border-rose-300 bg-rose-50/50' : ''}">
+                  </div>
+                  <div>
+                    <label class="block text-[11px] font-bold text-slate-600 mb-1">Recommended Action</label>
+                    <input type="text" value="${item.recommendedAction}" onchange="checkpointStates[${index}].recommendedAction = this.value" placeholder="Corrective action" class="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3 py-1.5 text-xs font-semibold focus:outline-none ${isNg ? 'border-rose-300 bg-rose-50/50' : ''}">
+                  </div>
+                </div>
+
+                <!-- Photo Attachment Row -->
+                <div class="pt-1 flex items-center space-x-3">
+                  <label class="cursor-pointer bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 border border-slate-200">
+                    <i class="fa-solid fa-camera text-indigo-600"></i>
+                    <span>${item.photoUrl ? 'Change Photo' : 'Attach Photo'}</span>
+                    <input type="file" accept="image/*" capture="environment" onchange="handlePhotoUpload(${index}, event)" class="hidden">
+                  </label>
+                  ${item.photoUrl ? `
+                    <div class="flex items-center space-x-2">
+                      <img src="${item.photoUrl}" class="w-9 h-9 object-cover rounded-lg border border-slate-300 shadow-sm">
+                      <button onclick="removePhoto(${index})" class="text-rose-500 hover:text-rose-700 text-xs font-bold">
+                        <i class="fa-solid fa-trash-can"></i>
+                      </button>
+                    </div>
+                  ` : ''}
+                </div>
+              ` : ''}
+            </div>
+          `;
+        });
+
+        html += `</div></div>`;
+      });
+
+      container.innerHTML = html;
+    }
+
+    function updateCheckpointStatus(index, newStatus) {
+      checkpointStates[index].status = newStatus;
+      renderCheckpoints();
+      updateScorecard();
+    }
+
+    // ── PHOTO UPLOADER (CANVAS RESIZING TO LIGHTWEIGHT JPEG) ───────────────────
+    function handlePhotoUpload(index, event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const MAX_DIM = 800;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height && width > MAX_DIM) {
+            height = Math.round((height * MAX_DIM) / width);
+            width = MAX_DIM;
+          } else if (height > MAX_DIM) {
+            width = Math.round((width * MAX_DIM) / height);
+            height = MAX_DIM;
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+
+          const compressedBase64 = canvas.toDataURL('image/jpeg', 0.65);
+          checkpointStates[index].photoUrl = compressedBase64;
+          renderCheckpoints();
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function removePhoto(index) {
+      checkpointStates[index].photoUrl = '';
+      renderCheckpoints();
+    }
+
+    // ── LIVE SCORECARD CALCULATION ────────────────────────────────────────────
+    function updateScorecard() {
+      const evaluated = checkpointStates.filter(c => c.status && c.status !== '');
+      const okCount = evaluated.filter(c => c.status === 'OK').length;
+      const ngCount = evaluated.filter(c => c.status === 'NG').length;
+      const obsCount = evaluated.filter(c => c.status === 'Observation').length;
+      const naCount = evaluated.filter(c => c.status === 'N/A').length;
+
+      const denominator = okCount + ngCount + obsCount;
+      const compliance = denominator > 0 ? Math.round((okCount / denominator) * 100) : 100;
+      const overallStatus = (ngCount > 0 || compliance < 90) ? 'FAIL' : 'PASS';
+
+      document.getElementById('statEvaluated').innerText = `${evaluated.length} / ${checkpointStates.length}`;
+      document.getElementById('statOk').innerText = okCount;
+      document.getElementById('statNg').innerText = ngCount;
+      document.getElementById('statObs').innerText = obsCount;
+      document.getElementById('statCompliance').innerText = `${compliance}%`;
+      document.getElementById('statProgressBar').style.width = `${compliance}%`;
+
+      const badge = document.getElementById('statStatusBadge');
+      if (overallStatus === 'PASS') {
+        badge.innerText = 'PASS';
+        badge.className = 'text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-500 text-white';
+      } else {
+        badge.innerText = 'ACTION REQ.';
+        badge.className = 'text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-rose-500 text-white';
+      }
+    }
+
+    // ── SUBMIT AUDIT HANDLER ──────────────────────────────────────────────────
+    function handleSubmitAudit() {
+      const evaluated = checkpointStates.filter(c => c.status && c.status !== '');
+      if (evaluated.length === 0) {
+        alert('Please evaluate at least one checkpoint before submitting.');
+        return;
+      }
+
+      const okCount = evaluated.filter(c => c.status === 'OK').length;
+      const ngCount = evaluated.filter(c => c.status === 'NG').length;
+      const obsCount = evaluated.filter(c => c.status === 'Observation').length;
+      const naCount = evaluated.filter(c => c.status === 'N/A').length;
+      const denominator = okCount + ngCount + obsCount;
+      const compliance = denominator > 0 ? Math.round((okCount / denominator) * 100) : 100;
+      const overallStatus = (ngCount > 0 || compliance < 90) ? 'FAIL' : 'PASS';
+
+      const header = {
+        auditId: document.getElementById('hdrAuditId').value,
+        date: document.getElementById('hdrDate').value,
+        time: new Date().toTimeString().substring(0, 5),
+        sectionName: document.getElementById('hdrSection').value,
+        subSectionName: document.getElementById('hdrSubSection').value,
+        lineName: document.getElementById('hdrLine').value,
+        equipmentName: document.getElementById('hdrEquipment').value,
+        auditorName: document.getElementById('hdrAuditor').value,
+        totalCheckpoints: evaluated.length,
+        okCount, ngCount, obsCount, naCount,
+        compliancePercent: compliance,
+        overallStatus
+      };
+
+      const results = evaluated.map(r => ({
+        sr: r.srNo,
+        comp: r.componentName,
+        ck: r.checkpointText,
+        std: r.standardParameter,
+        val: r.actualValue || (r.status === 'OK' ? 'OK' : 'NG'),
+        status: r.status,
+        notes: r.observationNotes || '',
+        action: r.recommendedAction || '',
+        photoUrl: r.photoUrl || '',
+        crit: r.isCritical ? 1 : 0,
+        whatImpactIfThisPartGetsFail: r.whatImpactIfThisPartGetsFail || ''
+      }));
+
+      const actions = evaluated
+        .filter(r => r.status === 'NG' || r.status === 'Observation')
+        .map((r, i) => ({
+          id: `ACT-${header.auditId}-${i + 1}`,
+          comp: r.componentName,
+          ck: r.checkpointText,
+          obs: r.observationNotes || 'Deviation noted during audit',
+          act: r.recommendedAction || 'Perform corrective maintenance',
+          prio: r.isCritical ? 'Critical' : 'Medium',
+          status: 'Open',
+          targetDate: new Date(Date.now() + 7 * 86400000).toISOString().substring(0, 10)
+        }));
+
+      const photos = evaluated
+        .filter(r => r.photoUrl && r.photoUrl.startsWith('data:image'))
+        .map(r => ({
+          sr: r.srNo,
+          fileName: `Photo_Sr${r.srNo}_${(r.componentName || 'Comp').replace(/[^a-zA-Z0-9_-]/g, '_')}.jpg`,
+          photoBase64: r.photoUrl
+        }));
+
+      const btn = document.getElementById('btnSubmitAudit');
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i><span>Saving to Google Drive &amp; Sheets...</span>';
+
+      const payload = { header, results, actions, photos };
+
+      if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run
+          .withSuccessHandler((res) => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i><span>Submit Engineering Audit</span>';
+
+            if (res.status === 'SUCCESS') {
+              showSuccessModal(res.auditId, res.photosSaved || 0, actions.length, res.driveFolderUrl);
+            } else {
+              alert('Notice from Google Apps Script: ' + res.message);
+            }
+          })
+          .withFailureHandler((err) => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i><span>Submit Engineering Audit</span>';
+            alert('Submission failed: ' + err.toString());
+          })
+          .submitAuditFromClient(payload);
+      } else {
+        // Local simulation if running outside GAS
+        setTimeout(() => {
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i><span>Submit Engineering Audit</span>';
+          showSuccessModal(header.auditId, photos.length, actions.length, 'https://drive.google.com');
+        }, 1000);
+      }
+    }
+
+    function showSuccessModal(auditId, photosCount, ngCount, driveUrl) {
+      document.getElementById('modalAuditId').innerText = auditId;
+      document.getElementById('modalPhotosCount').innerText = photosCount;
+      document.getElementById('modalNgCount').innerText = ngCount;
+      document.getElementById('modalDriveBtn').href = driveUrl || '#';
+      document.getElementById('modalSuccess').classList.remove('hidden');
+    }
+
+    function closeSuccessModal() {
+      document.getElementById('modalSuccess').classList.add('hidden');
+      initNewAudit();
+    }
+
+    // ── BACKEND SYNC ──────────────────────────────────────────────────────────
+    function loadCheckpointsFromBackend() {
+      if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run
+          .withSuccessHandler((res) => {
+            if (res.status === 'SUCCESS' && res.checkpoints && res.checkpoints.length > 0) {
+              allCheckpoints = res.checkpoints;
+              filterCheckpoints();
+            }
+          })
+          .getCheckpointsFromClient();
+      }
+    }
+
+    function loadActionsFromBackend() {
+      const tbody = document.getElementById('actionsTableBody');
+      tbody.innerHTML = '<tr><td colspan="8" class="p-8 text-center text-slate-400 font-bold"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Loading open action items...</td></tr>';
+
+      if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run
+          .withSuccessHandler((res) => {
+            if (res.status === 'SUCCESS' && res.actions) {
+              renderActionsTable(res.actions);
+            } else {
+              tbody.innerHTML = '<tr><td colspan="8" class="p-8 text-center text-slate-400">No action items found in Action_Tracker.</td></tr>';
+            }
+          })
+          .getActionsFromClient();
+      } else {
+        tbody.innerHTML = '<tr><td colspan="8" class="p-8 text-center text-slate-400">Action items available when connected to Google Sheets.</td></tr>';
+      }
+    }
+
+    function renderActionsTable(actions) {
+      const tbody = document.getElementById('actionsTableBody');
+      if (!actions || actions.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="p-8 text-center text-emerald-600 font-bold">✓ All clear! Zero open non-conformance actions.</td></tr>';
+        document.getElementById('openActionsBadge').classList.add('hidden');
+        return;
+      }
+
+      document.getElementById('openActionsBadge').innerText = actions.length;
+      document.getElementById('openActionsBadge').classList.remove('hidden');
+
+      let html = '';
+      actions.forEach(a => {
+        const isCrit = String(a.priority).toLowerCase() === 'critical';
+        html += `
+          <tr class="hover:bg-slate-50/80 transition">
+            <td class="p-3 font-mono font-bold text-slate-700">${a.actionId}</td>
+            <td class="p-3 font-mono text-slate-500">${a.auditId}</td>
+            <td class="p-3 font-bold text-slate-900">${a.component}</td>
+            <td class="p-3 text-slate-600">${a.checkpoint}</td>
+            <td class="p-3 text-rose-700 font-medium">${a.observation}</td>
+            <td class="p-3"><span class="px-2 py-0.5 rounded text-[10px] font-black ${isCrit ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'}">${a.priority}</span></td>
+            <td class="p-3"><span class="px-2 py-0.5 rounded text-[10px] font-black ${a.status === 'Closed' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}">${a.status}</span></td>
+            <td class="p-3">
+              ${a.status !== 'Closed' ? `
+                <button onclick="closeActionPrompt('${a.actionId}')" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] px-2.5 py-1 rounded-lg transition">Close</button>
+              ` : '<span class="text-slate-400 font-bold text-[10px]">Closed</span>'}
+            </td>
+          </tr>
+        `;
+      });
+      tbody.innerHTML = html;
+    }
+
+    function closeActionPrompt(actionId) {
+      const remark = prompt('Enter closure remark for ' + actionId + ':');
+      if (!remark) return;
+
+      if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run
+          .withSuccessHandler(() => {
+            alert('Action marked as Closed!');
+            loadActionsFromBackend();
+          })
+          .updateActionFromClient({ actionId, status: 'Closed', closureRemark: remark });
+      }
+    }
+
+    function loadHistoryFromBackend() {
+      const tbody = document.getElementById('historyTableBody');
+      tbody.innerHTML = '<tr><td colspan="8" class="p-8 text-center text-slate-400 font-bold"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Loading audit history...</td></tr>';
+
+      if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run
+          .withSuccessHandler((res) => {
+            if (res.status === 'SUCCESS' && res.audits) {
+              renderHistoryTable(res.audits);
+            } else {
+              tbody.innerHTML = '<tr><td colspan="8" class="p-8 text-center text-slate-400">No audits found in Audit_Master.</td></tr>';
+            }
+          })
+          .getAuditHistoryFromClient();
+      } else {
+        tbody.innerHTML = '<tr><td colspan="8" class="p-8 text-center text-slate-400">Audit history available when connected to Google Sheets.</td></tr>';
+      }
+    }
+
+    function renderHistoryTable(audits) {
+      const tbody = document.getElementById('historyTableBody');
+      if (!audits || audits.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="p-8 text-center text-slate-400">No audit records found.</td></tr>';
+        return;
+      }
+
+      let html = '';
+      audits.forEach(a => {
+        html += `
+          <tr class="hover:bg-slate-50/80 transition">
+            <td class="p-3 font-mono font-bold text-slate-800">${a.auditId}</td>
+            <td class="p-3 text-slate-600">${a.date}</td>
+            <td class="p-3 font-bold text-slate-900">${a.section}</td>
+            <td class="p-3 text-slate-600">${a.line}</td>
+            <td class="p-3 text-slate-700">${a.auditor}</td>
+            <td class="p-3 font-black text-indigo-700">${a.compliance}%</td>
+            <td class="p-3"><span class="px-2 py-0.5 rounded text-[10px] font-black ${a.status === 'PASS' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}">${a.status}</span></td>
+            <td class="p-3">
+              ${a.folderUrl ? `<a href="${a.folderUrl}" target="_blank" class="text-indigo-600 hover:text-indigo-800 font-bold underline"><i class="fa-brands fa-google-drive mr-1"></i>Drive</a>` : '<span class="text-slate-400">-</span>'}
+            </td>
+          </tr>
+        `;
+      });
+      tbody.innerHTML = html;
+    }
+  </script>
+</body>
+</html>
