@@ -1,27 +1,17 @@
 /**
  * PLANT ENGINEERING AUDIT PORTAL — GOOGLE APPS SCRIPT BACKEND
- * Architecture: Vercel (Frontend) → JSONP GET → Google Apps Script → Google Sheets + Drive
+ * Architecture: Vercel (Frontend) → JSONP GET / POST → Google Apps Script → Google Sheets + Drive
  */
 
-// ──────────────────────────────────────────────────────────────────────────────
-// OPTIONAL: If using a standalone script, paste your Google Sheet ID below.
-// Example: If your Sheet URL is https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit
-// Then SPREADSHEET_ID is "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"
-// ──────────────────────────────────────────────────────────────────────────────
-var SPREADSHEET_ID = "1s0a4QFIbE7uOpmSQX29279JswMvAOaX2z93kh5v36B0"; 
+var SPREADSHEET_ID = "1s0a4QFIbE7uOpmSQX29279JswMvAOaX2z93kh5v36B0";
 
-// ──────────────────────────────────────────────────────────────────────────────
-// SPREADSHEET RESOLVER — Bulletproof for Container-Bound & Standalone scripts
-// ──────────────────────────────────────────────────────────────────────────────
 function getDatabaseSpreadsheet(e) {
-  // 1. Try hardcoded SPREADSHEET_ID at top of file
   try {
     if (SPREADSHEET_ID && SPREADSHEET_ID.trim().length > 5) {
       return SpreadsheetApp.openById(SPREADSHEET_ID.trim());
     }
   } catch (err) {}
 
-  // 2. Try explicit sheet ID passed in request params from Web App
   try {
     var explicitId = (e && e.parameter && e.parameter.sheetId) ? e.parameter.sheetId.trim() : '';
     if (explicitId && explicitId.length > 5) {
@@ -29,44 +19,21 @@ function getDatabaseSpreadsheet(e) {
     }
   } catch (err) {}
 
-  // 3. Try active spreadsheet (container-bound script)
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     if (ss) return ss;
   } catch (err) {}
 
-  // 4. Search Drive for existing "Engineering_Audit_Database" spreadsheet
-  try {
-    var files = DriveApp.getFilesByName('Engineering_Audit_Database');
-    while (files.hasNext()) {
-      var file = files.next();
-      if (file.getMimeType() === MimeType.GOOGLE_SHEETS) {
-        return SpreadsheetApp.open(file);
-      }
-    }
-  } catch (err) {}
-
-  // 5. Create new spreadsheet in Drive root if none found
-  try {
-    var newSS = SpreadsheetApp.create('Engineering_Audit_Database');
-    return newSS;
-  } catch (err) {}
-
   return null;
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// ONE-TIME PERMISSIONS HELPER
-// Select "SETUP_PERMISSIONS" in top toolbar and click "Run (▶)" to authorize!
-// ──────────────────────────────────────────────────────────────────────────────
 function SETUP_PERMISSIONS() {
   Logger.log("Testing Spreadsheet & Drive permissions...");
   var ss = getDatabaseSpreadsheet();
   if (ss) {
     Logger.log("✅ SUCCESS! Connected to: " + ss.getName() + " (ID: " + ss.getId() + ")");
-    Logger.log("URL: " + ss.getUrl());
   } else {
-    Logger.log("⚠️ Could not open spreadsheet. Please paste your Google Sheet ID in SPREADSHEET_ID at line 10.");
+    Logger.log("⚠️ Could not open spreadsheet.");
   }
 }
 
@@ -86,17 +53,14 @@ function doGet(e) {
       result = { status: 'SUCCESS', message: 'Test email sent to ' + email };
 
     } else if (!ss) {
-      result = {
-        status: 'ERROR',
-        message: 'Google Sheet not found. Please paste your Google Sheet ID into SPREADSHEET_ID at line 10 of Code.gs.'
-      };
+      result = { status: 'ERROR', message: 'Could not open Google Sheet with ID: ' + SPREADSHEET_ID };
 
     } else if (action === 'PING') {
       result = {
         status: 'SUCCESS',
         message: 'Connected to ' + (ss.getName ? ss.getName() : 'Google Sheet'),
         sheetName: ss.getName ? ss.getName() : 'Google Sheet',
-        sheetId: ss.getId ? ss.getId() : '',
+        sheetId: ss.getId ? ss.getId() : SPREADSHEET_ID,
         sheetUrl: ss.getUrl ? ss.getUrl() : '',
         timestamp: new Date().toISOString()
       };
@@ -113,14 +77,6 @@ function doGet(e) {
     } else if (action === 'AUDIT_HEADER') {
       var header = JSON.parse(e.parameter.payload || '{}');
       result = handleAuditHeader(ss, header);
-
-    } else if (action === 'AUDIT_RESULTS') {
-      var data = JSON.parse(e.parameter.payload || '{}');
-      result = handleAuditResults(ss, data.auditId, data.results || []);
-
-    } else if (action === 'AUDIT_ACTIONS') {
-      var data2 = JSON.parse(e.parameter.payload || '{}');
-      result = handleAuditActions(ss, data2.auditId, data2.actions || []);
 
     } else if (action === 'UPDATE_ACTION') {
       var payload = JSON.parse(e.parameter.payload || '{}');
@@ -141,6 +97,9 @@ function doGet(e) {
   return ContentService.createTextOutput(json).setMimeType(ContentService.MimeType.JSON);
 }
 
+// ──────────────────────────────────────────────────────────────────────────────
+// ROUTER (POST — Atomic 1-Shot Audit Submission + Photo Upload)
+// ──────────────────────────────────────────────────────────────────────────────
 function doPost(e) {
   try {
     var ss   = getDatabaseSpreadsheet(e);
@@ -151,21 +110,36 @@ function doPost(e) {
     if (act === 'SUBMIT_AUDIT') {
       var headerRes  = handleAuditHeader(ss, data.header || {});
       var auditId    = (data.header && data.header.auditId) ? data.header.auditId : ('ENG-' + Date.now());
-      var resultsRes = handleAuditResults(ss, auditId, data.results || []);
+
+      // Save photos directly into Drive's Photos folder
+      var photoMap = {};
+      if (data.photos && data.photos.length > 0 && headerRes.driveFolderId) {
+        photoMap = saveAuditPhotosToDrive(headerRes.driveFolderId, data.photos);
+      }
+
+      // Attach Drive photo links to results
+      var resultsWithUrls = (data.results || []).map(function(r) {
+        if (photoMap[r.sr]) {
+          r.photoUrl = photoMap[r.sr];
+        }
+        return r;
+      });
+
+      var resultsRes = handleAuditResults(ss, auditId, resultsWithUrls);
       var actionsRes = handleAuditActions(ss, auditId, data.actions || []);
+
       return respond({
         status: 'SUCCESS',
         auditId: auditId,
         driveFolderId: headerRes.driveFolderId,
         driveFolderUrl: headerRes.driveFolderUrl,
         resultsAdded: resultsRes.rowsAdded,
-        actionsAdded: actionsRes.actionsAdded
+        actionsAdded: actionsRes.actionsAdded,
+        photosSaved: Object.keys(photoMap).length
       });
     }
 
     if (act === 'AUDIT_HEADER')  return respond(handleAuditHeader(ss, data));
-    if (act === 'AUDIT_RESULTS') return respond(handleAuditResults(ss, data.auditId, data.results || []));
-    if (act === 'AUDIT_ACTIONS') return respond(handleAuditActions(ss, data.auditId, data.actions || []));
     if (act === 'UPDATE_ACTION') return respond(handleUpdateAction(ss, data));
     return respond({ status: 'ERROR', message: 'Unknown action: ' + act });
   } catch (err) {
@@ -177,6 +151,42 @@ function respond(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
 
+// ──────────────────────────────────────────────────────────────────────────────
+// SAVE PHOTOS TO GOOGLE DRIVE (Photos Subfolder)
+// ──────────────────────────────────────────────────────────────────────────────
+function saveAuditPhotosToDrive(auditFolderId, photos) {
+  var photoMap = {};
+  if (!photos || photos.length === 0) return photoMap;
+  try {
+    var auditFolder = auditFolderId ? DriveApp.getFolderById(auditFolderId) : null;
+    if (!auditFolder) return photoMap;
+
+    var photosFolder = getOrCreateFolder(auditFolder, 'Photos');
+
+    for (var i = 0; i < photos.length; i++) {
+      var p = photos[i];
+      if (!p.photoBase64 || p.photoBase64.indexOf('base64,') === -1) continue;
+
+      var base64Data = p.photoBase64.split('base64,')[1];
+      var decoded = Utilities.base64Decode(base64Data);
+      var blob = Utilities.newBlob(decoded, 'image/jpeg', p.fileName || ('Photo_Sr' + p.sr + '.jpg'));
+      var file = photosFolder.createFile(blob);
+
+      try {
+        file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      } catch (shareErr) {}
+
+      photoMap[p.sr] = file.getUrl();
+    }
+  } catch (err) {
+    Logger.log('Photo upload error: ' + err);
+  }
+  return photoMap;
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// STEP 1 — AUDIT HEADER
+// ──────────────────────────────────────────────────────────────────────────────
 function handleAuditHeader(ss, header) {
   var sheet = ss.getSheetByName('Audit_Master');
   if (!sheet) {
@@ -227,6 +237,9 @@ function handleAuditHeader(ss, header) {
   return { status: 'SUCCESS', auditId: header.auditId, driveFolderId: folderInfo.folderId, driveFolderUrl: folderInfo.folderUrl };
 }
 
+// ──────────────────────────────────────────────────────────────────────────────
+// STEP 2 — AUDIT RESULTS
+// ──────────────────────────────────────────────────────────────────────────────
 function handleAuditResults(ss, auditId, results) {
   var sheet = ss.getSheetByName('Audit_Details');
   if (!sheet) {
@@ -234,7 +247,7 @@ function handleAuditResults(ss, auditId, results) {
     sheet.appendRow([
       'Audit ID','Sr No.','Component','Checkpoint','Standard Parameter',
       'Actual Value','Status','Observation Notes','Recommended Action',
-      'Critical','Timestamp'
+      'Photo URL','Critical','Timestamp'
     ]);
     sheet.setFrozenRows(1);
   }
@@ -253,6 +266,7 @@ function handleAuditResults(ss, auditId, results) {
       r.status || '',
       r.notes || r.observationNotes || '',
       r.action || r.recommendedAction || '',
+      r.photoUrl || '',
       (r.crit === 1 || r.isCritical === true || r.isCritical === 'Yes') ? 'Yes' : 'No',
       nowStr
     ]);
@@ -265,6 +279,9 @@ function handleAuditResults(ss, auditId, results) {
   return { status: 'SUCCESS', auditId: auditId, rowsAdded: rows.length };
 }
 
+// ──────────────────────────────────────────────────────────────────────────────
+// STEP 3 — AUDIT ACTIONS
+// ──────────────────────────────────────────────────────────────────────────────
 function handleAuditActions(ss, auditId, actions) {
   if (!actions || actions.length === 0) return { status: 'SUCCESS', message: 'No actions to save.' };
 

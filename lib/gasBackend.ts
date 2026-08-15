@@ -93,7 +93,7 @@ export class GasBackendClient {
     return checkpoints;
   }
 
-  // ── SUBMIT AUDIT (Full Atomic 1-Shot Submission) ─────────────────────────────
+  // ── SUBMIT AUDIT (Full Atomic 1-Shot Submission + Photos to Drive) ────────────
   public static async submitAudit(
     header: AuditHeader,
     results: AuditResult[],
@@ -122,7 +122,18 @@ export class GasBackendClient {
       notes: (r.observationNotes || '').slice(0, 150),
       action: (r.recommendedAction || '').slice(0, 150),
       crit: r.isCritical ? 1 : 0,
+      hasPhoto: Boolean(r.photoUrl && r.photoUrl.startsWith('data:image')),
     }));
+
+    // Extract photos to upload to Drive's Photos subfolder
+    const photos = results
+      .filter((r) => r.photoUrl && r.photoUrl.startsWith('data:image'))
+      .map((r) => ({
+        sr: r.srNo,
+        comp: (r.componentName || 'Component').replace(/[^a-zA-Z0-9_-]/g, '_'),
+        photoBase64: r.photoUrl,
+        fileName: `Photo_Sr${r.srNo}_${(r.componentName || 'Comp').replace(/[^a-zA-Z0-9_-]/g, '_')}.jpg`,
+      }));
 
     const slimActions = actions.map((a) => ({
       id: a.actionId,
@@ -139,13 +150,14 @@ export class GasBackendClient {
     let driveFolderUrl = '';
 
     try {
-      // 1. Send complete Audit (Header + Details + Actions) in 1 full POST request
+      // 1. Send complete Audit (Header + Details + Actions + Photos) in 1 full POST request
       const payload = JSON.stringify({
         action: 'SUBMIT_AUDIT',
         sheetId,
         header,
         results: slimResults,
         actions: slimActions,
+        photos,
       });
 
       try {
@@ -159,7 +171,7 @@ export class GasBackendClient {
         console.warn('POST sync notice:', postErr);
       }
 
-      // 2. Also register header via JSONP to retrieve the Google Drive folder link
+      // 2. Also register header via JSONP to retrieve the live Google Drive folder link
       try {
         const headerRes = await jsonpRequest<any>(
           url,
