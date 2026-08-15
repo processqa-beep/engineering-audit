@@ -123,25 +123,26 @@ export class GasBackendClient {
 
     for (let b = 0; b < totalBatches; b++) {
       const batch = slim.slice(b * BATCH_SIZE, (b + 1) * BATCH_SIZE);
-      try {
-        await jsonpRequest<any>(
-          url,
-          {
-            action: 'SAVE_CHECKPOINTS_BATCH',
-            sheetId,
-            batchIndex: String(b),
-            totalBatches: String(totalBatches),
-            payload: JSON.stringify(batch),
-          },
-          20000
-        );
-        if (onProgress) {
-          onProgress(Math.min((b + 1) * BATCH_SIZE, slim.length), slim.length);
-        }
-        await new Promise((r) => setTimeout(r, 60));
-      } catch (err) {
-        console.warn(`Checkpoints batch ${b}/${totalBatches} notice:`, err);
+      const res = await jsonpRequest<any>(
+        url,
+        {
+          action: 'SAVE_CHECKPOINTS_BATCH',
+          sheetId,
+          batchIndex: String(b),
+          totalBatches: String(totalBatches),
+          payload: JSON.stringify(batch),
+        },
+        20000
+      );
+
+      if (res && res.status === 'ERROR') {
+        throw new Error(res.message || `Apps Script rejected batch ${b + 1}/${totalBatches}`);
       }
+
+      if (onProgress) {
+        onProgress(Math.min((b + 1) * BATCH_SIZE, slim.length), slim.length);
+      }
+      await new Promise((r) => setTimeout(r, 60));
     }
 
     return true;
