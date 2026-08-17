@@ -154,6 +154,17 @@ export interface ImportPreviewSummary {
 
 export type EmailParticipationType = 'TO' | 'CC' | 'NONE';
 
+export interface AuthUser {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  department: string;
+  avatarUrl?: string;
+  loginMethod: 'google' | 'borosil_sso';
+  loginAt: string;
+}
+
 export interface Employee {
   id: string;
   name: string;

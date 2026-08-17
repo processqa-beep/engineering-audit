@@ -319,6 +319,7 @@ export const SettingsView: React.FC = () => {
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<Partial<Employee> | null>(null);
   const [userSearch, setUserSearch] = useState('');
+  const [filterRole, setFilterRole] = useState('ALL');
   const [filterDepartment, setFilterDepartment] = useState('ALL');
   const [filterParticipation, setFilterParticipation] = useState('ALL');
 
@@ -529,6 +530,7 @@ export const SettingsView: React.FC = () => {
   // Filtered Users list
   const filteredEmployees = employees.filter((emp) => {
     const q = userSearch.toLowerCase().trim();
+    if (filterRole !== 'ALL' && emp.role !== filterRole) return false;
     if (filterDepartment !== 'ALL' && emp.department !== filterDepartment) return false;
     if (filterParticipation !== 'ALL' && (emp.emailParticipation || 'NONE') !== filterParticipation) return false;
     if (q) {
@@ -610,6 +612,21 @@ export const SettingsView: React.FC = () => {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            {/* Role Filter */}
+            <div className="flex items-center space-x-1 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
+              <Shield className="w-3.5 h-3.5 text-slate-400" />
+              <select
+                value={filterRole}
+                onChange={(e) => setFilterRole(e.target.value)}
+                className="bg-transparent text-slate-700 font-bold focus:outline-none"
+              >
+                <option value="ALL">All Roles</option>
+                {ROLES.map((r) => (
+                  <option key={r} value={r}>{r}</option>
+                ))}
+              </select>
+            </div>
+
             {/* Department Filter */}
             <div className="flex items-center space-x-1 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
               <Building className="w-3.5 h-3.5 text-slate-400" />
@@ -684,7 +701,9 @@ export const SettingsView: React.FC = () => {
                             ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
                             : emp.role === 'Engineering'
                             ? 'bg-amber-50 text-amber-700 border-amber-200'
-                            : 'bg-slate-100 text-slate-700 border-slate-200'
+                            : emp.role === 'Auditor'
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : 'bg-slate-100 text-slate-600 border-slate-300'
                         }`}>
                           {emp.role}
                         </span>

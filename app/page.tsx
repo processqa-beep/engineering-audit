@@ -12,7 +12,9 @@ import { DraftsView } from '../components/DraftsView';
 import { SettingsView } from '../components/SettingsView';
 import { AuditPointSetupView } from '../components/AuditPointSetupView';
 import { PlantStructurePanel } from '../components/PlantStructurePanel';
+import { LoginPage } from '../components/LoginPage';
 import { StorageEngine } from '../lib/storageEngine';
+import { AuthUser } from '../lib/types';
 import {
   LayoutDashboard,
   ClipboardPlus,
@@ -30,9 +32,30 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [openActionCount, setOpenActionCount] = useState<number>(0);
   const [activeDraft, setActiveDraft] = useState<any>(null);
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+  const [authInitialized, setAuthInitialized] = useState<boolean>(false);
 
   useEffect(() => {
     StorageEngine.initializeDemoData();
+    const storedUser = StorageEngine.getCurrentUser();
+    if (storedUser) {
+      setCurrentUser(storedUser);
+    } else {
+      // Default to Mehul Chikhaliya admin on first fresh boot, or prompt login
+      const defaultAdmin: AuthUser = {
+        id: 'EMP-001',
+        name: 'Mehul Chikhaliya',
+        email: 'mehul.chikhaliya@borosil.com',
+        role: 'Admin',
+        department: 'Process QA',
+        loginMethod: 'google',
+        loginAt: new Date().toISOString(),
+      };
+      StorageEngine.setCurrentUser(defaultAdmin);
+      setCurrentUser(defaultAdmin);
+    }
+    setAuthInitialized(true);
+
     const actions = StorageEngine.getActions();
     const openCount = actions.filter((a) => a.status === 'Open' || a.status === 'In Progress').length;
     setOpenActionCount(openCount);
@@ -46,15 +69,36 @@ export default function Home() {
     }
   }, [activeTab]);
 
+  const handleLogout = () => {
+    StorageEngine.logout();
+    setCurrentUser(null);
+  };
+
   const handleResumeDraft = (draft: any) => {
     setActiveDraft(draft);
     setActiveTab('new-audit');
   };
 
+  if (!authInitialized) {
+    return <div className="h-screen bg-slate-900 flex items-center justify-center text-white text-xs font-bold">Loading Borosil Portal...</div>;
+  }
+
+  if (!currentUser) {
+    return <LoginPage onLoginSuccess={(user) => setCurrentUser(user)} />;
+  }
+
   return (
     <div className="h-screen max-h-screen overflow-hidden bg-slate-200/60 flex flex-col font-sans text-slate-800">
       {/* Fixed Top Navbar */}
-      <Navbar currentTab={activeTab} onTabChange={setActiveTab} />
+      <Navbar
+        currentTab={activeTab}
+        onTabChange={setActiveTab}
+        currentUser={currentUser}
+        onLogout={handleLogout}
+        onRoleChange={(newRole) => {
+          if (currentUser) setCurrentUser({ ...currentUser, role: newRole });
+        }}
+      />
 
       <div className="flex-1 flex overflow-hidden">
         {/* Fixed Desktop Navigation Sidebar */}

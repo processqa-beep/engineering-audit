@@ -13,6 +13,7 @@ import {
   SystemSettings,
   MailConfig,
   UserRole,
+  AuthUser,
   CheckpointImportRow,
 } from './types';
 import {
@@ -46,6 +47,7 @@ const STORAGE_KEYS = {
   SETTINGS:      'plant_eng_settings_v5',
   MAIL_CONFIGS:  'plant_eng_mail_configs_v5',
   DRAFTS:        'plant_eng_drafts_v5',
+  AUTH_USER:     'plant_eng_current_auth_user_v5',
 };
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -113,6 +115,15 @@ function setItem<T>(key: string, value: T): void {
     } else {
       console.error(`[StorageEngine] Error writing "${key}":`, e);
     }
+  }
+}
+
+function removeItem(key: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(key);
+  } catch (e) {
+    console.error(`Error removing ${key} from storage:`, e);
   }
 }
 
@@ -402,5 +413,25 @@ export class StorageEngine {
   public static deleteDraft(draftId: string): void {
     const drafts = this.getDrafts();
     setItem(STORAGE_KEYS.DRAFTS, drafts.filter((d) => d.header.auditId !== draftId));
+  }
+
+  // ── AUTHENTICATION & LOGIN SESSION ───────────────────────────────────────
+  public static getCurrentUser(): AuthUser | null {
+    return getItem(STORAGE_KEYS.AUTH_USER, null);
+  }
+
+  public static setCurrentUser(user: AuthUser | null): void {
+    if (user) {
+      setItem(STORAGE_KEYS.AUTH_USER, user);
+      const settings = this.getSettings();
+      settings.currentUserRole = user.role;
+      this.saveSettings(settings);
+    } else {
+      removeItem(STORAGE_KEYS.AUTH_USER);
+    }
+  }
+
+  public static logout(): void {
+    removeItem(STORAGE_KEYS.AUTH_USER);
   }
 }
