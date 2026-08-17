@@ -368,10 +368,17 @@ export const SettingsView: React.FC = () => {
     let updatedList: Employee[];
 
     if (userData.id) {
-      // Edit existing
+      // Edit existing or Approve pending
       updatedList = employees.map((emp) =>
         emp.id === userData.id
-          ? ({ ...emp, ...userData, updatedAt: now } as Employee)
+          ? ({
+              ...emp,
+              ...userData,
+              status: 'Approved',
+              approvedAt: emp.approvedAt || now,
+              approvedBy: 'Admin',
+              updatedAt: now,
+            } as Employee)
           : emp
       );
     } else {
@@ -385,8 +392,11 @@ export const SettingsView: React.FC = () => {
         emailParticipation: userData.emailParticipation || 'TO',
         sectionScope: userData.sectionScope || 'ALL',
         triggerOn: userData.triggerOn || 'ANY_NG',
+        status: 'Approved',
         active: userData.active !== false,
         createdAt: now,
+        approvedAt: now,
+        approvedBy: 'Admin',
         updatedAt: now,
       };
       updatedList = [newEmp, ...employees];
@@ -396,7 +406,16 @@ export const SettingsView: React.FC = () => {
     StorageEngine.saveEmployees(updatedList);
     setIsUserModalOpen(false);
     setEditingUser(null);
-    setSavedMessage(`User "${userData.name}" successfully saved.`);
+    setSavedMessage(`User "${userData.name}" successfully approved and assigned.`);
+    setTimeout(() => setSavedMessage(''), 4000);
+  };
+
+  const handleRejectUser = (emp: Employee) => {
+    if (!confirm(`Reject access request for "${emp.name}" (${emp.email})?`)) return;
+    StorageEngine.rejectUser(emp.id);
+    const updated = employees.map((e) => (e.id === emp.id ? { ...e, status: 'Rejected' as any } : e));
+    setEmployees(updated);
+    setSavedMessage(`Access request for "${emp.name}" rejected.`);
     setTimeout(() => setSavedMessage(''), 4000);
   };
 
@@ -527,8 +546,9 @@ export const SettingsView: React.FC = () => {
     });
   };
 
-  // Filtered Users list
+  // Filtered Users list (Approved team members)
   const filteredEmployees = employees.filter((emp) => {
+    if (emp.status === 'Pending') return false;
     const q = userSearch.toLowerCase().trim();
     if (filterRole !== 'ALL' && emp.role !== filterRole) return false;
     if (filterDepartment !== 'ALL' && emp.department !== filterDepartment) return false;
@@ -597,6 +617,74 @@ export const SettingsView: React.FC = () => {
             <span>+ Add User</span>
           </button>
         </div>
+
+        {/* Pending Requests Alert Banner & List */}
+        {(() => {
+          const pending = employees.filter((e) => e.status === 'Pending');
+          if (pending.length === 0) return null;
+
+          return (
+            <div className="p-5 bg-gradient-to-br from-amber-50 to-orange-50 border-2 border-amber-300 rounded-3xl space-y-3.5 shadow-sm animate-fade-in">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" />
+                  <h4 className="font-extrabold text-slate-900 text-sm flex items-center space-x-2">
+                    <span>Pending Portal Access Requests</span>
+                    <span className="bg-amber-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full">
+                      {pending.length} Waiting Approval
+                    </span>
+                  </h4>
+                </div>
+                <span className="text-[11px] text-amber-800 font-semibold hidden sm:inline-block">
+                  Assign a role in the portal so the user can sign in
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {pending.map((req) => (
+                  <div
+                    key={req.id}
+                    className="bg-white p-4 rounded-2xl border border-amber-200 shadow-xs flex flex-col justify-between space-y-3"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="font-extrabold text-slate-900 text-xs">{req.name}</span>
+                        <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-md">
+                          {req.department}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-slate-500 font-mono mt-0.5 flex items-center space-x-1">
+                        <Mail className="w-3 h-3 text-slate-400" />
+                        <span>{req.email}</span>
+                      </div>
+                      <div className="text-[10px] text-slate-400 mt-1">
+                        Requested: {req.requestedAt ? new Date(req.requestedAt).toLocaleDateString() : 'Today'}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center space-x-2 pt-2 border-t border-slate-100">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEditUser(req)}
+                        className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold py-2 px-3 rounded-xl text-xs transition flex items-center justify-center space-x-1 shadow-sm"
+                      >
+                        <Shield className="w-3.5 h-3.5" />
+                        <span>Approve &amp; Assign Role</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleRejectUser(req)}
+                        className="px-3 py-2 bg-slate-100 hover:bg-rose-50 hover:text-rose-700 text-slate-600 font-bold rounded-xl text-xs transition border border-slate-200"
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Filters and Search */}
         <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 text-xs font-bold">

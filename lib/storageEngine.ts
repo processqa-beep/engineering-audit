@@ -309,6 +309,72 @@ export class StorageEngine {
     setItem(STORAGE_KEYS.EMPLOYEES, employees);
   }
 
+  public static requestAccess(name: string, email: string, department: string, password: string): { success: boolean; message: string } {
+    const cleanEmail = email.trim().toLowerCase();
+    const employees = this.getEmployees();
+    const existing = employees.find((e) => e.email.toLowerCase() === cleanEmail);
+
+    if (existing) {
+      if (existing.status === 'Approved') {
+        return { success: false, message: 'This email is already registered and approved. Please sign in directly.' };
+      }
+      if (existing.status === 'Pending') {
+        return { success: false, message: 'An access request for this email is already pending Admin approval.' };
+      }
+    }
+
+    const newRequest: Employee = {
+      id: `REQ-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
+      name: name.trim(),
+      email: cleanEmail,
+      department: department.trim() || 'General / Plant',
+      password: password.trim(),
+      role: 'Viewer',
+      status: 'Pending',
+      emailParticipation: 'NONE',
+      sectionScope: 'ALL',
+      triggerOn: 'ANY_NG',
+      active: true,
+      createdAt: new Date().toISOString(),
+      requestedAt: new Date().toISOString(),
+    };
+
+    this.saveEmployees([newRequest, ...employees]);
+    return { success: true, message: 'Access request submitted! Your account is pending Admin approval and role assignment.' };
+  }
+
+  public static approveUser(id: string, role: UserRole, department?: string, emailParticipation?: any, sectionScope?: string): void {
+    const employees = this.getEmployees();
+    const idx = employees.findIndex((e) => e.id === id);
+    if (idx >= 0) {
+      employees[idx] = {
+        ...employees[idx],
+        role,
+        department: department || employees[idx].department,
+        emailParticipation: emailParticipation || employees[idx].emailParticipation || 'NONE',
+        sectionScope: sectionScope || employees[idx].sectionScope || 'ALL',
+        status: 'Approved',
+        approvedAt: new Date().toISOString(),
+        approvedBy: 'Admin',
+        updatedAt: new Date().toISOString(),
+      };
+      this.saveEmployees(employees);
+    }
+  }
+
+  public static rejectUser(id: string): void {
+    const employees = this.getEmployees();
+    const idx = employees.findIndex((e) => e.id === id);
+    if (idx >= 0) {
+      employees[idx] = {
+        ...employees[idx],
+        status: 'Rejected',
+        updatedAt: new Date().toISOString(),
+      };
+      this.saveEmployees(employees);
+    }
+  }
+
   // ── AUDITS ────────────────────────────────────────────────────────────────
   public static getAudits(): AuditHeader[] {
     return getItem(STORAGE_KEYS.AUDITS, initialAudits);

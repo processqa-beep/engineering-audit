@@ -133,10 +133,10 @@ export const initialCheckpoints: Checkpoint[] = [];
 // EMPLOYEES
 // ──────────────────────────────────────────────────────────────────────────────
 export const initialEmployees: Employee[] = [
-  { id: 'EMP-01', name: 'Mehul Chikhaliya',  role: 'Admin',       department: 'Process QA',  email: 'mehul.chikhaliya@borosil.com', emailParticipation: 'TO', sectionScope: 'ALL', triggerOn: 'ANY_NG', active: true },
-  { id: 'EMP-02', name: 'Process QA Admin',  role: 'QA',          department: 'Process QA',  email: 'process.qa@borosil.com',       emailParticipation: 'TO', sectionScope: 'ALL', triggerOn: 'ANY_NG', active: true },
-  { id: 'EMP-03', name: 'Rakesh Gohil',      role: 'Auditor',     department: 'Engineering', email: 'rakesh.gohil@borosil.com',     emailParticipation: 'CC', sectionScope: 'ALL', triggerOn: 'CRITICAL_ONLY', active: true },
-  { id: 'EMP-04', name: 'Pavan Kumar',       role: 'Engineering', department: 'Maintenance', email: 'pavan.kumar@borosil.com',      emailParticipation: 'CC', sectionScope: 'ALL', triggerOn: 'ANY_NG', active: true },
+  { id: 'EMP-01', name: 'Mehul Chikhaliya',  role: 'Admin',       department: 'Process QA',  email: 'mehul.chikhaliya@borosil.com', password: 'borosil123', status: 'Approved', emailParticipation: 'TO', sectionScope: 'ALL', triggerOn: 'ANY_NG', active: true },
+  { id: 'EMP-02', name: 'Process QA Admin',  role: 'QA',          department: 'Process QA',  email: 'process.qa@borosil.com',       password: 'borosil123', status: 'Approved', emailParticipation: 'TO', sectionScope: 'ALL', triggerOn: 'ANY_NG', active: true },
+  { id: 'EMP-03', name: 'Rakesh Gohil',      role: 'Auditor',     department: 'Engineering', email: 'rakesh.gohil@borosil.com',     password: 'borosil123', status: 'Approved', emailParticipation: 'CC', sectionScope: 'ALL', triggerOn: 'CRITICAL_ONLY', active: true },
+  { id: 'EMP-04', name: 'Pavan Kumar',       role: 'Engineering', department: 'Maintenance', email: 'pavan.kumar@borosil.com',      password: 'borosil123', status: 'Approved', emailParticipation: 'CC', sectionScope: 'ALL', triggerOn: 'ANY_NG', active: true },
 ];
 
 // ──────────────────────────────────────────────────────────────────────────────

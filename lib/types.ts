@@ -153,6 +153,7 @@ export interface ImportPreviewSummary {
 }
 
 export type EmailParticipationType = 'TO' | 'CC' | 'NONE';
+export type UserApprovalStatus = 'Approved' | 'Pending' | 'Rejected';
 
 export interface AuthUser {
   id: string;
@@ -161,7 +162,7 @@ export interface AuthUser {
   role: UserRole;
   department: string;
   avatarUrl?: string;
-  loginMethod: 'google' | 'borosil_sso';
+  loginMethod: 'email_password' | 'google' | 'borosil_sso';
   loginAt: string;
 }
 
@@ -171,12 +172,17 @@ export interface Employee {
   role: UserRole;
   department: string;
   email: string;
+  password?: string;
+  status?: UserApprovalStatus;
   emailParticipation?: EmailParticipationType;
   sectionScope?: string;
   triggerOn?: 'ANY_NG' | 'CRITICAL_ONLY' | 'ALL_AUDITS';
   active: boolean;
   createdAt?: string;
   updatedAt?: string;
+  requestedAt?: string;
+  approvedAt?: string;
+  approvedBy?: string;
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
