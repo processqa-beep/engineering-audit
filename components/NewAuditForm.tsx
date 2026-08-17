@@ -583,7 +583,7 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
             <span>PLANT ENGINEERING AUDIT SYSTEM</span>
           </h2>
           <p className="text-xs text-slate-500 mt-1 font-semibold">
-            Conduct multi-section equipment health audits. Master checkpoints configured from Google Sheets (<span className="font-mono text-indigo-700 font-bold">Checkpoint_Master</span>).
+            Master checkpoints configured from Google Sheets (<span className="font-mono text-indigo-700 font-bold">Checkpoint_Master</span>).
           </p>
         </div>
 

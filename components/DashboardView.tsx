@@ -208,9 +208,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
             <Activity className="w-5 h-5 text-indigo-600" />
             <span>PLANT ENGINEERING EXECUTIVE DASHBOARD</span>
           </h2>
-          <p className="text-xs text-slate-500 mt-0.5 font-semibold">
-            Real-time multi-section plant equipment health, sub-section breakdown, and active maintenance actions.
-          </p>
         </div>
 
         {/* Dynamic Filters Bar */}

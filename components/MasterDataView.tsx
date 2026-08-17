@@ -356,7 +356,7 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab = 'ch
             className="flex items-center space-x-1.5 px-4 py-2 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-extrabold shadow-md transition disabled:opacity-50"
           >
             <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
-            <span>{syncing ? 'Syncing...' : 'Sync Master Data from Google Sheet'}</span>
+            <span>{syncing ? 'Syncing...' : 'Sync from Google Sheet'}</span>
           </button>
         </div>
       </div>

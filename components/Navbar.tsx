@@ -1,9 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
-import { ShieldCheck, RefreshCw, UserCheck, Database, CheckCircle2 } from 'lucide-react';
+import { ShieldCheck, RefreshCw, UserCheck } from 'lucide-react';
 import { StorageEngine } from '../lib/storageEngine';
-import { GasBackendClient } from '../lib/gasBackend';
 import { UserRole } from '../lib/types';
 
 interface NavbarProps {
@@ -14,8 +13,6 @@ interface NavbarProps {
 
 export const Navbar: React.FC<NavbarProps> = ({ currentTab, onTabChange, onRoleChange }) => {
   const [role, setRole] = useState<UserRole>(StorageEngine.getCurrentRole());
-  const [syncing, setSyncing] = useState<boolean>(false);
-  const [syncMessage, setSyncMessage] = useState<string>('');
 
   const handleRoleSwitch = (newRole: UserRole) => {
     setRole(newRole);
@@ -23,21 +20,6 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onTabChange, onRoleC
     settings.currentUserRole = newRole;
     StorageEngine.saveSettings(settings);
     if (onRoleChange) onRoleChange(newRole);
-  };
-
-  const handleSyncMasterData = async () => {
-    setSyncing(true);
-    setSyncMessage('Syncing Google Sheets Master Data...');
-    try {
-      const checkpoints = await GasBackendClient.syncMasterData();
-      setSyncMessage(`✓ Synced ${checkpoints.length} Checkpoints!`);
-      setTimeout(() => setSyncMessage(''), 4000);
-    } catch (err: any) {
-      setSyncMessage('⚠️ Sheet sync offline (using cached master)');
-      setTimeout(() => setSyncMessage(''), 4000);
-    } finally {
-      setSyncing(false);
-    }
   };
 
   return (
@@ -51,19 +33,8 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onTabChange, onRoleC
           <h1 className="text-base font-extrabold tracking-tight text-slate-900 flex items-center space-x-2">
             <span>PLANT ENGINEERING AUDIT PORTAL</span>
           </h1>
-          <p className="text-xs font-semibold text-slate-500">
-            Multi-Section Equipment Health &amp; Quality System
-          </p>
         </div>
       </div>
-
-      {/* Center Sync Status Banner */}
-      {syncMessage && (
-        <div className="hidden md:flex items-center space-x-2 bg-indigo-50 border border-indigo-200 px-3 py-1 rounded-xl text-xs font-bold text-indigo-700 animate-fade-in">
-          <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600" />
-          <span>{syncMessage}</span>
-        </div>
-      )}
 
       {/* Navigation Right Side Controls */}
       <div className="flex items-center space-x-3">
@@ -82,17 +53,6 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onTabChange, onRoleC
             <option value="Viewer">Viewer</option>
           </select>
         </div>
-
-        {/* Sync Master Data Button */}
-        <button
-          onClick={handleSyncMasterData}
-          disabled={syncing}
-          className="hidden sm:flex items-center space-x-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs border border-slate-200 transition"
-          title="Sync Master Data from Google Sheets"
-        >
-          <Database className={`w-3.5 h-3.5 text-indigo-600 ${syncing ? 'animate-spin' : ''}`} />
-          <span>{syncing ? 'Syncing...' : 'Sync Master'}</span>
-        </button>
 
         {/* Quick New Audit Button */}
         {role !== 'Viewer' && (
