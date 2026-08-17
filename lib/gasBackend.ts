@@ -200,6 +200,9 @@ export class GasBackendClient {
     (header as any).toEmails = toList.length > 0 ? toList.join(', ') : 'mehul.chikhaliya@borosil.com, process.qa@borosil.com';
     (header as any).ccEmails = ccList.length > 0 ? ccList.join(', ') : '';
 
+    const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://engineering-audit.vercel.app';
+    (header as any).portalUrl = currentOrigin + '/?tab=actions';
+
     let driveFolderId = '';
     let driveFolderUrl = '';
 

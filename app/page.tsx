@@ -37,6 +37,14 @@ export default function Home() {
     const actions = StorageEngine.getActions();
     const openCount = actions.filter((a) => a.status === 'Open' || a.status === 'In Progress').length;
     setOpenActionCount(openCount);
+
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get('tab');
+      if (tabParam && ['dashboard', 'new-audit', 'actions', 'history', 'master', 'checkpoint-setup', 'settings'].includes(tabParam)) {
+        setActiveTab(tabParam);
+      }
+    }
   }, [activeTab]);
 
   const handleResumeDraft = (draft: any) => {

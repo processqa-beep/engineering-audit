@@ -685,12 +685,14 @@ function sendDeviationAlertEmail(auditId, header, actions, results, driveFolderU
   var auditorName = (header && header.auditorName) ? header.auditorName : 'Auditor';
   var section = (header && (header.sectionName || header.sectionId)) ? (header.sectionName || header.sectionId) : 'Engineering';
   var subSection = (header && (header.subSectionName || header.subSectionId)) ? (header.subSectionName || header.subSectionId) : 'General';
-  var lineMachine = ((header && (header.lineName || header.lineId)) ? (header.lineName || header.lineId) : '') + (header && (header.equipmentName || header.equipmentId) ? (' - ' + (header.equipmentName || header.equipmentId)) : '');
+  var lineName = (header && (header.lineName || header.lineId)) ? (header.lineName || header.lineId) : 'BL#1';
+  var equipName = (header && (header.equipmentName || header.equipmentId)) ? (header.equipmentName || header.equipmentId) : 'Benteler Edger';
+  var lineMachine = lineName + ' – ' + equipName;
   var totalDeviations = actions.length;
-  var criticalCount = actions.filter(function(a) { return String(a.priority || a.prio).toLowerCase() === 'critical'; }).length;
-  var auditUrl = driveFolderUrl || ('https://docs.google.com/spreadsheets/d/' + SPREADSHEET_ID);
+  var portalActionUrl = (header && header.portalUrl) ? header.portalUrl : 'https://engineering-audit.vercel.app/?tab=actions';
 
-  var subject = (criticalCount > 0 ? '⚠️ CRITICAL DEVIATION' : '⚠️ AUDIT DEVIATION') + ' — ' + auditId + ' (' + section + ' - ' + lineMachine + ')';
+  var formattedDT = formatAuditDateTime(header ? header.date : null, header ? header.time : null);
+  var subject = 'ENGINEERING AUDIT DEVIATION – ' + lineName + ' – ' + equipName + ' (' + formattedDT + ')';
 
   // Build inline image attachments dictionary and file attachments list
   var inlineImagesObj = {};
@@ -1038,7 +1040,7 @@ function sendDeviationAlertEmail(auditId, header, actions, results, driveFolderU
 
   html += '    <!-- VIEW AUDIT -->' +
 '<div class="button-container">' +
-'    <a href="' + auditUrl + '" class="button">View Engineering Audit Records</a>' +
+'    <a href="' + portalActionUrl + '" class="button">View & Update Actions in Portal</a>' +
 '</div>' +
 '    <!-- CLOSING -->' +
 '<div class="closing">' +
@@ -1053,6 +1055,8 @@ function sendDeviationAlertEmail(auditId, header, actions, results, driveFolderU
   try {
     var mailOptions = {
       to: recipients,
+      name: 'Process QA',
+      replyTo: 'process.qa@borosil.com',
       subject: subject,
       htmlBody: html
     };
@@ -1071,6 +1075,26 @@ function sendDeviationAlertEmail(auditId, header, actions, results, driveFolderU
   } catch (e) {
     Logger.log('MailApp error: ' + e.toString());
   }
+}
+
+function formatAuditDateTime(dateStr, timeStr) {
+  var monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var now = new Date();
+  var day = ('0' + now.getDate()).slice(-2);
+  var month = monthNames[now.getMonth()];
+  var year = now.getFullYear();
+  var time = timeStr || (('0' + now.getHours()).slice(-2) + ':' + ('0' + now.getMinutes()).slice(-2));
+
+  if (dateStr && String(dateStr).indexOf('-') >= 0) {
+    var parts = String(dateStr).split('-');
+    if (parts.length === 3) {
+      year = parts[0];
+      var mIdx = Number(parts[1]) - 1;
+      month = monthNames[mIdx] || month;
+      day = ('0' + Number(parts[2])).slice(-2);
+    }
+  }
+  return day + '-' + month + '-' + year + ' at ' + time;
 }
 
 function sendTestNotificationEmail(email) {
