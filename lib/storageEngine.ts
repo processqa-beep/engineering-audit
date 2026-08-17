@@ -289,9 +289,13 @@ export class StorageEngine {
     }
   }
 
-  // ── EMPLOYEES ─────────────────────────────────────────────────────────────
+  // ── EMPLOYEES / USERS ─────────────────────────────────────────────────────
   public static getEmployees(): Employee[] {
     return getItem(STORAGE_KEYS.EMPLOYEES, initialEmployees);
+  }
+
+  public static saveEmployees(employees: Employee[]): void {
+    setItem(STORAGE_KEYS.EMPLOYEES, employees);
   }
 
   // ── AUDITS ────────────────────────────────────────────────────────────────

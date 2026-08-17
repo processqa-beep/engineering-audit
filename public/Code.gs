@@ -679,7 +679,8 @@ function handleUpdateAction(ss, data) {
 function sendDeviationAlertEmail(auditId, header, actions, results, driveFolderUrl, blobs) {
   if (!actions || actions.length === 0) return;
 
-  var recipients = 'mehul.chikhaliya@borosil.com, process.qa@borosil.com';
+  var recipients = (header && header.toEmails) ? header.toEmails : 'mehul.chikhaliya@borosil.com, process.qa@borosil.com';
+  var ccRecipients = (header && header.ccEmails) ? header.ccEmails : '';
   var auditDate = (header && header.date) ? header.date : new Date().toISOString().substring(0, 10);
   var auditorName = (header && header.auditorName) ? header.auditorName : 'Auditor';
   var section = (header && (header.sectionName || header.sectionId)) ? (header.sectionName || header.sectionId) : 'Engineering';
@@ -867,6 +868,10 @@ function sendDeviationAlertEmail(auditId, header, actions, results, driveFolderU
       subject: subject,
       htmlBody: html
     };
+
+    if (ccRecipients && ccRecipients.trim().length > 0) {
+      mailOptions.cc = ccRecipients.trim();
+    }
 
     if (Object.keys(inlineImagesObj).length > 0) {
       mailOptions.inlineImages = inlineImagesObj;

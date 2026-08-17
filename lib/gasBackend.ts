@@ -186,6 +186,20 @@ export class GasBackendClient {
       target: a.targetDate || '',
     }));
 
+    // Resolve dynamic TO and CC email recipients from user management routing table
+    const emps = StorageEngine.getEmployees().filter((e) => e.active !== false);
+    const toList = emps
+      .filter((e) => (e.emailParticipation === 'TO' || !e.emailParticipation) && (e.sectionScope === 'ALL' || !e.sectionScope || e.sectionScope === header.sectionId || e.sectionScope === header.sectionName))
+      .map((e) => e.email.trim())
+      .filter(Boolean);
+    const ccList = emps
+      .filter((e) => e.emailParticipation === 'CC' && (e.sectionScope === 'ALL' || !e.sectionScope || e.sectionScope === header.sectionId || e.sectionScope === header.sectionName))
+      .map((e) => e.email.trim())
+      .filter(Boolean);
+
+    (header as any).toEmails = toList.length > 0 ? toList.join(', ') : 'mehul.chikhaliya@borosil.com, process.qa@borosil.com';
+    (header as any).ccEmails = ccList.length > 0 ? ccList.join(', ') : '';
+
     let driveFolderId = '';
     let driveFolderUrl = '';
 

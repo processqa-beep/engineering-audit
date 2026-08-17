@@ -152,9 +152,7 @@ export interface ImportPreviewSummary {
   rows: CheckpointImportRow[];
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// PEOPLE & AUTH
-// ──────────────────────────────────────────────────────────────────────────────
+export type EmailParticipationType = 'TO' | 'CC' | 'NONE';
 
 export interface Employee {
   id: string;
@@ -162,7 +160,12 @@ export interface Employee {
   role: UserRole;
   department: string;
   email: string;
+  emailParticipation?: EmailParticipationType;
+  sectionScope?: string;
+  triggerOn?: 'ANY_NG' | 'CRITICAL_ONLY' | 'ALL_AUDITS';
   active: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
