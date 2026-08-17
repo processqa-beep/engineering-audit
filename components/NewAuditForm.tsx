@@ -47,6 +47,7 @@ import {
 interface NewAuditFormProps {
   onSuccess: (auditId: string) => void;
   onCancel: () => void;
+  onNavigate?: (tab: string) => void;
   initialDraft?: any;
 }
 
@@ -66,13 +67,21 @@ interface ComponentGroup {
   items: { state: CheckpointState; originalIndex: number }[];
 }
 
-export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel, initialDraft }) => {
-  const sections = useMemo(() => StorageEngine.getSections(), []);
-  const allSubSections = useMemo(() => StorageEngine.getSubSections(), []);
-  const allLines = useMemo(() => StorageEngine.getLines(), []);
-  const allEquipment = useMemo(() => StorageEngine.getEquipment(), []);
+export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel, onNavigate, initialDraft }) => {
+  const [sections, setSections] = useState<Section[]>(() => StorageEngine.getSections());
+  const [allSubSections, setAllSubSections] = useState<SubSection[]>(() => StorageEngine.getSubSections());
+  const [allLines, setAllLines] = useState<Line[]>(() => StorageEngine.getLines());
+  const [allEquipment, setAllEquipment] = useState<Equipment[]>(() => StorageEngine.getEquipment());
   const [allCheckpoints, setAllCheckpoints] = useState<Checkpoint[]>(() => StorageEngine.getCheckpoints());
   const [syncingCloud, setSyncingCloud] = useState<boolean>(false);
+
+  // Reload plant structure whenever mounting or when section changes
+  useEffect(() => {
+    setSections(StorageEngine.getSections());
+    setAllSubSections(StorageEngine.getSubSections());
+    setAllLines(StorageEngine.getLines());
+    setAllEquipment(StorageEngine.getEquipment());
+  }, []);
 
   // Auto-sync master checkpoints from Google Sheets on load
   const syncCheckpointsFromGoogleSheet = useCallback(async () => {
@@ -630,29 +639,53 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
           <div className="space-y-2 max-w-md mx-auto">
             <h3 className="text-lg font-extrabold text-slate-900">SELECT ENGINEERING SECTION TO START AUDIT</h3>
             <p className="text-xs text-slate-500 leading-relaxed font-semibold">
-              Choose your engineering area below (Grinding, Robot, Washing, Tempering, Cutting, Annealing, etc.).
+              Sections configured from <strong>Plant Structure Settings</strong>. Select an area below to load its active audit checkpoints.
             </p>
           </div>
 
           {/* Section Selection Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-left pt-2">
-            {sections.map((sec) => (
-              <div
-                key={sec.id}
-                onClick={() => setSectionId(sec.id)}
-                className="bg-slate-50 hover:bg-indigo-50/80 border border-slate-200 hover:border-indigo-300 p-5 rounded-2xl cursor-pointer transition-all duration-200 hover:shadow-md group space-y-2"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="font-mono text-[10px] font-extrabold text-indigo-700 bg-white px-2 py-0.5 rounded border border-slate-200">
-                    {sec.id}
-                  </span>
-                  <CheckSquare className="w-4 h-4 text-slate-300 group-hover:text-indigo-600 transition" />
+            {sections.map((sec) => {
+              const count = allCheckpoints.filter(
+                (ck) => ck.sectionId === sec.id || ck.sectionName === sec.name || ck.sectionId === sec.name
+              ).length;
+
+              return (
+                <div
+                  key={sec.id}
+                  onClick={() => setSectionId(sec.id)}
+                  className="bg-slate-50 hover:bg-indigo-50/80 border border-slate-200 hover:border-indigo-300 p-5 rounded-2xl cursor-pointer transition-all duration-200 hover:shadow-md group space-y-2.5 relative"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono text-[10px] font-extrabold text-indigo-700 bg-white px-2 py-0.5 rounded border border-slate-200">
+                      {sec.id}
+                    </span>
+                    <span className="text-[10px] font-bold bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-full">
+                      {count > 0 ? `${count} Points` : 'Active'}
+                    </span>
+                  </div>
+                  <h4 className="text-sm font-extrabold text-slate-900 group-hover:text-indigo-900">{sec.name}</h4>
+                  <p className="text-[11px] text-slate-500 line-clamp-2 font-medium">
+                    {sec.description || 'Configured in Plant Structure Settings'}
+                  </p>
                 </div>
-                <h4 className="text-sm font-extrabold text-slate-900 group-hover:text-indigo-900">{sec.name}</h4>
-                <p className="text-[11px] text-slate-500 line-clamp-2 font-medium">{sec.description}</p>
-              </div>
-            ))}
+              );
+            })}
           </div>
+
+          {/* Link to Plant Structure Settings */}
+          {onNavigate && (
+            <div className="pt-4 border-t border-slate-100 flex items-center justify-center">
+              <button
+                type="button"
+                onClick={() => onNavigate('plant-structure')}
+                className="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center space-x-1.5 bg-indigo-50 hover:bg-indigo-100 px-4 py-2 rounded-2xl transition border border-indigo-200/80"
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span>⚙️ Manage Sections, Sub-Sections &amp; Lines in Plant Structure Settings</span>
+              </button>
+            </div>
+          )}
         </div>
       ) : (
         /* STEP 2: CASCADING DROPDOWNS & AUDIT FORM */

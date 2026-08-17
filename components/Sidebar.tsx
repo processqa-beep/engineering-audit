@@ -31,7 +31,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, openAc
     { id: 'audit-point-setup',  label: 'Audit Point Setup (Excel)',     icon: FileSpreadsheet,  badge: 'Setup' },
     { id: 'plant-structure',    label: 'Plant Structure Settings',      icon: Layers,            badge: 'Structure' },
     { id: 'mail',               label: 'Mail Alert Notifications',      icon: Mail,              badge: 'Mail' },
-    { id: 'masters',            label: 'Master Data Admin',             icon: Database },
   ];
 
   return (

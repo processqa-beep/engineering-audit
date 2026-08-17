@@ -7,7 +7,6 @@ import { DashboardView } from '../components/DashboardView';
 import { NewAuditForm } from '../components/NewAuditForm';
 import { ActionTrackingView } from '../components/ActionTrackingView';
 import { AuditHistoryView } from '../components/AuditHistoryView';
-import { MasterDataView } from '../components/MasterDataView';
 import { MailConfigView } from '../components/MailConfigView';
 import { DraftsView } from '../components/DraftsView';
 import { SettingsView } from '../components/SettingsView';
@@ -71,6 +70,7 @@ export default function Home() {
           {activeTab === 'new-audit' && (
             <NewAuditForm
               initialDraft={activeDraft}
+              onNavigate={setActiveTab}
               onSuccess={(auditId) => {
                 setActiveDraft(null);
                 setActiveTab('audits');
@@ -94,9 +94,7 @@ export default function Home() {
               <PlantStructurePanel />
             </div>
           )}
-          {activeTab === 'checkpoints' && <MasterDataView initialTab="checkpoints" />}
           {activeTab === 'mail' && <MailConfigView />}
-          {activeTab === 'masters' && <MasterDataView initialTab="sections" />}
           {activeTab === 'settings' && <SettingsView />}
         </main>
       </div>
