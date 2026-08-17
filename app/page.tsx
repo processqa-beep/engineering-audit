@@ -38,22 +38,8 @@ export default function Home() {
   useEffect(() => {
     StorageEngine.initializeDemoData();
     const storedUser = StorageEngine.getCurrentUser();
-    if (storedUser) {
-      setCurrentUser(storedUser);
-    } else {
-      // Default to Mehul Chikhaliya admin on first fresh boot, or prompt login
-      const defaultAdmin: AuthUser = {
-        id: 'EMP-001',
-        name: 'Mehul Chikhaliya',
-        email: 'mehul.chikhaliya@borosil.com',
-        role: 'Admin',
-        department: 'Process QA',
-        loginMethod: 'google',
-        loginAt: new Date().toISOString(),
-      };
-      StorageEngine.setCurrentUser(defaultAdmin);
-      setCurrentUser(defaultAdmin);
-    }
+    // Only set currentUser if an explicit login session exists
+    setCurrentUser(storedUser || null);
     setAuthInitialized(true);
 
     const actions = StorageEngine.getActions();

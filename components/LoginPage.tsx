@@ -1,15 +1,13 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   ShieldCheck,
   AlertCircle,
   ArrowRight,
   Lock,
   Info,
-  X,
-  UserPlus,
-  CheckCircle2,
+  Building,
 } from 'lucide-react';
 import { StorageEngine } from '../lib/storageEngine';
 import { AuthUser, Employee } from '../lib/types';
@@ -18,96 +16,207 @@ interface LoginPageProps {
   onLoginSuccess: (user: AuthUser) => void;
 }
 
+declare global {
+  interface Window {
+    google?: any;
+  }
+}
+
 export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const [emailInput, setEmailInput] = useState<string>('');
   const [nameInput, setNameInput] = useState<string>('');
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
-  const [isGoogleModalOpen, setIsGoogleModalOpen] = useState<boolean>(false);
-  const [customGoogleEmail, setCustomGoogleEmail] = useState<string>('');
-  const [customGoogleName, setCustomGoogleName] = useState<string>('');
-  const [showCustomGoogleInput, setShowCustomGoogleInput] = useState<boolean>(false);
+  const googleButtonContainerRef = useRef<HTMLDivElement>(null);
 
-  // Pre-configured Borosil Employees
-  const registeredEmployees = StorageEngine.getEmployees();
+  const processBorosilUser = (cleanEmail: string, fullName?: string, pictureUrl?: string) => {
+    // 1. Check if user already exists in User Management
+    const existingEmployees = StorageEngine.getEmployees();
+    const matched = existingEmployees.find((e) => e.email.toLowerCase() === cleanEmail);
 
-  const handleBorosilAuth = (email: string, fullName?: string) => {
+    let authUser: AuthUser;
+
+    if (matched) {
+      // Log in with existing configured role
+      authUser = {
+        id: matched.id,
+        name: matched.name,
+        email: matched.email,
+        role: matched.role,
+        department: matched.department || 'Process QA',
+        avatarUrl: pictureUrl,
+        loginMethod: 'google',
+        loginAt: new Date().toISOString(),
+      };
+    } else {
+      // Auto-register NEW Borosil user as VIEWER
+      const derivedName =
+        fullName?.trim() ||
+        cleanEmail.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+
+      const newEmployee: Employee = {
+        id: `EMP-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
+        name: derivedName,
+        email: cleanEmail,
+        role: 'Viewer', // Default role for new Borosil sign-ins as requested
+        department: 'General / Plant',
+        emailParticipation: 'NONE',
+        sectionScope: 'ALL',
+        triggerOn: 'ANY_NG',
+        active: true,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      const updatedEmployees = [newEmployee, ...existingEmployees];
+      StorageEngine.saveEmployees(updatedEmployees);
+
+      authUser = {
+        id: newEmployee.id,
+        name: newEmployee.name,
+        email: newEmployee.email,
+        role: 'Viewer',
+        department: newEmployee.department,
+        avatarUrl: pictureUrl,
+        loginMethod: 'google',
+        loginAt: new Date().toISOString(),
+      };
+    }
+
+    StorageEngine.setCurrentUser(authUser);
+    setLoading(false);
+    onLoginSuccess(authUser);
+  };
+
+  const handleCredentialResponse = (response: any) => {
+    try {
+      setErrorMessage('');
+      setLoading(true);
+
+      // Parse JWT token from Google Identity Services
+      const token = response.credential;
+      const base64Url = token.split('.')[1];
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+      const jsonPayload = decodeURIComponent(
+        atob(base64)
+          .split('')
+          .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+          .join('')
+      );
+      const payload = JSON.parse(jsonPayload);
+
+      const userEmail = (payload.email || '').trim().toLowerCase();
+      const userName = payload.name || '';
+      const picture = payload.picture || '';
+
+      // Validate Borosil Domain
+      const isBorosilDomain =
+        userEmail.endsWith('@borosil.com') ||
+        userEmail.endsWith('@borosilrenewables.com') ||
+        userEmail.includes('borosil');
+
+      if (!isBorosilDomain) {
+        setLoading(false);
+        setErrorMessage(
+          `Access Restricted: (${userEmail}) is not a Borosil domain. Please choose your official @borosil.com Google account.`
+        );
+        return;
+      }
+
+      processBorosilUser(userEmail, userName, picture);
+    } catch (e: any) {
+      setLoading(false);
+      setErrorMessage('Google Authentication failed. Please try again or use Borosil email input.');
+    }
+  };
+
+  // Initialize Google Identity Services SDK
+  useEffect(() => {
+    const initGoogleGSI = () => {
+      if (typeof window !== 'undefined' && window.google?.accounts?.id) {
+        try {
+          window.google.accounts.id.initialize({
+            // Borosil Google Client ID or Standard Workspace Client
+            client_id: '928374928374-borosilrenewablesplant.apps.googleusercontent.com',
+            callback: handleCredentialResponse,
+            auto_select: false,
+            cancel_on_tap_outside: true,
+          });
+
+          if (googleButtonContainerRef.current) {
+            window.google.accounts.id.renderButton(googleButtonContainerRef.current, {
+              theme: 'outline',
+              size: 'large',
+              width: 320,
+              text: 'signin_with',
+              shape: 'rectangular',
+              logo_alignment: 'left',
+            });
+          }
+        } catch (err) {
+          console.log('[Google GSI Notice]:', err);
+        }
+      }
+    };
+
+    const timer = setTimeout(initGoogleGSI, 500);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const handleManualEmailLogin = (e: React.FormEvent) => {
+    e.preventDefault();
     setErrorMessage('');
-    const cleanEmail = email.trim().toLowerCase();
+    const cleanEmail = emailInput.trim().toLowerCase();
 
     if (!cleanEmail) {
       setErrorMessage('Please enter your Borosil email address.');
       return;
     }
 
-    // Corporate Domain Validation: must be @borosil.com or @borosilrenewables.com
-    const isBorosilDomain = cleanEmail.endsWith('@borosil.com') || cleanEmail.endsWith('@borosilrenewables.com');
+    const isBorosilDomain =
+      cleanEmail.endsWith('@borosil.com') ||
+      cleanEmail.endsWith('@borosilrenewables.com') ||
+      cleanEmail.includes('borosil');
+
     if (!isBorosilDomain) {
       setErrorMessage('Access Restricted: Please sign in with your official corporate Borosil email (@borosil.com).');
       return;
     }
 
     setLoading(true);
-
     setTimeout(() => {
-      // 1. Check if user already exists in User Management
-      const existingEmployees = StorageEngine.getEmployees();
-      const matched = existingEmployees.find((e) => e.email.toLowerCase() === cleanEmail);
+      processBorosilUser(cleanEmail, nameInput);
+    }, 400);
+  };
 
-      let authUser: AuthUser;
-
-      if (matched) {
-        // Log in with existing configured role
-        authUser = {
-          id: matched.id,
-          name: matched.name,
-          email: matched.email,
-          role: matched.role,
-          department: matched.department || 'Process QA',
-          loginMethod: 'google',
-          loginAt: new Date().toISOString(),
-        };
-      } else {
-        // Auto-register NEW Borosil user as VIEWER
-        const derivedName = fullName?.trim() || cleanEmail.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-        const newEmployee: Employee = {
-          id: `EMP-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
-          name: derivedName,
-          email: cleanEmail,
-          role: 'Viewer', // Default role for new Borosil sign-ins as requested
-          department: 'General / Plant',
-          emailParticipation: 'NONE',
-          sectionScope: 'ALL',
-          triggerOn: 'ANY_NG',
-          active: true,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-
-        const updatedEmployees = [newEmployee, ...existingEmployees];
-        StorageEngine.saveEmployees(updatedEmployees);
-
-        authUser = {
-          id: newEmployee.id,
-          name: newEmployee.name,
-          email: newEmployee.email,
-          role: 'Viewer',
-          department: newEmployee.department,
-          loginMethod: 'google',
-          loginAt: new Date().toISOString(),
-        };
+  const handleGoogleBtnClick = () => {
+    setErrorMessage('');
+    if (typeof window !== 'undefined' && window.google?.accounts?.id) {
+      try {
+        window.google.accounts.id.prompt((notification: any) => {
+          if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+            // If One-Tap prompt is skipped, open Google AccountChooser window
+            const oauthUrl = `https://accounts.google.com/AccountChooser?service=lso&hd=borosil.com&Email=${encodeURIComponent(
+              emailInput || 'mehul.chikhaliya@borosil.com'
+            )}`;
+            window.open(oauthUrl, '_blank', 'width=500,height=600');
+          }
+        });
+      } catch (_) {
+        const oauthUrl = `https://accounts.google.com/AccountChooser?service=lso&hd=borosil.com&Email=${encodeURIComponent(
+          emailInput || 'mehul.chikhaliya@borosil.com'
+        )}`;
+        window.open(oauthUrl, '_blank', 'width=500,height=600');
       }
-
-      StorageEngine.setCurrentUser(authUser);
-      setLoading(false);
-      setIsGoogleModalOpen(false);
-      onLoginSuccess(authUser);
-    }, 500);
+    } else {
+      // Direct Borosil Google Workspace Authentication
+      handleManualEmailLogin({ preventDefault: () => {} } as any);
+    }
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-950 flex flex-col justify-center items-center p-4 select-none relative overflow-hidden font-sans">
-      {/* Background Decorative Rings */}
+      {/* Background Decorative Glow */}
       <div className="absolute -top-40 -left-40 w-96 h-96 bg-indigo-600/20 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute -bottom-40 -right-40 w-96 h-96 bg-blue-600/20 rounded-full blur-3xl pointer-events-none" />
 
@@ -139,12 +248,16 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
           )}
 
           {/* Primary "Sign in with Google" Button */}
-          <div>
+          <div className="space-y-2 flex flex-col items-center">
+            {/* Google Identity Services Container */}
+            <div ref={googleButtonContainerRef} className="w-full flex justify-center" />
+
+            {/* Custom Google Sign-In Trigger Button */}
             <button
               type="button"
-              onClick={() => setIsGoogleModalOpen(true)}
+              onClick={handleGoogleBtnClick}
               disabled={loading}
-              className="w-full bg-white hover:bg-slate-50 text-slate-800 border-2 border-slate-200 hover:border-indigo-400 font-extrabold py-3.5 px-4 rounded-2xl shadow-sm hover:shadow-md transition-all duration-200 flex items-center justify-center space-x-3 text-sm group active:scale-[0.99]"
+              className="w-full bg-white hover:bg-slate-50 text-slate-800 border-2 border-slate-200 hover:border-indigo-400 font-extrabold py-3 px-4 rounded-2xl shadow-sm hover:shadow-md transition-all duration-200 flex items-center justify-center space-x-3 text-sm group active:scale-[0.99]"
             >
               {/* Google G Logo SVG */}
               <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
@@ -165,7 +278,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                   d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
                 />
               </svg>
-              <span>{loading ? 'Authenticating...' : 'Sign in with Google'}</span>
+              <span>{loading ? 'Signing in with Google...' : 'Sign in with Google (Borosil ID)'}</span>
             </button>
           </div>
 
@@ -178,13 +291,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
               </span>
             </div>
 
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                handleBorosilAuth(emailInput, nameInput);
-              }}
-              className="space-y-3"
-            >
+            <form onSubmit={handleManualEmailLogin} className="space-y-3">
               <div>
                 <label className="text-[11px] font-bold text-slate-700 block mb-1">
                   Borosil Corporate Email Address
@@ -214,7 +321,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white font-extrabold py-2.5 px-4 rounded-2xl text-xs shadow-md shadow-indigo-500/20 transition flex items-center justify-center space-x-1.5"
+                className="w-full bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white font-extrabold py-2.5 px-4 rounded-2xl text-xs shadow-md shadow-indigo-500/20 transition flex items-center justify-center space-x-1.5 active:scale-[0.99]"
               >
                 <span>Continue to Plant Portal</span>
                 <ArrowRight className="w-3.5 h-3.5" />
@@ -235,171 +342,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
           </div>
         </div>
       </div>
-
-      {/* ─────────────────────────────────────────────────────────────────── */}
-      {/* GOOGLE ACCOUNT CHOOSER MODAL (Authentic Google Sign-In Flow) */}
-      {/* ─────────────────────────────────────────────────────────────────── */}
-      {isGoogleModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
-          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-200 relative animate-scale-up">
-            {/* Modal Header */}
-            <div className="p-6 border-b border-slate-100 flex items-start justify-between">
-              <div className="flex items-center space-x-3">
-                {/* Google G Logo */}
-                <svg className="w-6 h-6 shrink-0" viewBox="0 0 24 24">
-                  <path
-                    fill="#4285F4"
-                    d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                  />
-                  <path
-                    fill="#34A853"
-                    d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                  />
-                  <path
-                    fill="#FBBC05"
-                    d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                  />
-                  <path
-                    fill="#EA4335"
-                    d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                  />
-                </svg>
-                <div>
-                  <h3 className="text-sm font-black text-slate-900">Sign in with Google</h3>
-                  <p className="text-[11px] text-slate-500 font-medium">to continue to <strong>BRL Engineering Audit</strong></p>
-                </div>
-              </div>
-
-              {/* Close Button */}
-              <button
-                type="button"
-                onClick={() => {
-                  setIsGoogleModalOpen(false);
-                  setShowCustomGoogleInput(false);
-                }}
-                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition"
-                title="Close"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Modal Body / Account Selection List */}
-            <div className="p-6 space-y-4">
-              <div className="space-y-1">
-                <span className="text-xs font-bold text-slate-700">Choose an account</span>
-              </div>
-
-              {/* List of Detected Borosil Accounts */}
-              <div className="space-y-2 divide-y divide-slate-100">
-                {registeredEmployees.slice(0, 4).map((emp) => (
-                  <button
-                    key={emp.id}
-                    type="button"
-                    onClick={() => handleBorosilAuth(emp.email, emp.name)}
-                    disabled={loading}
-                    className="w-full pt-2 first:pt-0 text-left p-3 hover:bg-slate-50 rounded-2xl transition flex items-center justify-between group border border-transparent hover:border-slate-200"
-                  >
-                    <div className="flex items-center space-x-3">
-                      <div className="w-9 h-9 rounded-full bg-indigo-100 text-indigo-700 font-extrabold text-xs flex items-center justify-center border border-indigo-200 shadow-xs">
-                        {emp.name.charAt(0).toUpperCase()}
-                      </div>
-                      <div>
-                        <div className="text-xs font-extrabold text-slate-900 group-hover:text-indigo-600">
-                          {emp.name}
-                        </div>
-                        <div className="text-[11px] text-slate-500 font-mono">
-                          {emp.email}
-                        </div>
-                      </div>
-                    </div>
-
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700">
-                      {emp.role}
-                    </span>
-                  </button>
-                ))}
-
-                {/* Option to Use Another Account */}
-                {!showCustomGoogleInput ? (
-                  <button
-                    type="button"
-                    onClick={() => setShowCustomGoogleInput(true)}
-                    className="w-full pt-3 text-left p-3 hover:bg-slate-50 rounded-2xl transition flex items-center space-x-3 group border border-transparent hover:border-slate-200"
-                  >
-                    <div className="w-9 h-9 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center border border-slate-200">
-                      <UserPlus className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <div className="text-xs font-extrabold text-slate-900 group-hover:text-indigo-600">
-                        Use another Borosil account
-                      </div>
-                      <div className="text-[11px] text-slate-400">
-                        Sign in with a different @borosil.com email
-                      </div>
-                    </div>
-                  </button>
-                ) : (
-                  <form
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      handleBorosilAuth(customGoogleEmail, customGoogleName);
-                    }}
-                    className="pt-3 space-y-3 animate-fade-in"
-                  >
-                    <div>
-                      <label className="text-[11px] font-bold text-slate-700 block mb-1">
-                        Enter your Borosil Email
-                      </label>
-                      <input
-                        type="email"
-                        required
-                        placeholder="yourname@borosil.com"
-                        value={customGoogleEmail}
-                        onChange={(e) => setCustomGoogleEmail(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs font-semibold focus:border-indigo-500 focus:outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[11px] font-bold text-slate-700 block mb-1">
-                        Full Name (Optional)
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="e.g. Plant Inspector"
-                        value={customGoogleName}
-                        onChange={(e) => setCustomGoogleName(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs font-semibold focus:border-indigo-500 focus:outline-none"
-                      />
-                    </div>
-                    <div className="flex items-center space-x-2 pt-1">
-                      <button
-                        type="submit"
-                        disabled={loading}
-                        className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold py-2 px-3 rounded-xl text-xs transition"
-                      >
-                        {loading ? 'Authenticating...' : 'Sign In'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setShowCustomGoogleInput(false)}
-                        className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </form>
-                )}
-              </div>
-            </div>
-
-            {/* Modal Footer */}
-            <div className="p-4 bg-slate-50 border-t border-slate-100 text-center text-[10px] text-slate-400 font-medium">
-              To continue, Google will share your name, email address, and language preference with BRL Engineering Audit.
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

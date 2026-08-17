@@ -25,6 +25,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`}>
+      <head>
+        <script src="https://accounts.google.com/gsi/client" async defer></script>
+      </head>
       <body className="bg-slate-50 text-slate-800 min-h-screen font-sans selection:bg-indigo-500 selection:text-white antialiased">
         {children}
       </body>
