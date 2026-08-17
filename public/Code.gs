@@ -674,7 +674,7 @@ function handleUpdateAction(ss, data) {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// HTML DEVIATION NOTIFICATION EMAIL TEMPLATE (With Inline Embedded Photos)
+// HTML DEVIATION NOTIFICATION EMAIL TEMPLATE (With Inline Embedded Photos & File Attachments)
 // ──────────────────────────────────────────────────────────────────────────────
 function sendDeviationAlertEmail(auditId, header, actions, results, driveFolderUrl, blobs) {
   if (!actions || actions.length === 0) return;
@@ -685,179 +685,367 @@ function sendDeviationAlertEmail(auditId, header, actions, results, driveFolderU
   var auditorName = (header && header.auditorName) ? header.auditorName : 'Auditor';
   var section = (header && (header.sectionName || header.sectionId)) ? (header.sectionName || header.sectionId) : 'Engineering';
   var subSection = (header && (header.subSectionName || header.subSectionId)) ? (header.subSectionName || header.subSectionId) : 'General';
-  var lineMachine = ((header && (header.lineName || header.lineId)) ? (header.lineName || header.lineId) : '') + ' - ' + ((header && (header.equipmentName || header.equipmentId)) ? (header.equipmentName || header.equipmentId) : '');
+  var lineMachine = ((header && (header.lineName || header.lineId)) ? (header.lineName || header.lineId) : '') + (header && (header.equipmentName || header.equipmentId) ? (' - ' + (header.equipmentName || header.equipmentId)) : '');
   var totalDeviations = actions.length;
   var criticalCount = actions.filter(function(a) { return String(a.priority || a.prio).toLowerCase() === 'critical'; }).length;
   var auditUrl = driveFolderUrl || ('https://docs.google.com/spreadsheets/d/' + SPREADSHEET_ID);
 
-  var isSingle = totalDeviations === 1;
-  var singleAction = actions[0] || {};
-  var matchingResult = null;
-  if (results && results.length > 0) {
-    for (var r = 0; r < results.length; r++) {
-      if (results[r].comp === singleAction.comp || results[r].ck === singleAction.ck || results[r].sr === singleAction.sr) {
-        matchingResult = results[r];
-        break;
-      }
-    }
-  }
+  var subject = (criticalCount > 0 ? '⚠️ CRITICAL DEVIATION' : '⚠️ AUDIT DEVIATION') + ' — ' + auditId + ' (' + section + ' - ' + lineMachine + ')';
 
-  var subject = (criticalCount > 0 ? '⚠️ CRITICAL DEVIATION' : '⚠️ AUDIT DEVIATION') + ' — ' + auditId + ' (' + section + ')';
-
-  // Build inline image attachments dictionary
+  // Build inline image attachments dictionary and file attachments list
   var inlineImagesObj = {};
   var attachmentsList = [];
+  var photoGridHtml = '';
+  var primaryPhotoUrl = '';
+
   if (blobs && blobs.length > 0) {
     for (var b = 0; b < blobs.length; b++) {
       var imgKey = 'photo_' + b;
       inlineImagesObj[imgKey] = blobs[b].blob;
       attachmentsList.push(blobs[b].blob);
+
+      if (b === 0) {
+        primaryPhotoUrl = 'cid:' + imgKey;
+      }
+      photoGridHtml += '<img src="cid:' + imgKey + '" alt="' + (blobs[b].name || ('Deviation Photo ' + (b + 1))) + '" style="width:45%; max-width:400px; margin:6px; border:1px solid #cfd8dc; border-radius:6px;" />';
     }
   }
 
+  // Build Deviation Table Rows
   var deviationRowsHtml = '';
   for (var i = 0; i < actions.length; i++) {
     var act = actions[i];
     var isCrit = String(act.priority || act.prio).toLowerCase() === 'critical';
+    var isMajor = String(act.priority || act.prio).toLowerCase() === 'major' || String(act.priority || act.prio).toLowerCase() === 'high';
+    var critClass = isCrit ? 'critical' : (isMajor ? 'major' : 'minor');
+    var critLabel = act.priority || act.prio || (isCrit ? 'Critical' : 'Medium');
+
+    // Find matching result details if available
+    var matchedStd = '-';
+    var matchedVal = act.obs || act.observation || 'NG';
+    var matchedImpact = 'Operational wear / equipment stoppage risk';
+
+    if (results && results.length > 0) {
+      for (var r = 0; r < results.length; r++) {
+        if (results[r].comp === act.comp || results[r].ck === act.ck || results[r].sr === act.sr) {
+          if (results[r].std) matchedStd = results[r].std;
+          else if (results[r].standardParameter) matchedStd = results[r].standardParameter;
+
+          if (results[r].val) matchedVal = results[r].val;
+          else if (results[r].actualValue) matchedVal = results[r].actualValue;
+
+          if (results[r].whatImpactIfThisPartGetsFail) matchedImpact = results[r].whatImpactIfThisPartGetsFail;
+          break;
+        }
+      }
+    }
+
     deviationRowsHtml += '<tr>' +
-      '<td>' + lineMachine + '</td>' +
-      '<td>' + (act.comp || act.componentName || '-') + '</td>' +
+      '<td style="text-align:center; font-weight:bold;">' + (i + 1) + '</td>' +
+      '<td style="font-weight:bold; color:#17365d;">' + (act.comp || act.componentName || '-') + '</td>' +
       '<td>' + (act.ck || act.checkpointText || '-') + '</td>' +
-      '<td>' + (act.obs || act.observation || '-') + '</td>' +
-      '<td style="color:' + (isCrit ? '#c62828' : '#b71c1c') + '; font-weight:bold;">' + (act.prio || act.priority || 'Medium') + '</td>' +
-      '<td>' + (act.status || 'Open') + '</td>' +
+      '<td class="standard">' + matchedStd + '</td>' +
+      '<td class="actual">' + matchedVal + '</td>' +
+      '<td><span class="' + critClass + '">' + critLabel + '</span></td>' +
+      '<td class="observation">' + (act.obs || act.observation || '-') + '</td>' +
+      '<td class="impact">' + matchedImpact + '</td>' +
       '</tr>';
   }
 
-  var compName = singleAction.comp || singleAction.componentName || 'Component';
-  var ckText = singleAction.ck || singleAction.checkpointText || 'Checkpoint';
-  var stdParam = (matchingResult && matchingResult.std) ? matchingResult.std : (matchingResult && matchingResult.standardParameter ? matchingResult.standardParameter : 'Standard Parameter');
-  var actVal = (matchingResult && matchingResult.val) ? matchingResult.val : (singleAction.obs || 'NG');
-  var crit = singleAction.prio || singleAction.priority || 'Medium';
-  var obs = singleAction.obs || singleAction.observation || 'Deviation observed during audit';
-  var failImpact = (matchingResult && matchingResult.whatImpactIfThisPartGetsFail) ? matchingResult.whatImpactIfThisPartGetsFail : 'Equipment wear / operational stoppage';
-  var corrAction = singleAction.act || singleAction.recommendedAction || 'Perform corrective maintenance';
-  var targetDate = singleAction.target || singleAction.targetDate || 'Immediate';
-
+  // Full HTML Email Template
   var html = '<!DOCTYPE html>' +
 '<html lang="en">' +
 '<head>' +
 '<meta charset="UTF-8">' +
 '<meta name="viewport" content="width=device-width, initial-scale=1.0">' +
-'<title>BRL Engineering Audit - Deviation Report</title>' +
+'<title>Engineering Audit Deviation</title>' +
 '<style>' +
-'    body { margin: 0; padding: 20px; background: #f4f6f8; font-family: Arial, Helvetica, sans-serif; color: #222; }' +
-'    .container { max-width: 900px; margin: auto; background: #ffffff; border: 1px solid #d9dee3; }' +
-'    .header { padding: 20px 25px; border-bottom: 3px solid #1f4e78; }' +
-'    .header h1 { margin: 0; font-size: 22px; color: #1f4e78; }' +
-'    .header p { margin: 6px 0 0; font-size: 13px; color: #666; }' +
-'    .intro { padding: 20px 25px 0px 25px; font-size: 14px; line-height: 1.6; }' +
-'    .status { margin: 20px 25px; padding: 12px 15px; background: #fff1f1; border-left: 5px solid #d32f2f; color: #b71c1c; font-weight: bold; }' +
-'    .summary { margin: 20px 25px; padding: 12px 15px; background: #f3f8fc; border-left: 5px solid #1f4e78; font-size: 13px; }' +
-'    .section { margin: 20px 25px; }' +
-'    .section-title { font-size: 16px; font-weight: bold; color: #1f4e78; padding-bottom: 8px; border-bottom: 1px solid #ddd; margin-bottom: 12px; }' +
-'    table { width: 100%; border-collapse: collapse; font-size: 13px; }' +
-'    th { width: 25%; background: #f2f5f7; text-align: left; padding: 10px; border: 1px solid #ddd; font-weight: bold; }' +
-'    td { padding: 10px; border: 1px solid #ddd; }' +
-'    .critical { color: #c62828; font-weight: bold; }' +
-'    .observation { background: #fff8e1; padding: 12px; border: 1px solid #f0d98a; line-height: 1.6; }' +
-'    .action { background: #f3f8fc; padding: 12px; border: 1px solid #c8dcea; line-height: 1.6; }' +
-'    .photo { text-align: center; margin: 15px 0; }' +
-'    .photo img { max-width: 550px; width: 100%; border: 2px solid #1f4e78; border-radius: 6px; }' +
-'    .button { display: inline-block; padding: 10px 18px; background: #1f4e78; color: white !important; text-decoration: none; border-radius: 4px; font-weight: bold; }' +
-'    .footer { margin-top: 25px; padding: 15px 25px; background: #f2f5f7; font-size: 12px; color: #666; text-align: center; line-height: 1.6; }' +
-'    .signature { padding: 20px 25px; font-size: 14px; line-height: 1.6; }' +
+'    body {' +
+'        margin: 0;' +
+'        padding: 20px;' +
+'        background: #eef2f6;' +
+'        font-family: Arial, Helvetica, sans-serif;' +
+'        color: #263238;' +
+'    }' +
+'    .container {' +
+'        max-width: 1100px;' +
+'        margin: 0 auto;' +
+'        background: #ffffff;' +
+'        border-radius: 8px;' +
+'        overflow: hidden;' +
+'        box-shadow: 0 2px 10px rgba(0,0,0,0.08);' +
+'    }' +
+'    /* INTRODUCTION */' +
+'    .intro {' +
+'        padding: 25px 30px 15px 30px;' +
+'        font-size: 14px;' +
+'        line-height: 1.7;' +
+'    }' +
+'    .intro p {' +
+'        margin: 0 0 12px 0;' +
+'    }' +
+'    /* AUDIT INFORMATION */' +
+'    .summary {' +
+'        margin: 20px 30px;' +
+'        padding: 18px;' +
+'        background: #eaf3fb;' +
+'        border: 1px solid #c7dced;' +
+'        border-radius: 6px;' +
+'    }' +
+'    .summary-title {' +
+'        color: #17365d;' +
+'        font-size: 16px;' +
+'        font-weight: bold;' +
+'        margin-bottom: 12px;' +
+'    }' +
+'    .summary-grid {' +
+'        width: 100%;' +
+'        border-collapse: collapse;' +
+'    }' +
+'    .summary-grid td {' +
+'        padding: 7px 6px;' +
+'        font-size: 13px;' +
+'    }' +
+'    .summary-label {' +
+'        color: #607d8b;' +
+'        width: 25%;' +
+'        font-weight: bold;' +
+'    }' +
+'    /* MAIN SECTION */' +
+'    .section {' +
+'        margin: 25px 30px;' +
+'    }' +
+'    .section-title {' +
+'        color: #17365d;' +
+'        font-size: 18px;' +
+'        font-weight: bold;' +
+'        padding-bottom: 10px;' +
+'        border-bottom: 3px solid #1976d2;' +
+'        margin-bottom: 15px;' +
+'    }' +
+'    /* DEVIATION TABLE */' +
+'    .deviation-table {' +
+'        width: 100%;' +
+'        border-collapse: collapse;' +
+'        font-size: 12px;' +
+'        table-layout: fixed;' +
+'    }' +
+'    .deviation-table th {' +
+'        background: #17365d;' +
+'        color: #ffffff;' +
+'        padding: 10px 7px;' +
+'        border: 1px solid #c7d0d8;' +
+'        text-align: left;' +
+'        vertical-align: middle;' +
+'    }' +
+'    .deviation-table td {' +
+'        padding: 10px 7px;' +
+'        border: 1px solid #dce3e8;' +
+'        vertical-align: top;' +
+'        line-height: 1.5;' +
+'        word-wrap: break-word;' +
+'    }' +
+'    .deviation-table tr:nth-child(even) td {' +
+'        background: #f8fafc;' +
+'    }' +
+'    /* STANDARD */' +
+'    .standard {' +
+'        background: #eaf7ee;' +
+'        color: #1b5e20;' +
+'        font-weight: bold;' +
+'    }' +
+'    /* ACTUAL */' +
+'    .actual {' +
+'        background: #fff0f0;' +
+'        color: #b71c1c;' +
+'        font-weight: bold;' +
+'    }' +
+'    /* OBSERVATION */' +
+'    .observation {' +
+'        background: #fff8e1;' +
+'    }' +
+'    /* IMPACT */' +
+'    .impact {' +
+'        background: #fceeee;' +
+'        color: #8e2424;' +
+'    }' +
+'    /* ACTION */' +
+'    .action {' +
+'        background: #eaf3fb;' +
+'        color: #174f7c;' +
+'    }' +
+'    /* CRITICALITY */' +
+'    .critical {' +
+'        color: #c62828;' +
+'        font-weight: bold;' +
+'    }' +
+'    .major {' +
+'        color: #ef6c00;' +
+'        font-weight: bold;' +
+'    }' +
+'    .minor {' +
+'        color: #2e7d32;' +
+'        font-weight: bold;' +
+'    }' +
+'    /* PHOTO */' +
+'    .photo-section {' +
+'        margin-top: 25px;' +
+'    }' +
+'    .photo-title {' +
+'        font-size: 16px;' +
+'        font-weight: bold;' +
+'        color: #17365d;' +
+'        padding-bottom: 8px;' +
+'        border-bottom: 2px solid #d9e6f2;' +
+'        margin-bottom: 12px;' +
+'    }' +
+'    .photo-container {' +
+'        background: #f7f9fb;' +
+'        border: 1px solid #dce3e8;' +
+'        border-radius: 6px;' +
+'        padding: 15px;' +
+'        text-align: center;' +
+'    }' +
+'    .photo-container img {' +
+'        max-width: 100%;' +
+'        max-height: 450px;' +
+'        border: 1px solid #cfd8dc;' +
+'        border-radius: 5px;' +
+'    }' +
+'    .photo-caption {' +
+'        margin-top: 8px;' +
+'        font-size: 12px;' +
+'        color: #78909c;' +
+'    }' +
+'    /* MULTIPLE PHOTOS */' +
+'    .photo-grid {' +
+'        text-align: center;' +
+'    }' +
+'    .photo-grid img {' +
+'        width: 45%;' +
+'        max-width: 400px;' +
+'        margin: 5px;' +
+'        border: 1px solid #cfd8dc;' +
+'        border-radius: 5px;' +
+'    }' +
+'    /* BUTTON */' +
+'    .button-container {' +
+'        text-align: center;' +
+'        margin: 30px;' +
+'    }' +
+'    .button {' +
+'        display: inline-block;' +
+'        padding: 13px 25px;' +
+'        background: #1976d2;' +
+'        color: #ffffff !important;' +
+'        text-decoration: none;' +
+'        border-radius: 5px;' +
+'        font-weight: bold;' +
+'        font-size: 14px;' +
+'    }' +
+'    /* CLOSING */' +
+'    .closing {' +
+'        padding: 10px 30px 25px 30px;' +
+'        font-size: 14px;' +
+'        line-height: 1.7;' +
+'    }' +
+'    @media only screen and (max-width: 700px) {' +
+'        body { padding: 5px; }' +
+'        .container { width: 100%; }' +
+'        .intro, .section, .closing { margin-left: 15px; margin-right: 15px; }' +
+'        .summary { margin-left: 15px; margin-right: 15px; }' +
+'        .deviation-table { font-size: 10px; }' +
+'        .deviation-table th, .deviation-table td { padding: 6px 4px; }' +
+'        .photo-grid img { width: 95%; }' +
+'    }' +
 '</style>' +
 '</head>' +
 '<body>' +
 '<div class="container">' +
-'    <div class="header">' +
-'        <h1>BRL Engineering Audit – Deviation Notification</h1>' +
-'        <p>Automated Engineering Audit Management System</p>' +
-'    </div>' +
+'    <!-- INTRODUCTION -->' +
 '    <div class="intro">' +
-'        <p>Dear Process Owner,</p>' +
-'        <p>Please review the following deviations identified during today\'s process audit. Kindly take the necessary corrective action and ensure timely closure of the identified points.</p>' +
+'        <p>Dear Team,</p>' +
+'        <p>Please review the following deviations identified during today\'s Engineering Audit. Kindly take the necessary corrective action and ensure timely closure of the identified points.</p>' +
 '    </div>' +
-'    <div class="status">⚠ DEVIATION IDENTIFIED – ACTION REQUIRED</div>' +
+'    <!-- AUDIT INFORMATION -->' +
 '    <div class="summary">' +
-'        <strong>Audit Date:</strong> ' + auditDate + '<br>' +
-'        <strong>Auditor:</strong> ' + auditorName + '<br>' +
-'        <strong>Section:</strong> ' + section + '<br>' +
-'        <strong>Sub Section:</strong> ' + subSection + '<br>' +
-'        <strong>Total Deviations:</strong> ' + totalDeviations + '<br>' +
-'        <strong>Critical Deviations:</strong> ' + criticalCount + '' +
+'        <div class="summary-title">Audit Information</div>' +
+'        <table class="summary-grid">' +
+'            <tr>' +
+'                <td class="summary-label">Audit ID</td>' +
+'                <td><strong>' + auditId + '</strong></td>' +
+'                <td class="summary-label">Audit Date</td>' +
+'                <td>' + auditDate + '</td>' +
+'            </tr>' +
+'            <tr>' +
+'                <td class="summary-label">Auditor</td>' +
+'                <td>' + auditorName + '</td>' +
+'                <td class="summary-label">Section</td>' +
+'                <td>' + section + '</td>' +
+'            </tr>' +
+'            <tr>' +
+'                <td class="summary-label">Sub Section</td>' +
+'                <td>' + subSection + '</td>' +
+'                <td class="summary-label">Line / Machine</td>' +
+'                <td>' + lineMachine + '</td>' +
+'            </tr>' +
+'        </table>' +
+'    </div>' +
+'    <!-- ENGINEERING AUDIT DEVIATION SUMMARY -->' +
+'    <div class="section">' +
+'        <div class="section-title">Engineering Audit Deviation Summary</div>' +
+'        <table class="deviation-table">' +
+'            <thead>' +
+'                <tr>' +
+'                    <th style="width:5%;">Sr.</th>' +
+'                    <th style="width:14%;">Component</th>' +
+'                    <th style="width:16%;">Checkpoint</th>' +
+'                    <th style="width:14%;">Standard Parameter</th>' +
+'                    <th style="width:12%;">Actual Value</th>' +
+'                    <th style="width:9%;">Criticality</th>' +
+'                    <th style="width:15%;">Observation</th>' +
+'                    <th style="width:15%;">Potential Impact</th>' +
+'                </tr>' +
+'            </thead>' +
+'            <tbody>' +
+                deviationRowsHtml +
+'            </tbody>' +
+'        </table>' +
 '    </div>';
 
-  if (isSingle) {
-    html += '<div class="section">' +
-'        <div class="section-title">Deviation Details</div>' +
-'        <table>' +
-'            <tr><th>Audit ID</th><td>' + auditId + '</td></tr>' +
-'            <tr><th>Line / Machine</th><td>' + lineMachine + '</td></tr>' +
-'            <tr><th>Component</th><td>' + compName + '</td></tr>' +
-'            <tr><th>Checkpoint</th><td>' + ckText + '</td></tr>' +
-'            <tr><th>Standard Parameter</th><td>' + stdParam + '</td></tr>' +
-'            <tr><th>Actual Value</th><td class="critical">' + actVal + '</td></tr>' +
-'            <tr><th>Criticality</th><td class="critical">' + crit + '</td></tr>' +
-'            <tr><th>Status</th><td>' + (singleAction.status || 'NG') + '</td></tr>' +
-'        </table>' +
-'    </div>' +
-'    <div class="section">' +
-'        <div class="section-title">Observation</div>' +
-'        <div class="observation">' + obs + '</div>' +
-'    </div>' +
-'    <div class="section">' +
-'        <div class="section-title">Potential Impact</div>' +
-'        <div class="observation">' + failImpact + '</div>' +
-'    </div>' +
-'    <div class="section">' +
-'        <div class="section-title">Corrective Action Required</div>' +
-'        <div class="action">' + corrAction + '</div>' +
-'    </div>' +
-'    <div class="section">' +
-'        <div class="section-title">Responsibility & Target Completion Date</div>' +
-'        <table>' +
-'            <tr><th>Responsible Person</th><td>Process Engineering Team</td></tr>' +
-'            <tr><th>Department</th><td>Engineering / Maintenance</td></tr>' +
-'            <tr><th>Target Completion Date</th><td>' + targetDate + '</td></tr>' +
-'        </table>' +
-'    </div>';
-  } else {
-    html += '<div class="section">' +
-'        <div class="section-title">Deviation Summary</div>' +
-'        <table>' +
-'            <thead><tr><th>Line / Machine</th><th>Component</th><th>Checkpoint</th><th>Observation</th><th>Criticality</th><th>Status</th></tr></thead>' +
-'            <tbody>' + deviationRowsHtml + '</tbody>' +
-'        </table>' +
-'    </div>';
-  }
-
-  // Embed inline photos directly into email body
+  // Photo Evidence Section
   if (blobs && blobs.length > 0) {
-    html += '<div class="section">' +
-'        <div class="section-title">Deviation Photograph(s)</div>';
-    for (var b = 0; b < blobs.length; b++) {
-      html += '<div class="photo">' +
-'          <img src="cid:photo_' + b + '" alt="Deviation Photo">' +
-'          <p style="font-size:11px; color:#666; margin-top:4px;">' + blobs[b].name + '</p>' +
-'        </div>';
+    if (blobs.length === 1 && primaryPhotoUrl) {
+      html += '    <!-- PHOTO EVIDENCE -->' +
+'<div class="section photo-section">' +
+'    <div class="photo-title">📷 Audit Photo Evidence</div>' +
+'    <div class="photo-container">' +
+'        <img src="' + primaryPhotoUrl + '" alt="Engineering Audit Deviation Photo">' +
+'        <div class="photo-caption">Photo captured during Engineering Audit (' + (blobs[0].name || '') + ')</div>' +
+'    </div>' +
+'</div>';
+    } else {
+      html += '    <!-- MULTIPLE PHOTOS -->' +
+'<div class="section photo-section">' +
+'    <div class="photo-title">📷 Audit Photo Evidence (' + blobs.length + ' Photos)</div>' +
+'    <div class="photo-container">' +
+'        <div class="photo-grid">' + photoGridHtml + '</div>' +
+'        <div class="photo-caption">Photos captured during Engineering Audit</div>' +
+'    </div>' +
+'</div>';
     }
-    html += '</div>';
   }
 
-  html += '<div class="section" style="text-align:center;">' +
-'        <a href="' + auditUrl + '" class="button">View Audit Records in Drive</a>' +
-'    </div>' +
-'    <div class="signature">' +
-'        <p>Kindly review the above observations and ensure that the necessary corrective actions are implemented within the specified timeline.</p>' +
-'        <p>For any clarification, please contact the Audit Team.</p>' +
-'        <p>Regards,<br><strong>BRL Engineering Audit Team</strong></p>' +
-'    </div>' +
-'    <div class="footer">' +
-'        This is an automatically generated notification from the BRL Engineering Audit Management System.<br><br>' +
-'        Please do not reply directly to this email.' +
-'    </div>' +
+  html += '    <!-- VIEW AUDIT -->' +
+'<div class="button-container">' +
+'    <a href="' + auditUrl + '" class="button">View Engineering Audit Records</a>' +
+'</div>' +
+'    <!-- CLOSING -->' +
+'<div class="closing">' +
+'    <p>Kindly review the above engineering observations and ensure that the necessary corrective actions are completed within the specified timeline.</p>' +
+'    <p>Please update the corrective action and closure status in the BRL Engineering Audit System after completion.</p>' +
+'    <p>Regards,<br><strong>Process QA</strong></p>' +
+'</div>' +
 '</div>' +
 '</body>' +
 '</html>';
@@ -873,6 +1061,7 @@ function sendDeviationAlertEmail(auditId, header, actions, results, driveFolderU
       mailOptions.cc = ccRecipients.trim();
     }
 
+    // Both inline embedded photos and file attachments
     if (Object.keys(inlineImagesObj).length > 0) {
       mailOptions.inlineImages = inlineImagesObj;
       mailOptions.attachments = attachmentsList;
