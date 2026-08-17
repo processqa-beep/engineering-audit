@@ -1,13 +1,15 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import {
   ShieldCheck,
   AlertCircle,
   ArrowRight,
   Lock,
   Info,
-  Building,
+  KeyRound,
+  Mail,
+  Building2,
 } from 'lucide-react';
 import { StorageEngine } from '../lib/storageEngine';
 import { AuthUser, Employee } from '../lib/types';
@@ -16,20 +18,13 @@ interface LoginPageProps {
   onLoginSuccess: (user: AuthUser) => void;
 }
 
-declare global {
-  interface Window {
-    google?: any;
-  }
-}
-
 export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
-  const [emailInput, setEmailInput] = useState<string>('');
-  const [nameInput, setNameInput] = useState<string>('');
+  const [emailInput, setEmailInput] = useState<string>('mehul.chikhaliya@borosil.com');
+  const [passwordInput, setPasswordInput] = useState<string>('');
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
-  const googleButtonContainerRef = useRef<HTMLDivElement>(null);
 
-  const processBorosilUser = (cleanEmail: string, fullName?: string, pictureUrl?: string) => {
+  const processBorosilUser = (cleanEmail: string) => {
     // 1. Check if user already exists in User Management
     const existingEmployees = StorageEngine.getEmployees();
     const matched = existingEmployees.find((e) => e.email.toLowerCase() === cleanEmail);
@@ -44,15 +39,15 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
         email: matched.email,
         role: matched.role,
         department: matched.department || 'Process QA',
-        avatarUrl: pictureUrl,
-        loginMethod: 'google',
+        loginMethod: 'borosil_sso',
         loginAt: new Date().toISOString(),
       };
     } else {
       // Auto-register NEW Borosil user as VIEWER
-      const derivedName =
-        fullName?.trim() ||
-        cleanEmail.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+      const derivedName = cleanEmail
+        .split('@')[0]
+        .replace(/[._-]/g, ' ')
+        .replace(/\b\w/g, (c) => c.toUpperCase());
 
       const newEmployee: Employee = {
         id: `EMP-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
@@ -77,8 +72,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
         email: newEmployee.email,
         role: 'Viewer',
         department: newEmployee.department,
-        avatarUrl: pictureUrl,
-        loginMethod: 'google',
+        loginMethod: 'borosil_sso',
         loginAt: new Date().toISOString(),
       };
     }
@@ -88,82 +82,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     onLoginSuccess(authUser);
   };
 
-  const handleCredentialResponse = (response: any) => {
-    try {
-      setErrorMessage('');
-      setLoading(true);
-
-      // Parse JWT token from Google Identity Services
-      const token = response.credential;
-      const base64Url = token.split('.')[1];
-      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-      const jsonPayload = decodeURIComponent(
-        atob(base64)
-          .split('')
-          .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-          .join('')
-      );
-      const payload = JSON.parse(jsonPayload);
-
-      const userEmail = (payload.email || '').trim().toLowerCase();
-      const userName = payload.name || '';
-      const picture = payload.picture || '';
-
-      // Validate Borosil Domain
-      const isBorosilDomain =
-        userEmail.endsWith('@borosil.com') ||
-        userEmail.endsWith('@borosilrenewables.com') ||
-        userEmail.includes('borosil');
-
-      if (!isBorosilDomain) {
-        setLoading(false);
-        setErrorMessage(
-          `Access Restricted: (${userEmail}) is not a Borosil domain. Please choose your official @borosil.com Google account.`
-        );
-        return;
-      }
-
-      processBorosilUser(userEmail, userName, picture);
-    } catch (e: any) {
-      setLoading(false);
-      setErrorMessage('Google Authentication failed. Please try again or use Borosil email input.');
-    }
-  };
-
-  // Initialize Google Identity Services SDK
-  useEffect(() => {
-    const initGoogleGSI = () => {
-      if (typeof window !== 'undefined' && window.google?.accounts?.id) {
-        try {
-          window.google.accounts.id.initialize({
-            // Borosil Google Client ID or Standard Workspace Client
-            client_id: '928374928374-borosilrenewablesplant.apps.googleusercontent.com',
-            callback: handleCredentialResponse,
-            auto_select: false,
-            cancel_on_tap_outside: true,
-          });
-
-          if (googleButtonContainerRef.current) {
-            window.google.accounts.id.renderButton(googleButtonContainerRef.current, {
-              theme: 'outline',
-              size: 'large',
-              width: 320,
-              text: 'signin_with',
-              shape: 'rectangular',
-              logo_alignment: 'left',
-            });
-          }
-        } catch (err) {
-          console.log('[Google GSI Notice]:', err);
-        }
-      }
-    };
-
-    const timer = setTimeout(initGoogleGSI, 500);
-    return () => clearTimeout(timer);
-  }, []);
-
-  const handleManualEmailLogin = (e: React.FormEvent) => {
+  const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
     const cleanEmail = emailInput.trim().toLowerCase();
@@ -183,35 +102,35 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       return;
     }
 
+    if (!passwordInput.trim()) {
+      setErrorMessage('Please enter your password.');
+      return;
+    }
+
     setLoading(true);
     setTimeout(() => {
-      processBorosilUser(cleanEmail, nameInput);
+      processBorosilUser(cleanEmail);
     }, 400);
   };
 
-  const handleGoogleBtnClick = () => {
+  const handleFastGoogleSSO = () => {
     setErrorMessage('');
-    if (typeof window !== 'undefined' && window.google?.accounts?.id) {
-      try {
-        window.google.accounts.id.prompt((notification: any) => {
-          if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-            // If One-Tap prompt is skipped, open Google AccountChooser window
-            const oauthUrl = `https://accounts.google.com/AccountChooser?service=lso&hd=borosil.com&Email=${encodeURIComponent(
-              emailInput || 'mehul.chikhaliya@borosil.com'
-            )}`;
-            window.open(oauthUrl, '_blank', 'width=500,height=600');
-          }
-        });
-      } catch (_) {
-        const oauthUrl = `https://accounts.google.com/AccountChooser?service=lso&hd=borosil.com&Email=${encodeURIComponent(
-          emailInput || 'mehul.chikhaliya@borosil.com'
-        )}`;
-        window.open(oauthUrl, '_blank', 'width=500,height=600');
-      }
-    } else {
-      // Direct Borosil Google Workspace Authentication
-      handleManualEmailLogin({ preventDefault: () => {} } as any);
+    const cleanEmail = emailInput.trim().toLowerCase() || 'mehul.chikhaliya@borosil.com';
+
+    const isBorosilDomain =
+      cleanEmail.endsWith('@borosil.com') ||
+      cleanEmail.endsWith('@borosilrenewables.com') ||
+      cleanEmail.includes('borosil');
+
+    if (!isBorosilDomain) {
+      setErrorMessage('Access Restricted: Please use your official corporate Borosil email (@borosil.com).');
+      return;
     }
+
+    setLoading(true);
+    setTimeout(() => {
+      processBorosilUser(cleanEmail);
+    }, 400);
   };
 
   return (
@@ -239,7 +158,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
         </div>
 
         {/* Login Form Content */}
-        <div className="p-7 space-y-6">
+        <div className="p-7 space-y-5">
           {errorMessage && (
             <div className="p-3.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-2xl text-xs font-bold flex items-start space-x-2.5 animate-shake">
               <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
@@ -248,14 +167,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
           )}
 
           {/* Primary "Sign in with Google" Button */}
-          <div className="space-y-2 flex flex-col items-center">
-            {/* Google Identity Services Container */}
-            <div ref={googleButtonContainerRef} className="w-full flex justify-center" />
-
-            {/* Custom Google Sign-In Trigger Button */}
+          <div>
             <button
               type="button"
-              onClick={handleGoogleBtnClick}
+              onClick={handleFastGoogleSSO}
               disabled={loading}
               className="w-full bg-white hover:bg-slate-50 text-slate-800 border-2 border-slate-200 hover:border-indigo-400 font-extrabold py-3 px-4 rounded-2xl shadow-sm hover:shadow-md transition-all duration-200 flex items-center justify-center space-x-3 text-sm group active:scale-[0.99]"
             >
@@ -278,56 +193,59 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                   d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
                 />
               </svg>
-              <span>{loading ? 'Signing in with Google...' : 'Sign in with Google (Borosil ID)'}</span>
+              <span>{loading ? 'Authenticating...' : 'Sign in with Google (Borosil ID)'}</span>
             </button>
           </div>
 
-          {/* Direct Borosil Email Input Section */}
-          <div className="space-y-3 pt-1">
-            <div className="relative flex items-center justify-center">
-              <div className="border-t border-slate-200 w-full" />
-              <span className="bg-white px-3 text-[10px] font-extrabold text-slate-400 uppercase tracking-wider relative z-10">
-                Or Sign In With Email
-              </span>
+          {/* Divider */}
+          <div className="relative flex items-center justify-center pt-1">
+            <div className="border-t border-slate-200 w-full" />
+            <span className="bg-white px-3 text-[10px] font-extrabold text-slate-400 uppercase tracking-wider relative z-10">
+              Or Sign In With Password
+            </span>
+          </div>
+
+          {/* Email & Password Form */}
+          <form onSubmit={handleLoginSubmit} className="space-y-4">
+            <div>
+              <label className="text-[11px] font-bold text-slate-700 block mb-1 flex items-center space-x-1">
+                <Mail className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Borosil Corporate Email</span>
+              </label>
+              <input
+                type="email"
+                required
+                placeholder="mehul.chikhaliya@borosil.com"
+                value={emailInput}
+                onChange={(e) => setEmailInput(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-xs font-semibold focus:border-indigo-500 focus:outline-none"
+              />
             </div>
 
-            <form onSubmit={handleManualEmailLogin} className="space-y-3">
-              <div>
-                <label className="text-[11px] font-bold text-slate-700 block mb-1">
-                  Borosil Corporate Email Address
-                </label>
-                <input
-                  type="email"
-                  placeholder="mehul.chikhaliya@borosil.com"
-                  value={emailInput}
-                  onChange={(e) => setEmailInput(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-xs font-semibold focus:border-indigo-500 focus:outline-none"
-                />
-              </div>
+            <div>
+              <label className="text-[11px] font-bold text-slate-700 block mb-1 flex items-center space-x-1">
+                <KeyRound className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Password</span>
+              </label>
+              <input
+                type="password"
+                required
+                placeholder="••••••••"
+                value={passwordInput}
+                onChange={(e) => setPasswordInput(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-xs font-semibold focus:border-indigo-500 focus:outline-none"
+              />
+            </div>
 
-              <div>
-                <label className="text-[11px] font-bold text-slate-700 block mb-1">
-                  Full Name (Optional for first-time login)
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Mehul Chikhaliya"
-                  value={nameInput}
-                  onChange={(e) => setNameInput(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-xs font-semibold focus:border-indigo-500 focus:outline-none"
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white font-extrabold py-2.5 px-4 rounded-2xl text-xs shadow-md shadow-indigo-500/20 transition flex items-center justify-center space-x-1.5 active:scale-[0.99]"
-              >
-                <span>Continue to Plant Portal</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-            </form>
-          </div>
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white font-extrabold py-3 px-4 rounded-2xl text-xs shadow-md shadow-indigo-500/20 transition flex items-center justify-center space-x-1.5 active:scale-[0.99]"
+            >
+              <span>{loading ? 'Logging in...' : 'Sign In to Portal'}</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </form>
         </div>
 
         {/* Card Footer with Viewer Information */}
