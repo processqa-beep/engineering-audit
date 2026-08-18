@@ -90,6 +90,27 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       const employees = StorageEngine.getEmployees();
       const user = employees.find((emp) => emp.email.toLowerCase() === cleanEmail);
 
+      // Special Admin Master handler for Mehul Chikhaliya
+      const isAdminAccount = cleanEmail === 'mehul.chikhaliya@borosil.com';
+      const isValidAdminPass = loginPassword === 'mehul@1473' || loginPassword === 'borosil123';
+
+      if (isAdminAccount && isValidAdminPass) {
+        const authUser: AuthUser = {
+          id: user?.id || 'EMP-01',
+          name: user?.name || 'Mehul Chikhaliya',
+          email: 'mehul.chikhaliya@borosil.com',
+          role: 'Admin',
+          department: user?.department || 'Process QA',
+          loginMethod: 'email_password',
+          loginAt: new Date().toISOString(),
+        };
+
+        StorageEngine.setCurrentUser(authUser);
+        setLoading(false);
+        onLoginSuccess(authUser);
+        return;
+      }
+
       if (!user) {
         setLoading(false);
         setErrorMessage(
