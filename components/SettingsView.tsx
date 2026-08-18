@@ -341,15 +341,30 @@ const FprModal: React.FC<FprModalProps> = ({ entry, sections, departments, lines
       alert('FPR Person name and email are required.');
       return;
     }
+
+    // Clean comma-separated FPR emails (if multiple)
+    const cleanedFprEmails = fprEmail
+      .split(',')
+      .map((em) => em.trim().toLowerCase())
+      .filter(Boolean)
+      .join(', ');
+
+    // Clean comma-separated HOD / CC emails
+    const cleanedHodEmails = hodEmail
+      .split(',')
+      .map((em) => em.trim().toLowerCase())
+      .filter(Boolean)
+      .join(', ');
+
     onSave({
       id: entry?.id,
       department: dept,
       sectionId,
       lineId,
       fprName: fprName.trim(),
-      fprEmail: fprEmail.trim().toLowerCase(),
+      fprEmail: cleanedFprEmails,
       hodName: hodName.trim(),
-      hodEmail: hodEmail.trim().toLowerCase(),
+      hodEmail: cleanedHodEmails,
       active: entry?.active !== false,
     });
   };
@@ -426,7 +441,7 @@ const FprModal: React.FC<FprModalProps> = ({ entry, sections, departments, lines
               <div>
                 <label className="text-[11px] font-bold text-slate-700 block mb-1">FPR Email <span className="text-rose-500">*</span></label>
                 <input
-                  type="email"
+                  type="text"
                   placeholder="ravi.kumar@borosil.com"
                   value={fprEmail}
                   onChange={(e) => setFprEmail(e.target.value)}
@@ -438,28 +453,35 @@ const FprModal: React.FC<FprModalProps> = ({ entry, sections, departments, lines
           </div>
 
           <div className="border-t border-slate-100 pt-3">
-            <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mb-3">HOD / Process Owner — Will receive CC copy</p>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-[11px] font-bold text-slate-700 block mb-1">HOD Name</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Mehul Chikhaliya"
-                  value={hodName}
-                  onChange={(e) => setHodName(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:border-indigo-500 focus:outline-none"
-                />
+            <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mb-3">HOD / Process Owner — Will receive CC copy (Multiple emails supported with comma ",")</p>
+            <div className="grid grid-cols-1 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-bold text-slate-700 block mb-1">HOD / Process Owner Name(s)</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Mehul Chikhaliya, Quality Head"
+                    value={hodName}
+                    onChange={(e) => setHodName(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:border-indigo-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                    HOD CC Email(s) <span className="text-indigo-600 font-bold">(comma separated)</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="mehul.chikhaliya@borosil.com, hod2@borosil.com"
+                    value={hodEmail}
+                    onChange={(e) => setHodEmail(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-semibold focus:border-indigo-500 focus:outline-none"
+                  />
+                </div>
               </div>
-              <div>
-                <label className="text-[11px] font-bold text-slate-700 block mb-1">HOD Email (CC)</label>
-                <input
-                  type="email"
-                  placeholder="hod@borosil.com"
-                  value={hodEmail}
-                  onChange={(e) => setHodEmail(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-semibold focus:border-indigo-500 focus:outline-none"
-                />
-              </div>
+              <p className="text-[10px] text-slate-500 font-medium">
+                💡 Tip: You can enter multiple HOD/Manager email addresses separated by commas (e.g. <code className="bg-slate-100 px-1 py-0.5 rounded text-indigo-700">hod1@borosil.com, hod2@borosil.com</code>).
+              </p>
             </div>
           </div>
 
@@ -1309,11 +1331,39 @@ export const SettingsView: React.FC = () => {
                     <td className="px-4 py-3">
                       <div className="font-bold text-slate-900">{entry.fprName || '—'}</div>
                     </td>
-                    <td className="px-4 py-3 font-mono text-[11px] text-indigo-700">{entry.fprEmail || '—'}</td>
+                    <td className="px-4 py-3 font-mono text-[11px] text-indigo-700">
+                      {entry.fprEmail ? (
+                        <div className="space-y-0.5">
+                          {entry.fprEmail.split(',').map((email, idx) => (
+                            <div key={idx} className="truncate max-w-[180px]" title={email.trim()}>
+                              {email.trim()}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
                     <td className="px-4 py-3">
                       <div className="font-bold text-slate-700">{entry.hodName || '—'}</div>
                     </td>
-                    <td className="px-4 py-3 font-mono text-[11px] text-amber-700">{entry.hodEmail || '—'}</td>
+                    <td className="px-4 py-3 font-mono text-[11px] text-amber-700">
+                      {entry.hodEmail ? (
+                        <div className="space-y-0.5">
+                          {entry.hodEmail.split(',').map((email, idx) => (
+                            <span
+                              key={idx}
+                              className="inline-block bg-amber-50 text-amber-800 border border-amber-200/80 px-1.5 py-0.5 rounded text-[10px] mr-1 mb-0.5 font-mono"
+                              title={email.trim()}
+                            >
+                              {email.trim()}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-center">
                       <button
                         onClick={() => handleToggleFprActive(entry.id)}

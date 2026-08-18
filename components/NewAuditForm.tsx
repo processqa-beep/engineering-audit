@@ -947,10 +947,13 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
                           const allEmployees = StorageEngine.getEmployees().filter((e) => e.active && e.status === 'Approved');
                           const deptOptions = Array.from(new Set(allEmployees.map((e) => e.department).filter(Boolean)));
                           const deptEmployees = allEmployees.filter((e) => e.department === state.assignedDept);
-                          // HOD / CC: first QA/Engineering/Admin person from that dept or any process owner
+                          // HOD / CC: Check FPR matrix first (supports multiple HODs/emails), then fallback to QA/Admin employee
+                          const fprMatch = StorageEngine.lookupFpr(state.assignedDept, sectionId, lineId);
                           const hodCC = allEmployees.find(
                             (e) => (e.role === 'QA' || e.role === 'Engineering' || e.role === 'Admin') && e.active
                           );
+                          const ccDisplayText = fprMatch?.hodName || fprMatch?.hodEmail || hodCC?.name;
+                          const ccTooltip = fprMatch?.hodEmail || hodCC?.email || '';
 
                           return (
                             <tr
@@ -1073,10 +1076,10 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
                                   )}
 
                                   {/* CC HOD / Process Owner info */}
-                                  {hodCC && (
-                                    <div className="text-[9px] text-slate-500 flex items-center space-x-1">
-                                      <span className="font-bold text-slate-400">CC:</span>
-                                      <span className="font-semibold text-indigo-600">{hodCC.name}</span>
+                                  {ccDisplayText && (
+                                    <div className="text-[9px] text-slate-500 flex items-center space-x-1" title={ccTooltip}>
+                                      <span className="font-bold text-slate-400 shrink-0">CC:</span>
+                                      <span className="font-semibold text-indigo-600 truncate max-w-[130px]">{ccDisplayText}</span>
                                     </div>
                                   )}
                                 </div>
