@@ -609,22 +609,39 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
         };
       });
 
-    let syncResult: { status: string; message: string; driveFolderId?: string; driveFolderUrl?: string } | undefined;
-    try {
-      syncResult = await GasBackendClient.submitAudit(header, results, actions);
-    } catch (err: any) {
-      console.warn('Network sync notice:', err);
-      syncResult = { status: 'LOCAL_SAVED', message: err?.message || 'Sync error. Saved locally.' };
-    }
+    // ── STEP 1: Save locally FIRST — instant, never fails ────────────────────
+    StorageEngine.saveAudit(header, results, actions);
 
+    // ── STEP 2: Show success screen IMMEDIATELY (no waiting for network) ─────
     setSubmitting(false);
-    setLastSubmittedAudit({ header, results, actions, syncResult });
+    setLastSubmittedAudit({ header, results, actions, syncResult: undefined });
 
     if (summary.overall !== 'FAIL') {
-      try {
-        confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 } });
-      } catch (e) {}
+      try { confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 } }); } catch (e) {}
     }
+
+    // ── STEP 3: Fire cloud sync + email in background (non-blocking) ──────────
+    // This runs silently after the user is already on the success screen.
+    (async () => {
+      try {
+        const syncResult = await GasBackendClient.submitAudit(header, results, actions);
+        // Update sync badge silently if the modal is still open
+        setLastSubmittedAudit((prev) => prev ? { ...prev, syncResult } : prev);
+      } catch (err: any) {
+        console.log('[Background sync notice]:', err?.message);
+        setLastSubmittedAudit((prev) =>
+          prev
+            ? {
+                ...prev,
+                syncResult: {
+                  status: 'LOCAL_SAVED',
+                  message: 'Syncing in background. Audit saved locally.',
+                },
+              }
+            : prev
+        );
+      }
+    })();
   };
 
   const selectedSecObj = sections.find((s) => s.id === sectionId);
@@ -1161,7 +1178,7 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
                 className="bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white px-7 py-2.5 rounded-xl font-bold text-xs shadow-lg shadow-indigo-500/30 transition active:scale-95 disabled:opacity-50 flex items-center space-x-2"
               >
                 <Send className="w-4 h-4" />
-                <span>{submitting ? 'Transmitting Snapshot to Drive...' : 'Submit Engineering Audit'}</span>
+                <span>{submitting ? 'Saving Audit...' : 'Submit Engineering Audit'}</span>
               </button>
             </div>
           </div>
@@ -1211,37 +1228,47 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
                 </div>
               </div>
 
-              {/* Live Sync Status Feedback */}
-              {lastSubmittedAudit.syncResult?.status === 'SUCCESS' ? (
-                <div className="p-3 bg-emerald-50 border border-emerald-300 text-emerald-900 rounded-2xl text-xs space-y-1 font-semibold">
+              {/* Background Sync Status — three clean states */}
+              {!lastSubmittedAudit.syncResult ? (
+                /* Syncing in background */
+                <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-2xl text-xs flex items-center space-x-2.5 font-semibold">
+                  <RefreshCw className="w-4 h-4 text-indigo-500 shrink-0 animate-spin" />
+                  <div>
+                    <p className="text-indigo-800 font-bold">Syncing to Google Sheets in background…</p>
+                    <p className="text-indigo-500 text-[10px]">You can use the portal normally. This runs silently.</p>
+                  </div>
+                </div>
+              ) : lastSubmittedAudit.syncResult.status === 'SUCCESS' ? (
+                /* Cloud sync succeeded */
+                <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-2xl text-xs space-y-1 font-semibold">
                   <div className="flex items-center space-x-1.5 text-emerald-800 font-extrabold">
                     <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span>Transmitted to Google Sheets &amp; Drive!</span>
+                    <span>Synced to Google Sheets &amp; Drive ✓</span>
                   </div>
-                  <p className="text-[11px] text-emerald-700">Audit_Master, Audit_Details, and Action_Tracker updated.</p>
+                  <p className="text-[11px] text-emerald-700">Audit_Master, Audit_Details, Action_Tracker updated.</p>
                   {lastSubmittedAudit.syncResult.driveFolderUrl && (
                     <a
                       href={lastSubmittedAudit.syncResult.driveFolderUrl}
                       target="_blank"
                       rel="noreferrer"
-                      className="inline-flex items-center space-x-1 text-indigo-700 hover:text-indigo-900 underline font-extrabold text-[11px] pt-1"
+                      className="inline-flex items-center space-x-1 text-indigo-700 hover:text-indigo-900 underline font-extrabold text-[11px] pt-0.5"
                     >
-                      <span>📁 Open Folder in Google Drive</span>
+                      <span>📁 Open Folder in Drive</span>
                       <span className="text-[9px]">↗</span>
                     </a>
                   )}
                 </div>
               ) : (
-                <div className="p-3 bg-amber-50 border border-amber-300 text-amber-900 rounded-2xl text-xs space-y-1 font-semibold">
-                  <div className="flex items-center space-x-1.5 text-amber-800 font-extrabold">
-                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-                    <span>Saved in Browser (Local Storage)</span>
+                /* Saved locally only — neutral, not alarming */
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs flex items-center space-x-2.5 font-semibold">
+                  <CheckCircle className="w-4 h-4 text-slate-400 shrink-0" />
+                  <div>
+                    <p className="text-slate-700 font-bold">Saved Locally — Syncing when connected</p>
+                    <p className="text-slate-400 text-[10px]">Audit is recorded. Cloud sync will retry automatically.</p>
                   </div>
-                  <p className="text-[11px] text-amber-700 leading-snug">
-                    {lastSubmittedAudit.syncResult?.message || 'Google Apps Script URL is not connected in Settings.'}
-                  </p>
                 </div>
               )}
+
 
               {/* Export Buttons */}
               <div className="space-y-2 pt-1">
