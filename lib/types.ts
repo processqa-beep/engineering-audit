@@ -265,6 +265,10 @@ export interface ActionItem {
   observation: string;
   recommendedAction: string;
   responsiblePerson: string;
+  responsibleDepartment?: string;
+  assignedEmail?: string;      // direct email of the assigned person
+  ccPerson?: string;           // CC person name (HOD/Process Owner)
+  ccEmail?: string;            // CC email
   targetDate: string;
   priority: ActionPriority;
   status: ActionStatus;
@@ -307,4 +311,20 @@ export interface MailConfig {
   role: string;
   triggerOn: 'CRITICAL_ONLY' | 'ANY_NG' | 'ALL_AUDITS';
   active: boolean;
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// FPR MATRIX — Department × Section/Line → Responsible Person + CC
+// ──────────────────────────────────────────────────────────────────────────────
+export interface FprEntry {
+  id: string;
+  department: string;    // e.g. "Maintenance"
+  sectionId: string;     // e.g. "GR" or "ALL"
+  lineId: string;        // e.g. "BL-1" or "ALL"
+  fprName: string;       // Functionally Responsible Person name
+  fprEmail: string;      // their @borosil.com email
+  hodName: string;       // HOD / Process Owner name (CC)
+  hodEmail: string;      // HOD email (CC)
+  active: boolean;
+  updatedAt?: string;
 }

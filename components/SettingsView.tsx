@@ -28,7 +28,7 @@ import {
 } from 'lucide-react';
 import { StorageEngine } from '../lib/storageEngine';
 import { GasBackendClient } from '../lib/gasBackend';
-import { SystemSettings, Employee, UserRole, EmailParticipationType } from '../lib/types';
+import { SystemSettings, Employee, UserRole, EmailParticipationType, FprEntry } from '../lib/types';
 
 const DEPARTMENTS = [
   'Instrumentation',
@@ -310,8 +310,183 @@ const UserModal: React.FC<UserModalProps> = ({ user, onClose, onSave }) => {
 };
 
 // ──────────────────────────────────────────────────────────────────────────────
-// MAIN SETTINGS VIEW WITH USER MANAGEMENT
+// FPR ADD / EDIT MODAL
 // ──────────────────────────────────────────────────────────────────────────────
+interface FprModalProps {
+  entry: Partial<FprEntry> | null;
+  sections: { id: string; name: string }[];
+  departments: string[];
+  lines: { id: string; name: string; sectionId: string }[];
+  onClose: () => void;
+  onSave: (entry: Partial<FprEntry>) => void;
+}
+
+const FprModal: React.FC<FprModalProps> = ({ entry, sections, departments, lines, onClose, onSave }) => {
+  const [dept, setDept] = useState(entry?.department || 'Maintenance');
+  const [sectionId, setSectionId] = useState(entry?.sectionId || 'ALL');
+  const [lineId, setLineId] = useState(entry?.lineId || 'ALL');
+  const [fprName, setFprName] = useState(entry?.fprName || '');
+  const [fprEmail, setFprEmail] = useState(entry?.fprEmail || '');
+  const [hodName, setHodName] = useState(entry?.hodName || '');
+  const [hodEmail, setHodEmail] = useState(entry?.hodEmail || '');
+
+  // Filter lines by selected section
+  const filteredLines = sectionId === 'ALL'
+    ? lines
+    : lines.filter((l) => l.sectionId === sectionId);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!fprName.trim() || !fprEmail.trim()) {
+      alert('FPR Person name and email are required.');
+      return;
+    }
+    onSave({
+      id: entry?.id,
+      department: dept,
+      sectionId,
+      lineId,
+      fprName: fprName.trim(),
+      fprEmail: fprEmail.trim().toLowerCase(),
+      hodName: hodName.trim(),
+      hodEmail: hodEmail.trim().toLowerCase(),
+      active: entry?.active !== false,
+    });
+  };
+
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl border border-slate-200 overflow-hidden animate-fade-in">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-indigo-700 to-indigo-600 px-6 py-4 text-white flex items-center justify-between">
+          <div>
+            <h3 className="font-extrabold text-sm tracking-wide flex items-center space-x-2">
+              <Mail className="w-4 h-4" />
+              <span>{entry?.id ? 'EDIT FPR ASSIGNMENT' : 'ADD FPR ASSIGNMENT'}</span>
+            </h3>
+            <p className="text-[11px] text-indigo-200 mt-0.5">Map Department × Section × Line to responsible person and HOD CC.</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-xl hover:bg-white/20 transition">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {/* Row 1: Dept + Section + Line */}
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="text-[11px] font-bold text-slate-700 block mb-1">Department <span className="text-rose-500">*</span></label>
+              <select
+                value={dept}
+                onChange={(e) => setDept(e.target.value)}
+                className="w-full bg-white border border-indigo-200 rounded-xl px-3 py-2 text-xs font-bold focus:border-indigo-500 focus:outline-none"
+              >
+                {departments.map((d) => <option key={d} value={d}>{d}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-[11px] font-bold text-slate-700 block mb-1">Section</label>
+              <select
+                value={sectionId}
+                onChange={(e) => { setSectionId(e.target.value); setLineId('ALL'); }}
+                className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold focus:border-indigo-500 focus:outline-none"
+              >
+                <option value="ALL">All Sections</option>
+                {sections.filter((s) => s.id !== 'ALL').map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-[11px] font-bold text-slate-700 block mb-1">Line</label>
+              <select
+                value={lineId}
+                onChange={(e) => setLineId(e.target.value)}
+                className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold focus:border-indigo-500 focus:outline-none"
+              >
+                <option value="ALL">All Lines</option>
+                {filteredLines.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {/* Divider */}
+          <div className="border-t border-slate-100 pt-3">
+            <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mb-3">FPR Person — Will receive email directly (TO)</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[11px] font-bold text-slate-700 block mb-1">FPR Name <span className="text-rose-500">*</span></label>
+                <input
+                  type="text"
+                  placeholder="e.g. Ravi Kumar"
+                  value={fprName}
+                  onChange={(e) => setFprName(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:border-indigo-500 focus:outline-none"
+                  required
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-bold text-slate-700 block mb-1">FPR Email <span className="text-rose-500">*</span></label>
+                <input
+                  type="email"
+                  placeholder="ravi.kumar@borosil.com"
+                  value={fprEmail}
+                  onChange={(e) => setFprEmail(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-semibold focus:border-indigo-500 focus:outline-none"
+                  required
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t border-slate-100 pt-3">
+            <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mb-3">HOD / Process Owner — Will receive CC copy</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[11px] font-bold text-slate-700 block mb-1">HOD Name</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Mehul Chikhaliya"
+                  value={hodName}
+                  onChange={(e) => setHodName(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:border-indigo-500 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-bold text-slate-700 block mb-1">HOD Email (CC)</label>
+                <input
+                  type="email"
+                  placeholder="hod@borosil.com"
+                  value={hodEmail}
+                  onChange={(e) => setHodEmail(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-semibold focus:border-indigo-500 focus:outline-none"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-2 border-t border-slate-100 flex items-center justify-end space-x-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs transition"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-6 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-xs shadow-md transition flex items-center space-x-1.5"
+            >
+              <Check className="w-4 h-4" />
+              <span>{entry?.id ? 'Update Assignment' : 'Add Assignment'}</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>,
+    document.body
+  );
+};
+
+
 export const SettingsView: React.FC = () => {
   const [settings, setSettings] = useState<SystemSettings>(() => StorageEngine.getSettings());
   const [employees, setEmployees] = useState<Employee[]>(() => StorageEngine.getEmployees());
@@ -330,6 +505,56 @@ export const SettingsView: React.FC = () => {
   const [emailTestResult, setEmailTestResult] = useState<{ sending: boolean; message?: string; error?: string } | null>(null);
   const [diagLogs, setDiagLogs] = useState<{ step: string; status: 'running'|'ok'|'error'|'warn'; detail: string }[]>([]);
   const [diagRunning, setDiagRunning] = useState(false);
+
+  // FPR Matrix
+  const [fprMatrix, setFprMatrix] = useState<FprEntry[]>(() => StorageEngine.getFprMatrix());
+  const [showFprForm, setShowFprForm] = useState(false);
+  const [editingFpr, setEditingFpr] = useState<Partial<FprEntry> | null>(null);
+
+  const handleSaveFprEntry = (entry: Partial<FprEntry>) => {
+    const now = new Date().toISOString();
+    let updated: FprEntry[];
+    if (entry.id) {
+      updated = fprMatrix.map((e) =>
+        e.id === entry.id ? { ...e, ...entry, updatedAt: now } as FprEntry : e
+      );
+    } else {
+      const newEntry: FprEntry = {
+        id: `FPR-${Date.now()}`,
+        department: entry.department || 'Maintenance',
+        sectionId: entry.sectionId || 'ALL',
+        lineId: entry.lineId || 'ALL',
+        fprName: entry.fprName || '',
+        fprEmail: entry.fprEmail || '',
+        hodName: entry.hodName || '',
+        hodEmail: entry.hodEmail || '',
+        active: true,
+        updatedAt: now,
+      };
+      updated = [newEntry, ...fprMatrix];
+    }
+    setFprMatrix(updated);
+    StorageEngine.saveFprMatrix(updated);
+    setShowFprForm(false);
+    setEditingFpr(null);
+    setSavedMessage('FPR Matrix updated successfully.');
+    setTimeout(() => setSavedMessage(''), 3000);
+  };
+
+  const handleDeleteFpr = (id: string) => {
+    if (!confirm('Remove this FPR assignment?')) return;
+    const updated = fprMatrix.filter((e) => e.id !== id);
+    setFprMatrix(updated);
+    StorageEngine.saveFprMatrix(updated);
+  };
+
+  const handleToggleFprActive = (id: string) => {
+    const updated = fprMatrix.map((e) =>
+      e.id === id ? { ...e, active: !e.active, updatedAt: new Date().toISOString() } : e
+    );
+    setFprMatrix(updated);
+    StorageEngine.saveFprMatrix(updated);
+  };
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1025,6 +1250,129 @@ export const SettingsView: React.FC = () => {
           </button>
         </div>
       </form>
+
+      {/* ─────────────────────────────────────────────────────────────────── */}
+      {/* FPR RESPONSIBILITY MATRIX */}
+      {/* ─────────────────────────────────────────────────────────────────── */}
+      <div className="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-xl shadow-slate-300/40 space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-slate-100">
+          <div>
+            <h3 className="text-base font-extrabold text-slate-900 flex items-center space-x-2">
+              <Mail className="w-5 h-5 text-indigo-600" />
+              <span>FPR RESPONSIBILITY MATRIX</span>
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5 font-semibold">
+              Map <strong>Department × Section × Line</strong> → <strong>FPR Person (TO)</strong> + <strong>HOD CC</strong>.
+              When an audit point is marked <span className="text-rose-600 font-bold">NG</span> and assigned to a dept, the FPR and HOD receive the email automatically.
+            </p>
+          </div>
+          <button
+            onClick={() => { setEditingFpr({}); setShowFprForm(true); }}
+            className="flex items-center space-x-1.5 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-extrabold text-xs shadow-md shadow-indigo-500/20 transition shrink-0"
+          >
+            <UserPlus className="w-4 h-4" />
+            <span>+ Add FPR Assignment</span>
+          </button>
+        </div>
+
+        {/* FPR Matrix Table */}
+        {fprMatrix.length === 0 ? (
+          <div className="text-center py-10 text-slate-400">
+            <Mail className="w-10 h-10 mx-auto mb-2 text-slate-200" />
+            <p className="font-bold text-sm">No FPR Assignments Yet</p>
+            <p className="text-xs mt-1">Click <strong>+ Add FPR Assignment</strong> to configure department-wise email routing for deviations.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto rounded-2xl border border-slate-200">
+            <table className="w-full text-xs text-left border-collapse">
+              <thead>
+                <tr className="bg-indigo-50 text-indigo-900 font-extrabold uppercase tracking-wider border-b border-indigo-100">
+                  <th className="px-4 py-3">Department</th>
+                  <th className="px-4 py-3">Section</th>
+                  <th className="px-4 py-3">Line</th>
+                  <th className="px-4 py-3">FPR Person (TO)</th>
+                  <th className="px-4 py-3">FPR Email</th>
+                  <th className="px-4 py-3">HOD / CC Person</th>
+                  <th className="px-4 py-3">CC Email</th>
+                  <th className="px-4 py-3 text-center">Active</th>
+                  <th className="px-4 py-3 text-center">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {fprMatrix.map((entry) => (
+                  <tr key={entry.id} className={`hover:bg-slate-50 transition ${!entry.active ? 'opacity-50' : ''}`}>
+                    <td className="px-4 py-3 font-bold text-slate-900">
+                      <span className="bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-lg text-[10px] font-extrabold">{entry.department}</span>
+                    </td>
+                    <td className="px-4 py-3 font-semibold text-slate-600">{entry.sectionId === 'ALL' ? '🏭 All Sections' : entry.sectionId}</td>
+                    <td className="px-4 py-3 font-semibold text-slate-600">{entry.lineId === 'ALL' ? '🔁 All Lines' : entry.lineId}</td>
+                    <td className="px-4 py-3">
+                      <div className="font-bold text-slate-900">{entry.fprName || '—'}</div>
+                    </td>
+                    <td className="px-4 py-3 font-mono text-[11px] text-indigo-700">{entry.fprEmail || '—'}</td>
+                    <td className="px-4 py-3">
+                      <div className="font-bold text-slate-700">{entry.hodName || '—'}</div>
+                    </td>
+                    <td className="px-4 py-3 font-mono text-[11px] text-amber-700">{entry.hodEmail || '—'}</td>
+                    <td className="px-4 py-3 text-center">
+                      <button
+                        onClick={() => handleToggleFprActive(entry.id)}
+                        className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold transition ${
+                          entry.active ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-slate-100 text-slate-500 border border-slate-200'
+                        }`}
+                      >
+                        {entry.active ? 'Active' : 'Off'}
+                      </button>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <div className="flex items-center justify-center space-x-2">
+                        <button
+                          onClick={() => { setEditingFpr(entry); setShowFprForm(true); }}
+                          className="p-1.5 rounded-lg hover:bg-indigo-50 text-slate-500 hover:text-indigo-600 transition"
+                          title="Edit"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteFpr(entry.id)}
+                          className="p-1.5 rounded-lg hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* FPR Legend */}
+        <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-3 text-xs text-indigo-700 font-semibold">
+          <p className="font-extrabold text-indigo-900 mb-1">📋 How it works:</p>
+          <ul className="list-disc list-inside space-y-0.5 text-[11px]">
+            <li>When an audit point is marked <strong>NG</strong>, the system looks up this matrix using <strong>Dept + Section + Line</strong>.</li>
+            <li><strong>FPR Person</strong> receives a direct action email (TO) to fix the deviation.</li>
+            <li><strong>HOD/CC</strong> receives a copy for awareness and oversight.</li>
+            <li>Use <strong>ALL</strong> in Section/Line to apply to the whole plant or entire section.</li>
+          </ul>
+        </div>
+      </div>
+
+      {/* FPR Add / Edit Modal */}
+      {showFprForm && typeof window !== 'undefined' && createPortal(
+        <FprModal
+          entry={editingFpr}
+          sections={SECTIONS}
+          departments={DEPARTMENTS}
+          lines={StorageEngine.getLines()}
+          onClose={() => { setShowFprForm(false); setEditingFpr(null); }}
+          onSave={handleSaveFprEntry}
+        />,
+        document.body
+      )}
 
       {/* User Add / Edit Modal */}
       {isUserModalOpen && (

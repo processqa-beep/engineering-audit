@@ -174,7 +174,7 @@ export class GasBackendClient {
       whatImpactIfThisPartGetsFail: (r.whatImpactIfThisPartGetsFail || '').slice(0, 150),
     }));
 
-    // 2. Slim actions
+    // 2. Slim actions — include per-point email routing for individual notifications
     const slimActions = actions.map((a) => ({
       id: a.actionId,
       comp: (a.componentName || '').slice(0, 80),
@@ -184,6 +184,11 @@ export class GasBackendClient {
       prio: a.priority || 'Medium',
       status: a.status || 'Open',
       target: a.targetDate || '',
+      responsiblePerson: a.responsiblePerson || '',
+      responsibleDept: a.responsibleDepartment || '',
+      assignedEmail: a.assignedEmail || '',   // direct TO email for this NG point
+      ccPerson: a.ccPerson || '',
+      ccEmail: a.ccEmail || '',               // HOD CC email for this NG point
     }));
 
     // Resolve dynamic TO and CC email recipients from user management routing table

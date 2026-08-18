@@ -568,21 +568,29 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
     }));
 
     // Auto-create Actions in Action_Tracker for NG findings
-    // Also collect CC recipients: HODs and Process Owners for the assigned department
+    // Look up FPR matrix to resolve email addresses for per-point notifications
     const allEmployees = StorageEngine.getEmployees();
     const actions: ActionItem[] = checkpointStates
       .filter((cs) => cs.status === 'NG')
       .map((cs, idx) => {
-        // Determine responsible person: use assignedTo from checkpoint state
         const responsiblePerson = cs.assignedTo || cs.assignedDept || 'Maintenance Lead';
 
-        // CC: find HOD / QA lead / process owner for that department
-        const deptHOD = allEmployees.find(
-          (e) => (e.department === cs.assignedDept || e.sectionScope === 'ALL') &&
-          (e.role === 'QA' || e.role === 'Engineering' || e.role === 'Admin') &&
-          e.active && e.status === 'Approved'
+        // Lookup FPR matrix: department × section × line → fprEmail + hodEmail
+        const fprEntry = StorageEngine.lookupFpr(cs.assignedDept, sectionId, lineId);
+
+        // Also check employee registry for direct email match
+        const assignedEmployee = allEmployees.find(
+          (e) => e.name === cs.assignedTo && e.active && e.status === 'Approved'
         );
-        const ccRecipient = deptHOD?.name || 'Process QA Admin';
+
+        // Fallback: HOD from employee registry
+        const deptHOD = allEmployees.find(
+          (e) => (e.role === 'QA' || e.role === 'Engineering' || e.role === 'Admin') && e.active && e.status === 'Approved'
+        );
+
+        const assignedEmail = assignedEmployee?.email || fprEntry?.fprEmail || '';
+        const ccPerson = fprEntry?.hodName || deptHOD?.name || 'Process QA Admin';
+        const ccEmail = fprEntry?.hodEmail || deptHOD?.email || 'mehul.chikhaliya@borosil.com';
 
         return {
           actionId: `ACT-${auditId.replace(/[^A-Za-z0-9]/g, '')}-${idx + 1}`,
@@ -601,7 +609,9 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
           recommendedAction: cs.recommendedAction || cs.component.recommendedAction || 'Inspect & repair component',
           responsiblePerson,
           responsibleDepartment: cs.assignedDept,
-          ccPerson: ccRecipient,
+          assignedEmail,
+          ccPerson,
+          ccEmail,
           targetDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().substring(0, 10),
           priority: cs.checkpoint.isCritical ? 'Critical' : 'High',
           status: 'Open',

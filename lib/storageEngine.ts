@@ -12,6 +12,7 @@ import {
   PhotoRecord,
   SystemSettings,
   MailConfig,
+  FprEntry,
   UserRole,
   AuthUser,
   CheckpointImportRow,
@@ -48,6 +49,7 @@ const STORAGE_KEYS = {
   MAIL_CONFIGS:  'plant_eng_mail_configs_v5',
   DRAFTS:        'plant_eng_drafts_v5',
   AUTH_USER:     'plant_eng_current_auth_user_v5',
+  FPR_MATRIX:    'plant_eng_fpr_matrix_v5',
 };
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -499,5 +501,35 @@ export class StorageEngine {
 
   public static logout(): void {
     removeItem(STORAGE_KEYS.AUTH_USER);
+  }
+
+  // ── FPR MATRIX (Department × Section/Line → Person + CC) ─────────────────
+  public static getFprMatrix(): FprEntry[] {
+    return getItem<FprEntry[]>(STORAGE_KEYS.FPR_MATRIX, []);
+  }
+
+  public static saveFprMatrix(matrix: FprEntry[]): void {
+    setItem(STORAGE_KEYS.FPR_MATRIX, matrix);
+  }
+
+  /**
+   * Look up the best FPR entry for a given department + section + line.
+   * Priority: exact dept+section+line > dept+section+ALL > dept+ALL+ALL
+   */
+  public static lookupFpr(
+    department: string,
+    sectionId: string,
+    lineId: string
+  ): FprEntry | null {
+    const matrix = this.getFprMatrix().filter((e) => e.active && e.department === department);
+    // Exact match
+    let match = matrix.find(
+      (e) => e.sectionId === sectionId && e.lineId === lineId
+    );
+    // Section + ANY line
+    if (!match) match = matrix.find((e) => e.sectionId === sectionId && e.lineId === 'ALL');
+    // Any section + any line
+    if (!match) match = matrix.find((e) => e.sectionId === 'ALL' && e.lineId === 'ALL');
+    return match || null;
   }
 }
