@@ -31,15 +31,16 @@ import { GasBackendClient } from '../lib/gasBackend';
 import { SystemSettings, Employee, UserRole, EmailParticipationType } from '../lib/types';
 
 const DEPARTMENTS = [
-  'Process QA',
+  'Instrumentation',
   'Maintenance',
-  'Engineering',
   'Electrical',
   'Production',
-  'Quality Control',
+  'Quality',
   'Utilities',
-  'Stores & Spares',
   'EHS / Safety',
+  'Process QA',
+  'Engineering',
+  'Stores & Spares',
 ];
 
 const ROLES: UserRole[] = ['Admin', 'Engineering', 'QA', 'Auditor', 'Viewer'];
