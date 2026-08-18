@@ -58,6 +58,8 @@ interface CheckpointState {
   actualValue: string;
   observationNotes: string;
   recommendedAction: string;
+  assignedDept: string;
+  assignedTo: string;
   photoUrl?: string;
 }
 
@@ -286,6 +288,8 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
         actualValue: '',
         observationNotes: '',
         recommendedAction: ck.recommendedAction || '',
+        assignedDept: 'Maintenance',
+        assignedTo: '',
       };
     });
 
@@ -343,6 +347,33 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
     setCheckpointStates((prev) => {
       const updated = [...prev];
       updated[index] = { ...updated[index], observationNotes: remarks };
+      return updated;
+    });
+  };
+
+  const handleRecommendedActionChange = (index: number, val: string) => {
+    setCheckpointStates((prev) => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], recommendedAction: val };
+      return updated;
+    });
+  };
+
+  const handleAssignedDeptChange = (index: number, dept: string) => {
+    // When dept changes, auto-pick first matching employee for that dept
+    const employees = StorageEngine.getEmployees();
+    const deptEmp = employees.find((e) => e.department === dept && e.status === 'Approved' && e.active);
+    setCheckpointStates((prev) => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], assignedDept: dept, assignedTo: deptEmp?.name || '' };
+      return updated;
+    });
+  };
+
+  const handleAssignedToChange = (index: number, val: string) => {
+    setCheckpointStates((prev) => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], assignedTo: val };
       return updated;
     });
   };
@@ -537,29 +568,46 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
     }));
 
     // Auto-create Actions in Action_Tracker for NG findings
+    // Also collect CC recipients: HODs and Process Owners for the assigned department
+    const allEmployees = StorageEngine.getEmployees();
     const actions: ActionItem[] = checkpointStates
       .filter((cs) => cs.status === 'NG')
-      .map((cs, idx) => ({
-        actionId: `ACT-${auditId.replace(/[^A-Za-z0-9]/g, '')}-${idx + 1}`,
-        auditId,
-        sectionId,
-        sectionName: selectedSecObj?.name || sectionId,
-        subSectionId,
-        subSectionName: selectedSubSecObj?.name || subSectionId,
-        lineId,
-        lineName: selectedLineObj?.name || lineId,
-        equipmentId,
-        equipmentName: selectedEquipObj?.name || equipmentId,
-        componentName: cs.component.name || 'Component',
-        checkpointText: cs.checkpoint.checkpointText,
-        observation: cs.observationNotes || `NG finding observed on ${cs.component.name}`,
-        recommendedAction: cs.recommendedAction || cs.component.recommendedAction || 'Inspect & repair component',
-        responsiblePerson: 'Maintenance Lead',
-        targetDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().substring(0, 10),
-        priority: cs.checkpoint.isCritical ? 'Critical' : 'High',
-        status: 'Open',
-        createdAt: now.toISOString(),
-      }));
+      .map((cs, idx) => {
+        // Determine responsible person: use assignedTo from checkpoint state
+        const responsiblePerson = cs.assignedTo || cs.assignedDept || 'Maintenance Lead';
+
+        // CC: find HOD / QA lead / process owner for that department
+        const deptHOD = allEmployees.find(
+          (e) => (e.department === cs.assignedDept || e.sectionScope === 'ALL') &&
+          (e.role === 'QA' || e.role === 'Engineering' || e.role === 'Admin') &&
+          e.active && e.status === 'Approved'
+        );
+        const ccRecipient = deptHOD?.name || 'Process QA Admin';
+
+        return {
+          actionId: `ACT-${auditId.replace(/[^A-Za-z0-9]/g, '')}-${idx + 1}`,
+          auditId,
+          sectionId,
+          sectionName: selectedSecObj?.name || sectionId,
+          subSectionId,
+          subSectionName: selectedSubSecObj?.name || subSectionId,
+          lineId,
+          lineName: selectedLineObj?.name || lineId,
+          equipmentId,
+          equipmentName: selectedEquipObj?.name || equipmentId,
+          componentName: cs.component.name || 'Component',
+          checkpointText: cs.checkpoint.checkpointText,
+          observation: cs.observationNotes || `NG finding observed on ${cs.component.name}`,
+          recommendedAction: cs.recommendedAction || cs.component.recommendedAction || 'Inspect & repair component',
+          responsiblePerson,
+          responsibleDepartment: cs.assignedDept,
+          ccPerson: ccRecipient,
+          targetDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().substring(0, 10),
+          priority: cs.checkpoint.isCritical ? 'Critical' : 'High',
+          status: 'Open',
+          createdAt: now.toISOString(),
+        };
+      });
 
     let syncResult: { status: string; message: string; driveFolderId?: string; driveFolderUrl?: string } | undefined;
     try {
@@ -854,48 +902,62 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
                     <table className="w-full text-left border-collapse">
                       <thead>
                         <tr className="bg-slate-100/90 text-slate-700 font-extrabold text-xs uppercase tracking-wider border-b border-slate-200">
-                          <th className="px-4 py-3.5 w-14 text-center">Sr.No</th>
-                          <th className="px-4 py-3.5">Activities to be Followed (Audit Point)</th>
-                          <th className="px-4 py-3.5 w-40">Specification</th>
-                          <th className="px-4 py-3.5 w-24 text-center">Criticality</th>
-                          <th className="px-4 py-3.5 w-36">Actual Observation</th>
-                          <th className="px-4 py-3.5 w-28 text-center">Status</th>
-                          <th className="px-4 py-3.5 w-52">Remarks &amp; Photo</th>
+                          <th className="px-3 py-3 w-10 text-center">Sr.</th>
+                          <th className="px-3 py-3">Audit Point</th>
+                          <th className="px-3 py-3 w-32">Specification</th>
+                          <th className="px-3 py-3 w-20 text-center">Criticality</th>
+                          <th className="px-3 py-3 w-32">Actual Observation</th>
+                          <th className="px-3 py-3 w-24 text-center">Status</th>
+                          <th className="px-3 py-3 w-44">Assign To</th>
+                          <th className="px-3 py-3 w-44">Recommended Action</th>
+                          <th className="px-3 py-3 w-32">Remarks &amp; Photo</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-800">
                         {group.items.map(({ state, originalIndex }, itemIdx) => {
                           const ck = state.checkpoint;
                           const isCritical = ck.isCritical || ck.criticality === 'Critical';
+                          const allEmployees = StorageEngine.getEmployees().filter((e) => e.active && e.status === 'Approved');
+                          const deptOptions = Array.from(new Set(allEmployees.map((e) => e.department).filter(Boolean)));
+                          const deptEmployees = allEmployees.filter((e) => e.department === state.assignedDept);
+                          // HOD / CC: first QA/Engineering/Admin person from that dept or any process owner
+                          const hodCC = allEmployees.find(
+                            (e) => (e.role === 'QA' || e.role === 'Engineering' || e.role === 'Admin') && e.active
+                          );
 
                           return (
-                            <tr key={ck.id + '-' + itemIdx} className="hover:bg-slate-50/80 transition">
+                            <tr
+                              key={ck.id + '-' + itemIdx}
+                              className={`hover:bg-slate-50/80 transition ${
+                                state.status === 'NG' ? 'bg-rose-50/30' : ''
+                              }`}
+                            >
                               {/* 1. Sr.No */}
-                              <td className="px-4 py-4 text-center font-extrabold text-slate-500">
+                              <td className="px-3 py-3 text-center font-extrabold text-slate-500 text-[11px]">
                                 {ck.srNo || itemIdx + 1}
                               </td>
 
                               {/* 2. Audit Point */}
-                              <td className="px-4 py-4 space-y-1">
-                                <div className="font-bold text-slate-900 text-xs leading-relaxed">
+                              <td className="px-3 py-3 space-y-0.5">
+                                <div className="font-bold text-slate-900 text-xs leading-snug">
                                   {ck.checkpointText}
                                 </div>
                                 {ck.functionOfPart && (
-                                  <div className="text-[10px] text-slate-500 font-semibold">
-                                    Part Function: {ck.functionOfPart}
+                                  <div className="text-[10px] text-slate-500">
+                                    {ck.functionOfPart}
                                   </div>
                                 )}
                               </td>
 
                               {/* 3. Specification */}
-                              <td className="px-4 py-4 font-bold text-slate-700 font-mono text-[11px]">
+                              <td className="px-3 py-3 font-bold text-slate-700 font-mono text-[10px]">
                                 {ck.standardParameter || 'N/A'} {ck.unit ? `(${ck.unit})` : ''}
                               </td>
 
                               {/* 4. Criticality */}
-                              <td className="px-4 py-4 text-center">
+                              <td className="px-3 py-3 text-center">
                                 <span
-                                  className={`px-2.5 py-1 text-[10px] font-extrabold rounded-xl inline-block ${
+                                  className={`px-2 py-0.5 text-[10px] font-extrabold rounded-lg inline-block ${
                                     isCritical
                                       ? 'bg-rose-100 text-rose-800 border border-rose-200'
                                       : 'bg-amber-100 text-amber-800 border border-amber-200'
@@ -906,22 +968,22 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
                               </td>
 
                               {/* 5. Actual Observation */}
-                              <td className="px-4 py-4">
+                              <td className="px-3 py-3">
                                 <input
                                   type="text"
-                                  placeholder="Enter value / observation..."
+                                  placeholder="Value / observation..."
                                   value={state.actualValue}
                                   onChange={(e) => handleActualValueChange(originalIndex, e.target.value)}
-                                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-900 font-semibold focus:bg-white focus:border-indigo-500 focus:outline-none transition shadow-xs"
+                                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 font-semibold focus:bg-white focus:border-indigo-500 focus:outline-none transition"
                                 />
                               </td>
 
                               {/* 6. Status Selector */}
-                              <td className="px-4 py-4 text-center">
+                              <td className="px-3 py-3 text-center">
                                 <select
                                   value={state.status || ''}
                                   onChange={(e) => handleStatusChange(originalIndex, e.target.value as StatusType)}
-                                  className={`px-3 py-1.5 rounded-xl text-xs font-extrabold focus:outline-none cursor-pointer transition shadow-xs ${
+                                  className={`w-full px-2 py-1.5 rounded-lg text-xs font-extrabold focus:outline-none cursor-pointer transition ${
                                     state.status === 'OK'
                                       ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                                       : state.status === 'NG'
@@ -930,33 +992,96 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
                                       ? 'bg-amber-100 text-amber-800 border border-amber-300'
                                       : state.status === 'N/A'
                                       ? 'bg-slate-100 text-slate-700 border border-slate-300'
-                                      : 'bg-white text-slate-400 border border-dashed border-slate-300 hover:border-slate-400'
+                                      : 'bg-white text-slate-400 border border-dashed border-slate-300'
                                   }`}
                                 >
-                                  <option value="">-- Select --</option>
-                                  <option value="OK">OK</option>
-                                  <option value="NG">NG</option>
-                                  <option value="Observation">Observation</option>
+                                  <option value="">-- Status --</option>
+                                  <option value="OK">✅ OK</option>
+                                  <option value="NG">❌ NG</option>
+                                  <option value="Observation">⚠️ Obs.</option>
                                   <option value="N/A">N/A</option>
                                 </select>
                               </td>
 
-                              {/* 7. Remarks & Photo Upload */}
-                              <td className="px-4 py-4 space-y-2">
-                                <div className="flex items-center space-x-2">
+                              {/* 7. Assign To (Dept + Person) */}
+                              <td className="px-3 py-3">
+                                <div className="space-y-1">
+                                  {/* Department Selector */}
+                                  <select
+                                    value={state.assignedDept}
+                                    onChange={(e) => handleAssignedDeptChange(originalIndex, e.target.value)}
+                                    className="w-full bg-indigo-50 border border-indigo-200 rounded-lg px-2 py-1 text-[10px] font-bold text-indigo-900 focus:outline-none focus:border-indigo-500"
+                                  >
+                                    <option value="">-- Dept --</option>
+                                    {deptOptions.length > 0
+                                      ? deptOptions.map((d) => <option key={d} value={d}>{d}</option>)
+                                      : [
+                                          'Maintenance', 'Instrumentation', 'Electrical',
+                                          'Production', 'Quality', 'Utilities', 'EHS / Safety',
+                                          'Process QA', 'Engineering',
+                                        ].map((d) => <option key={d} value={d}>{d}</option>)
+                                    }
+                                  </select>
+
+                                  {/* Person selector within selected department */}
+                                  {deptEmployees.length > 0 ? (
+                                    <select
+                                      value={state.assignedTo}
+                                      onChange={(e) => handleAssignedToChange(originalIndex, e.target.value)}
+                                      className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-[10px] font-semibold text-slate-800 focus:outline-none focus:border-indigo-500"
+                                    >
+                                      <option value="">-- Person --</option>
+                                      {deptEmployees.map((e) => (
+                                        <option key={e.id} value={e.name}>{e.name}</option>
+                                      ))}
+                                    </select>
+                                  ) : (
+                                    <input
+                                      type="text"
+                                      placeholder="Responsible person..."
+                                      value={state.assignedTo}
+                                      onChange={(e) => handleAssignedToChange(originalIndex, e.target.value)}
+                                      className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-[10px] font-semibold text-slate-800 focus:outline-none focus:border-indigo-500"
+                                    />
+                                  )}
+
+                                  {/* CC HOD / Process Owner info */}
+                                  {hodCC && (
+                                    <div className="text-[9px] text-slate-500 flex items-center space-x-1">
+                                      <span className="font-bold text-slate-400">CC:</span>
+                                      <span className="font-semibold text-indigo-600">{hodCC.name}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+
+                              {/* 8. Recommended Action */}
+                              <td className="px-3 py-3">
+                                <textarea
+                                  rows={2}
+                                  placeholder="Recommended corrective action..."
+                                  value={state.recommendedAction}
+                                  onChange={(e) => handleRecommendedActionChange(originalIndex, e.target.value)}
+                                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-[10px] text-slate-900 font-semibold focus:bg-white focus:border-indigo-500 focus:outline-none transition resize-none leading-snug"
+                                />
+                              </td>
+
+                              {/* 9. Remarks & Photo Upload (compact) */}
+                              <td className="px-3 py-3">
+                                <div className="flex items-center space-x-1.5">
                                   <input
                                     type="text"
-                                    placeholder="Optional remarks..."
+                                    placeholder="Remark..."
                                     value={state.observationNotes}
                                     onChange={(e) => handleRemarksChange(originalIndex, e.target.value)}
-                                    className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-900 font-semibold focus:bg-white focus:border-indigo-500 focus:outline-none transition shadow-xs"
+                                    className="flex-1 min-w-0 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-[10px] text-slate-900 font-semibold focus:bg-white focus:border-indigo-500 focus:outline-none transition"
                                   />
 
                                   <label
-                                    className="p-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-indigo-600 border border-slate-200 cursor-pointer transition shrink-0"
-                                    title="Take Photo / Upload"
+                                    className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-indigo-600 border border-slate-200 cursor-pointer transition shrink-0"
+                                    title="Capture / Upload Photo"
                                   >
-                                    <Camera className="w-4 h-4" />
+                                    <Camera className="w-3.5 h-3.5" />
                                     <input
                                       type="file"
                                       accept="image/*"
@@ -968,14 +1093,14 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
                                 </div>
 
                                 {state.photoUrl && (
-                                  <div className="flex items-center space-x-2 pt-1">
+                                  <div className="flex items-center space-x-1.5 pt-1.5">
                                     <img
                                       src={state.photoUrl}
-                                      alt="Observation Photo"
+                                      alt="Photo"
                                       onClick={() => setActivePhotoUrl(state.photoUrl)}
-                                      className="w-10 h-10 object-cover rounded-xl border border-slate-300 cursor-pointer shadow-xs hover:scale-105 transition"
+                                      className="w-8 h-8 object-cover rounded-lg border border-slate-300 cursor-pointer shadow-xs hover:scale-105 transition"
                                     />
-                                    <span className="text-[10px] text-indigo-600 font-bold">Photo Attached</span>
+                                    <span className="text-[9px] text-indigo-600 font-bold">📎</span>
                                   </div>
                                 )}
                               </td>
