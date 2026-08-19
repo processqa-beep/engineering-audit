@@ -60,10 +60,10 @@ export const AuditHistoryView: React.FC = () => {
         <div>
           <h2 className="text-xl font-extrabold text-slate-900 flex items-center space-x-2">
             <History className="w-5 h-5 text-indigo-600" />
-            <span>AUDIT HISTORY &amp; DRIVE REPORTS</span>
+            <span>AUDIT HISTORY &amp; REPORTS</span>
           </h2>
           <p className="text-xs text-slate-500 mt-1 font-semibold">
-            View completed engineering audit snapshots, PDF reports, Excel files, and Google Drive records.
+            View completed engineering audit snapshots, PDF reports, Excel downloads, and evaluation history.
           </p>
         </div>
 

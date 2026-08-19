@@ -55,7 +55,7 @@ const STORAGE_KEYS = {
 // ──────────────────────────────────────────────────────────────────────────
 // STORAGE LIMITS
 // Browser localStorage is a ~5 MB cache only.
-// Google Sheets / Drive hold the permanent full copy.
+// Supabase PostgreSQL & Storage hold the permanent full copy.
 // ──────────────────────────────────────────────────────────────────────────
 const MAX_AUDIT_HEADERS = 30;   // last 30 audit summaries (headers only)
 const MAX_LAST_RESULTS  = 1;    // keep results for only the LAST audit (PDF re-gen)

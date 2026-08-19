@@ -27,7 +27,7 @@ import {
 } from 'lucide-react';
 
 import { StorageEngine } from '../lib/storageEngine';
-import { GasBackendClient } from '../lib/gasBackend';
+import { SupabaseBackendClient } from '../lib/supabaseBackend';
 import { downloadAuditPointTemplate } from '../lib/excelTemplate';
 import { parseCheckpointExcel, formatSpec } from '../lib/checkpointImporter';
 import {
@@ -472,12 +472,12 @@ export const AuditPointSetupView: React.FC = () => {
   const handleSyncFromCloud = async () => {
     setSyncingCloud(true);
     try {
-      const data = await GasBackendClient.syncMasterData();
+      const data = await SupabaseBackendClient.fetchCheckpoints();
       if (data && data.length > 0) {
         setCheckpoints(data);
-        alert(`✓ Successfully synced ${data.length} checkpoints from Google Sheets!`);
+        alert(`✓ Successfully synced ${data.length} checkpoints from Supabase Database!`);
       } else {
-        alert('No checkpoints returned from Google Sheet Checkpoint_Master tab.');
+        alert('No checkpoints returned from Supabase database.');
       }
     } catch (err: any) {
       alert(`Cloud sync notice: ${err?.message || err}`);
@@ -489,18 +489,15 @@ export const AuditPointSetupView: React.FC = () => {
   const handleDumpToCloud = async () => {
     const current = StorageEngine.getCheckpoints();
     if (current.length === 0) {
-      alert('No checkpoints found to dump. Please upload checkpoints or add points first.');
+      alert('No checkpoints found to push. Please upload checkpoints or add points first.');
       return;
     }
     setDumpingCloud(true);
-    setDumpProgress(`Starting upload of ${current.length} checkpoints to Google Sheets...`);
+    setDumpProgress(`Pushing ${current.length} checkpoints to Supabase Database...`);
     try {
-      await GasBackendClient.saveCheckpointsToGoogleSheet(current, (cur, tot) => {
-        const pct = Math.round((cur / tot) * 100);
-        setDumpProgress(`Dumping to Google Sheets Checkpoint_Master: ${cur}/${tot} points (${pct}%)...`);
-      });
-      setDumpProgress(`✓ All ${current.length} checkpoints successfully saved into Google Sheets Checkpoint_Master tab!`);
-      setTimeout(() => setDumpProgress(null), 6000);
+      await SupabaseBackendClient.saveCheckpoints(current);
+      setDumpProgress(`✓ All ${current.length} checkpoints successfully saved into Supabase Database!`);
+      setTimeout(() => setDumpProgress(null), 4000);
     } catch (err: any) {
       setDumpProgress(`Notice while saving: ${err?.message || err}`);
     } finally {
@@ -527,7 +524,7 @@ export const AuditPointSetupView: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    GasBackendClient.syncMasterData()
+    SupabaseBackendClient.fetchCheckpoints()
       .then((data) => {
         if (data && data.length > 0) setCheckpoints(data);
       })
@@ -542,19 +539,16 @@ export const AuditPointSetupView: React.FC = () => {
     setUploadSuccess({ imported: result.imported, updated: result.updated });
     setTimeout(() => setUploadSuccess(null), 5000);
 
-    // Auto-dump all checkpoints to Google Sheets Checkpoint_Master tab
+    // Auto-save all checkpoints to Supabase
     const all = StorageEngine.getCheckpoints();
     setDumpingCloud(true);
-    setDumpProgress(`Auto-saving ${all.length} checkpoints to Google Sheets...`);
+    setDumpProgress(`Auto-saving ${all.length} checkpoints to Supabase Database...`);
     try {
-      await GasBackendClient.saveCheckpointsToGoogleSheet(all, (cur, tot) => {
-        const pct = Math.round((cur / tot) * 100);
-        setDumpProgress(`Saving to Google Sheet Checkpoint_Master: ${cur}/${tot} (${pct}%)...`);
-      });
-      setDumpProgress(`✓ All ${all.length} checkpoints successfully saved to Google Sheets Checkpoint_Master tab!`);
-      setTimeout(() => setDumpProgress(null), 6000);
+      await SupabaseBackendClient.saveCheckpoints(all);
+      setDumpProgress(`✓ All ${all.length} checkpoints successfully saved to Supabase Database!`);
+      setTimeout(() => setDumpProgress(null), 4000);
     } catch (dumpErr) {
-      console.warn('Auto-dump to Google Sheets notice:', dumpErr);
+      console.warn('Auto-save to Supabase notice:', dumpErr);
       setDumpProgress(null);
     } finally {
       setDumpingCloud(false);
@@ -564,32 +558,35 @@ export const AuditPointSetupView: React.FC = () => {
   // ── Manual Add handler ────────────────────────────────────────────────────
   const handleManualSave = async (form: Partial<Checkpoint>) => {
     const now = new Date().toISOString();
-    const id = `CKP-M-${Date.now()}-${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
-    const selectedSec = sections.find((s) => s.id === form.sectionId);
-    const selectedSub = subSections.find((ss) => ss.id === form.subSectionId);
-    const selectedLine = lines.find((l) => l.id === form.lineId);
-
     const newCk: Checkpoint = {
-      id,
-      sectionId: form.sectionId || '',
-      sectionName: selectedSec?.name || form.sectionId || '',
-      subSectionId: form.subSectionId || 'General',
-      subSectionName: selectedSub?.name || form.subSectionId || 'General',
+      id: `CK-MANUAL-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
+      srNo: form.srNo || (checkpoints.length + 1),
+      sectionId: form.sectionId || 'GR',
+      sectionName: form.sectionName || form.sectionId || 'Grinding',
+      subSectionId: form.subSectionId || 'GR-M1',
+      subSectionName: form.subSectionName || form.subSectionId || 'M1',
       lineId: form.lineId || 'ALL',
-      lineName: selectedLine?.name || form.lineId || 'ALL',
-      componentName: form.componentName || '',
+      lineName: form.lineName || form.lineId || 'ALL',
+      equipmentId: form.equipmentId || '',
+      equipmentName: form.equipmentName || '',
+      componentId: form.componentId || '',
+      componentName: form.componentName?.trim() || 'Component',
+      componentReferencePhotoUrl: form.componentReferencePhotoUrl,
       functionOfComponent: form.functionOfComponent,
       whatImpactIfThisPartGetsFail: form.whatImpactIfThisPartGetsFail,
-      checkpointText: form.checkpointText || '',
-      standardParameter: form.standardParameter || '',
-      parameterType: (form.minimum !== undefined || form.maximum !== undefined) ? 'NUMBER' : 'OK_NG',
+      functionOfPart: form.functionOfPart,
+      partFailureType: form.partFailureType,
+      impactOfFailure: form.impactOfFailure,
+      checkpointText: form.checkpointText?.trim() || 'Audit Checkpoint',
+      standardParameter: form.standardParameter?.trim() || 'Visual Check',
+      parameterType: form.parameterType || 'OK_NG',
       minimum: form.minimum,
       maximum: form.maximum,
-      unit: form.unit,
-      applicableLines: form.applicableLines?.length ? form.applicableLines : ['ALL'],
+      unit: form.unit || '',
+      applicableLines: form.applicableLines || ['ALL'],
       criticality: form.criticality || 'Medium',
-      isCritical: (form.criticality || '').toLowerCase() === 'critical',
-      active: form.active !== undefined ? form.active : true,
+      isCritical: form.criticality === 'Critical',
+      active: form.active !== false,
       createdAt: now,
       updatedAt: now,
     };
@@ -599,13 +596,14 @@ export const AuditPointSetupView: React.FC = () => {
     StorageEngine.saveCheckpoints(updatedAll);
     reload();
 
-    // Auto-dump to Google Sheets Checkpoint_Master
+    // Auto-save to Supabase
     try {
-      await GasBackendClient.saveCheckpointsToGoogleSheet(updatedAll);
+      await SupabaseBackendClient.saveCheckpoints(updatedAll);
     } catch (dumpErr) {
-      console.warn('Auto-dump to Google Sheets notice:', dumpErr);
+      console.warn('Auto-save to Supabase notice:', dumpErr);
     }
   };
+
 
   // ── Toggle active ─────────────────────────────────────────────────────────
   const handleToggleActive = (ck: Checkpoint) => {
@@ -669,10 +667,10 @@ export const AuditPointSetupView: React.FC = () => {
               onClick={handleSyncFromCloud}
               disabled={syncingCloud}
               className="flex items-center space-x-1.5 px-4 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-2xl font-extrabold text-xs transition shadow-sm"
-              title="Sync checkpoints from Checkpoint_Master sheet in Google Sheets"
+              title="Sync checkpoints from Supabase Database"
             >
               <RefreshCw className={`w-4 h-4 text-emerald-600 ${syncingCloud ? 'animate-spin' : ''}`} />
-              <span>{syncingCloud ? 'Syncing...' : 'Sync from Google Sheet'}</span>
+              <span>{syncingCloud ? 'Syncing...' : 'Sync from Supabase'}</span>
             </button>
 
             <button
@@ -697,10 +695,10 @@ export const AuditPointSetupView: React.FC = () => {
               onClick={handleDumpToCloud}
               disabled={dumpingCloud}
               className="flex items-center space-x-1.5 px-4 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-300 rounded-2xl font-extrabold text-xs transition shadow-sm"
-              title="Save / push all checkpoints directly to Google Sheets Checkpoint_Master tab"
+              title="Push all checkpoints directly to Supabase Database"
             >
               <Send className={`w-4 h-4 text-indigo-600 ${dumpingCloud ? 'animate-pulse' : ''}`} />
-              <span>{dumpingCloud ? 'Saving to Google Sheet...' : 'Dump All to Google Sheet'}</span>
+              <span>{dumpingCloud ? 'Saving to Supabase...' : 'Push All to Supabase'}</span>
             </button>
 
             <button

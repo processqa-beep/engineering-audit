@@ -436,4 +436,34 @@ export class SupabaseBackendClient {
       return false;
     }
   }
+
+  // ── ACTION ITEMS ────────────────────────────────────────────────────────────
+  public static async updateActionStatus(
+    actionId: string,
+    status: string,
+    closureRemark?: string,
+    closurePhotoUrl?: string
+  ): Promise<{ status: string; message: string }> {
+    StorageEngine.updateActionStatus(actionId, status, closureRemark, closurePhotoUrl);
+    if (!this.isConfigured()) return { status: 'LOCAL_SAVED', message: 'Saved locally.' };
+
+    try {
+      const { error } = await supabase
+        .from('action_items')
+        .update({
+          status,
+          closure_remark: closureRemark || null,
+          closure_photo_url: closurePhotoUrl || null,
+          closed_date: status === 'Closed' ? new Date().toISOString().substring(0, 10) : null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('action_id', actionId);
+
+      if (error) throw error;
+      return { status: 'SUCCESS', message: 'Action status updated in Supabase.' };
+    } catch (err: any) {
+      console.warn('[Supabase Action Update Error]:', err);
+      return { status: 'LOCAL_SAVED', message: 'Saved locally.' };
+    }
+  }
 }

@@ -290,16 +290,16 @@ export interface PhotoRecord {
 }
 
 export interface SystemSettings {
-  googleSheetId: string;
-  googleDriveFolderId: string;
-  googleAppsScriptUrl: string;
-  serviceAccountEmail?: string;
-  serviceAccountPrivateKey?: string;
+  supabaseUrl?: string;
+  supabaseAnonKey?: string;
   autoBackupEnabled: boolean;
   lastBackupDate: string;
   companyName: string;
   defaultSection: string;
   currentUserRole: UserRole;
+  googleSheetId?: string;
+  googleDriveFolderId?: string;
+  googleAppsScriptUrl?: string;
 }
 
 export interface MailConfig {

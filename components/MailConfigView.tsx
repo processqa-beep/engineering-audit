@@ -116,7 +116,7 @@ export const MailConfigView: React.FC = () => {
   };
 
   const handleTestEmail = (email: string) => {
-    setTestSentMessage(`Test alert triggered for ${email}! Check Google Apps Script email logs.`);
+    setTestSentMessage(`Test alert triggered for ${email}!`);
     setTimeout(() => setTestSentMessage(''), 4000);
   };
 

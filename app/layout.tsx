@@ -13,9 +13,9 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'ENGINEERING AUDIT SYSTEM',
+  title: 'ENGINEERING AUDIT SYSTEM - BOROSIL RENEWABLES LTD.',
   description:
-    'Industrial equipment health assessment, M1/M1A/M2 checkpoint compliance, and automated action tracking powered by Google Drive & Google Sheets.',
+    'Industrial equipment health assessment, checkpoint compliance, and automated action tracking powered by Supabase Cloud Database & Storage.',
 };
 
 export default function RootLayout({
@@ -25,9 +25,6 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`}>
-      <head>
-        <script src="https://accounts.google.com/gsi/client" async defer></script>
-      </head>
       <body className="bg-slate-50 text-slate-800 min-h-screen font-sans selection:bg-indigo-500 selection:text-white antialiased">
         {children}
       </body>

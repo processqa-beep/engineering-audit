@@ -23,7 +23,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { StorageEngine } from '../lib/storageEngine';
-import { GasBackendClient } from '../lib/gasBackend';
+import { SupabaseBackendClient } from '../lib/supabaseBackend';
 import { Section, SubSection, Line, Equipment, Component, Checkpoint, Employee } from '../lib/types';
 
 interface MasterDataViewProps {
@@ -69,14 +69,14 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab = 'ch
     setTimeout(() => setCopiedHeader(false), 3000);
   };
 
-  const handleSyncFromGoogleSheet = async () => {
+  const handleSyncFromCloud = async () => {
     setSyncing(true);
     try {
-      const fetched = await GasBackendClient.syncMasterData();
+      const fetched = await SupabaseBackendClient.fetchCheckpoints();
       refreshAllData();
-      alert(`✓ Successfully synced ${fetched.length} checkpoints from Google Sheet tab "Checkpoint_Master"!`);
+      alert(`✓ Successfully synced ${fetched.length} checkpoints from Supabase Database!`);
     } catch (err: any) {
-      alert(`Sheet Sync Notice: ${err.message}`);
+      alert(`Sync Notice: ${err.message}`);
     } finally {
       setSyncing(false);
     }
@@ -326,7 +326,7 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab = 'ch
             <span>MASTER CONFIGURATION DATA</span>
           </h2>
           <p className="text-xs text-slate-500 mt-1 font-semibold">
-            Google Sheet (<span className="font-mono text-indigo-700 font-bold">Engineering_Audit_Database &gt; Checkpoint_Master</span>) is the primary master checkpoint store.
+            Plant Sections, Lines, Equipment Units, Components, and Master Checkpoints.
           </p>
         </div>
 
@@ -337,7 +337,7 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab = 'ch
             className="flex items-center space-x-1.5 px-3.5 py-2 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-extrabold transition border border-slate-200"
           >
             {copiedHeader ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4 text-slate-500" />}
-            <span>{copiedHeader ? 'Header Copied!' : 'Copy Sheet Header Row'}</span>
+            <span>{copiedHeader ? 'Header Copied!' : 'Copy Excel Header Row'}</span>
           </button>
 
           <button
@@ -351,12 +351,12 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab = 'ch
 
           <button
             type="button"
-            onClick={handleSyncFromGoogleSheet}
+            onClick={handleSyncFromCloud}
             disabled={syncing}
             className="flex items-center space-x-1.5 px-4 py-2 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-extrabold shadow-md transition disabled:opacity-50"
           >
             <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
-            <span>{syncing ? 'Syncing...' : 'Sync from Google Sheet'}</span>
+            <span>{syncing ? 'Syncing...' : 'Sync from Supabase'}</span>
           </button>
         </div>
       </div>
@@ -603,12 +603,12 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({ initialTab = 'ch
               <div className="flex items-center justify-between">
                 <h3 className="text-base font-extrabold text-slate-900 flex items-center space-x-2">
                   <Sparkles className="w-5 h-5 text-indigo-600" />
-                  <span>SMART AUTO-DETECT EXCEL / GOOGLE SHEETS IMPORTER</span>
+                  <span>SMART AUTO-DETECT EXCEL IMPORTER</span>
                 </h3>
               </div>
 
               <p className="text-xs text-slate-500 font-semibold leading-relaxed">
-                Paste your Excel or Google Sheets rows below. The Smart Auto-Detector automatically extracts Section, Sub-Section, Component Name, Failure Impact, Audit Points, and Specifications regardless of column order!
+                Paste your Excel tabular rows below. The Smart Auto-Detector automatically extracts Section, Sub-Section, Component Name, Failure Impact, Audit Points, and Specifications regardless of column order!
               </p>
 
               <textarea

@@ -15,8 +15,8 @@ import {
   MessageSquare,
 } from 'lucide-react';
 import { StorageEngine } from '../lib/storageEngine';
-import { GasBackendClient } from '../lib/gasBackend';
-import { ActionItem } from '../lib/types';
+import { SupabaseBackendClient } from '../lib/supabaseBackend';
+import { ActionItem, ActionStatus } from '../lib/types';
 
 interface ActionTrackingViewProps {
   onNavigate: (tab: string) => void;
@@ -67,7 +67,7 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
     setActions(StorageEngine.getActions());
 
     try {
-      await GasBackendClient.updateAction(editingAction.actionId, newStatus, newRemarks);
+      await SupabaseBackendClient.updateActionStatus(editingAction.actionId, newStatus, newRemarks);
     } catch (err) {
       console.warn('Action sync notice:', err);
     }

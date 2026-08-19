@@ -26,7 +26,6 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { StorageEngine } from '../lib/storageEngine';
-import { GasBackendClient } from '../lib/gasBackend';
 import { SupabaseBackendClient } from '../lib/supabaseBackend';
 import { generateAuditPdfReport } from '../lib/pdfGenerator';
 import { generateAuditExcelReport } from '../lib/excelGenerator';
@@ -86,22 +85,18 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
     setAllEquipment(StorageEngine.getEquipment());
   }, []);
 
-  // Auto-sync master checkpoints from Supabase / Google Sheets on load
+  // Auto-sync master checkpoints from Supabase on load
   const syncCheckpointsFromCloud = useCallback(async () => {
     setSyncingCloud(true);
     try {
-      let cloudCheckpoints;
       if (SupabaseBackendClient.isConfigured()) {
-        cloudCheckpoints = await SupabaseBackendClient.fetchCheckpoints();
-      }
-      if (!cloudCheckpoints || cloudCheckpoints.length === 0) {
-        cloudCheckpoints = await GasBackendClient.syncMasterData();
-      }
-      if (cloudCheckpoints && cloudCheckpoints.length > 0) {
-        setAllCheckpoints(cloudCheckpoints);
+        const cloudCheckpoints = await SupabaseBackendClient.fetchCheckpoints();
+        if (cloudCheckpoints && cloudCheckpoints.length > 0) {
+          setAllCheckpoints(cloudCheckpoints);
+        }
       }
     } catch (err) {
-      console.log('[Cloud Checkpoints Sync notice]:', err);
+      console.log('[Supabase Checkpoints Sync notice]:', err);
     } finally {
       setSyncingCloud(false);
     }
@@ -641,12 +636,9 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
     // This runs silently after the user is already on the success screen.
     (async () => {
       try {
-        let syncResult;
+        let syncResult: { status: string; message: string } | undefined;
         if (SupabaseBackendClient.isConfigured()) {
           syncResult = await SupabaseBackendClient.submitAudit(header, results, actions);
-        }
-        if (!syncResult || syncResult.status !== 'SUCCESS') {
-          syncResult = await GasBackendClient.submitAudit(header, results, actions);
         }
         // Update sync badge silently if the modal is still open
         setLastSubmittedAudit((prev) => prev ? { ...prev, syncResult } : prev);
@@ -680,7 +672,7 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
             <span>PLANT ENGINEERING AUDIT SYSTEM</span>
           </h2>
           <p className="text-xs text-slate-500 mt-1 font-semibold">
-            Master checkpoints configured from Google Sheets (<span className="font-mono text-indigo-700 font-bold">Checkpoint_Master</span>).
+            Borosil Plant Engineering Audit &amp; Quality Management System.
           </p>
         </div>
 
@@ -881,7 +873,7 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
                 No Active Checkpoints for {selectedSecObj?.name} {selectedSubSecObj ? `(${selectedSubSecObj.name})` : ''}
               </h4>
               <p className="text-xs text-slate-500 max-w-sm mx-auto font-medium">
-                Paste checkpoints into your Google Sheet <span className="font-mono text-indigo-700 font-bold">Checkpoint_Master</span> tab and click <strong>Sync Master</strong> in the top header.
+                Checkpoints can be managed from the <strong>Checkpoint Master</strong> tab. Click <strong>Sync Checkpoints</strong> to load active points.
               </p>
             </div>
           ) : (
@@ -1260,7 +1252,7 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
                 <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-2xl text-xs flex items-center space-x-2.5 font-semibold">
                   <RefreshCw className="w-4 h-4 text-indigo-500 shrink-0 animate-spin" />
                   <div>
-                    <p className="text-indigo-800 font-bold">Syncing to Google Sheets in background…</p>
+                    <p className="text-indigo-800 font-bold">Syncing to Supabase Cloud Database &amp; Storage…</p>
                     <p className="text-indigo-500 text-[10px]">You can use the portal normally. This runs silently.</p>
                   </div>
                 </div>
@@ -1269,20 +1261,9 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
                 <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-2xl text-xs space-y-1 font-semibold">
                   <div className="flex items-center space-x-1.5 text-emerald-800 font-extrabold">
                     <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span>Synced to Google Sheets &amp; Drive ✓</span>
+                    <span>Synced to Supabase Cloud Database &amp; Storage ✓</span>
                   </div>
-                  <p className="text-[11px] text-emerald-700">Audit_Master, Audit_Details, Action_Tracker updated.</p>
-                  {lastSubmittedAudit.syncResult.driveFolderUrl && (
-                    <a
-                      href={lastSubmittedAudit.syncResult.driveFolderUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center space-x-1 text-indigo-700 hover:text-indigo-900 underline font-extrabold text-[11px] pt-0.5"
-                    >
-                      <span>📁 Open Folder in Drive</span>
-                      <span className="text-[9px]">↗</span>
-                    </a>
-                  )}
+                  <p className="text-[11px] text-emerald-700">Audit header, results, photos &amp; action items saved in real-time.</p>
                 </div>
               ) : (
                 /* Saved locally only — neutral, not alarming */
