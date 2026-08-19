@@ -45,6 +45,7 @@ import {
   Line,
 } from 'recharts';
 import { StorageEngine } from '../lib/storageEngine';
+import { SupabaseBackendClient } from '../lib/supabaseBackend';
 import { AuditHeader, AuditResult, ActionItem } from '../lib/types';
 
 interface DashboardViewProps {
@@ -69,10 +70,23 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
   // Table Tab State
   const [activeTableTab, setActiveTableTab] = useState<'lines' | 'auditors' | 'audits'>('lines');
 
-  const loadData = () => {
+  const loadData = async () => {
     setAudits(StorageEngine.getAudits());
     setAuditResults(StorageEngine.getAuditResults());
     setActions(StorageEngine.getActions());
+
+    if (SupabaseBackendClient.isConfigured()) {
+      try {
+        const [cloudAudits, cloudActions] = await Promise.all([
+          SupabaseBackendClient.fetchAudits(),
+          SupabaseBackendClient.fetchActions(),
+        ]);
+        if (cloudAudits) setAudits(cloudAudits);
+        if (cloudActions) setActions(cloudActions);
+      } catch (err) {
+        console.warn('Dashboard cloud fetch notice:', err);
+      }
+    }
   };
 
   useEffect(() => {

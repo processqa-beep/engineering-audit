@@ -143,12 +143,12 @@ export class StorageEngine {
       setItem(STORAGE_KEYS.COMPONENTS,   initialComponents);
       setItem(STORAGE_KEYS.CHECKPOINTS,  initialCheckpoints);   // []
       setItem(STORAGE_KEYS.EMPLOYEES,    initialEmployees);
-      setItem(STORAGE_KEYS.AUDITS,       initialAudits);
-      setItem(STORAGE_KEYS.AUDIT_RESULTS, initialAuditResults);
-      setItem(STORAGE_KEYS.ACTIONS,      initialActions);
+      setItem(STORAGE_KEYS.AUDITS,       []);
+      setItem(STORAGE_KEYS.AUDIT_RESULTS, []);
+      setItem(STORAGE_KEYS.ACTIONS,      []);
       setItem(STORAGE_KEYS.MAIL_CONFIGS, initialMailConfigs);
       setItem(STORAGE_KEYS.SETTINGS,     defaultSettings);
-      localStorage.setItem('plant_eng_portal_initialized_v5', 'true');
+      localStorage.setItem('plant_eng_portal_initialized_v6', 'true');
     }
   }
 

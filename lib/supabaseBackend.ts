@@ -284,45 +284,58 @@ export class SupabaseBackendClient {
   public static async saveCheckpoints(checkpoints: Checkpoint[]): Promise<boolean> {
     if (!this.isConfigured() || checkpoints.length === 0) return false;
     try {
+      const cleanNum = (val: any): number | null => {
+        if (val === undefined || val === null || val === '' || isNaN(Number(val))) return null;
+        return Number(val);
+      };
+
       const rows = checkpoints.map((c, i) => ({
-        id: c.id,
-        sr_no: c.srNo || i + 1,
-        section_id: c.sectionId,
-        section_name: c.sectionName,
-        sub_section_id: c.subSectionId,
-        sub_section_name: c.subSectionName,
-        line_id: c.lineId,
-        line_name: c.lineName,
-        equipment_id: c.equipmentId,
-        equipment_name: c.equipmentName,
-        component_id: c.componentId,
-        component_name: c.componentName,
-        component_reference_photo_url: c.componentReferencePhotoUrl,
-        function_of_component: c.functionOfComponent,
-        what_impact_if_this_part_gets_fail: c.whatImpactIfThisPartGetsFail,
-        function_of_part: c.functionOfPart,
-        part_failure_type: c.partFailureType,
-        impact_of_failure: c.impactOfFailure,
-        recommended_action: c.recommendedAction,
-        checkpoint_text: c.checkpointText,
-        standard_parameter: c.standardParameter,
+        id: String(c.id || `CKP-${Date.now()}-${i + 1}`),
+        sr_no: cleanNum(c.srNo) || i + 1,
+        section_id: c.sectionId || 'GR',
+        section_name: c.sectionName || '',
+        sub_section_id: c.subSectionId || '',
+        sub_section_name: c.subSectionName || '',
+        line_id: c.lineId || 'ALL',
+        line_name: c.lineName || 'ALL',
+        equipment_id: c.equipmentId || '',
+        equipment_name: c.equipmentName || '',
+        component_id: c.componentId || '',
+        component_name: c.componentName || 'Component',
+        component_reference_photo_url: c.componentReferencePhotoUrl || null,
+        function_of_component: c.functionOfComponent || null,
+        what_impact_if_this_part_gets_fail: c.whatImpactIfThisPartGetsFail || null,
+        function_of_part: c.functionOfPart || null,
+        part_failure_type: c.partFailureType || null,
+        impact_of_failure: c.impactOfFailure || null,
+        recommended_action: c.recommendedAction || null,
+        checkpoint_text: c.checkpointText || 'Audit Point',
+        standard_parameter: c.standardParameter || '',
         parameter_type: c.parameterType || 'OK_NG',
-        minimum: c.minimum,
-        maximum: c.maximum,
-        unit: c.unit,
-        applicable_lines: c.applicableLines || ['ALL'],
+        minimum: cleanNum(c.minimum),
+        maximum: cleanNum(c.maximum),
+        unit: c.unit || '',
+        applicable_lines: Array.isArray(c.applicableLines) ? c.applicableLines : ['ALL'],
         criticality: c.criticality || (c.isCritical ? 'Critical' : 'Medium'),
         is_critical: c.isCritical || c.criticality === 'Critical',
         active: c.active !== false,
         updated_at: new Date().toISOString(),
       }));
 
-      const { error } = await supabase.from('checkpoints').upsert(rows);
-      if (error) throw error;
+      // Chunk in batches of 50 for safety
+      const BATCH_SIZE = 50;
+      for (let b = 0; b < rows.length; b += BATCH_SIZE) {
+        const batch = rows.slice(b, b + BATCH_SIZE);
+        const { error } = await supabase.from('checkpoints').upsert(batch);
+        if (error) {
+          console.error('[Supabase Save Checkpoints Error]:', error);
+          throw new Error(error.message);
+        }
+      }
       return true;
-    } catch (err) {
+    } catch (err: any) {
       console.error('[Supabase Save Checkpoints Error]:', err);
-      return false;
+      throw err;
     }
   }
 
@@ -437,7 +450,91 @@ export class SupabaseBackendClient {
     }
   }
 
-  // ── ACTION ITEMS ────────────────────────────────────────────────────────────
+  // ── AUDITS & ACTIONS QUERY ──────────────────────────────────────────────────
+  public static async fetchAudits(): Promise<AuditHeader[]> {
+    if (!this.isConfigured()) return StorageEngine.getAudits();
+    try {
+      const { data, error } = await supabase
+        .from('audits')
+        .select('*')
+        .order('date', { ascending: false });
+
+      if (error || !data) return StorageEngine.getAudits();
+
+      return data.map((d: any) => ({
+        auditId: d.audit_id,
+        date: d.date,
+        time: d.time,
+        sectionId: d.section_id,
+        sectionName: d.section_name,
+        subSectionId: d.sub_section_id,
+        subSectionName: d.sub_section_name,
+        lineId: d.line_id,
+        lineName: d.line_name,
+        equipmentId: d.equipment_id,
+        equipmentName: d.equipment_name,
+        auditorId: d.auditor_id,
+        auditorName: d.auditor_name,
+        totalCheckpoints: d.total_checkpoints,
+        okCount: d.ok_count,
+        ngCount: d.ng_count,
+        obsCount: d.obs_count,
+        naCount: d.na_count,
+        compliancePercent: Number(d.compliance_percent),
+        overallStatus: d.overall_status,
+        syncStatus: 'SYNCED',
+        isDraft: d.is_draft,
+        createdAt: d.created_at,
+        updatedAt: d.updated_at,
+      }));
+    } catch {
+      return StorageEngine.getAudits();
+    }
+  }
+
+  public static async fetchActions(): Promise<ActionItem[]> {
+    if (!this.isConfigured()) return StorageEngine.getActions();
+    try {
+      const { data, error } = await supabase
+        .from('action_items')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error || !data) return StorageEngine.getActions();
+
+      return data.map((d: any) => ({
+        actionId: d.action_id,
+        auditId: d.audit_id,
+        sectionId: d.section_id,
+        sectionName: d.section_name,
+        subSectionId: d.sub_section_id,
+        subSectionName: d.sub_section_name,
+        lineId: d.line_id,
+        lineName: d.line_name,
+        equipmentId: d.equipment_id,
+        equipmentName: d.equipment_name,
+        componentName: d.component_name,
+        checkpointText: d.checkpoint_text,
+        observation: d.observation,
+        recommendedAction: d.recommended_action,
+        responsiblePerson: d.responsible_person,
+        responsibleDepartment: d.responsible_department,
+        assignedEmail: d.assigned_email,
+        ccPerson: d.cc_person,
+        ccEmail: d.cc_email,
+        targetDate: d.target_date,
+        priority: d.priority,
+        status: d.status,
+        closureRemark: d.closure_remark,
+        closurePhotoUrl: d.closure_photo_url,
+        closedDate: d.closed_date,
+        createdAt: d.created_at,
+      }));
+    } catch {
+      return StorageEngine.getActions();
+    }
+  }
+
   public static async updateActionStatus(
     actionId: string,
     status: string,
