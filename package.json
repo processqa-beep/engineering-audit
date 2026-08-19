@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.112.3",
     "@types/nodemailer": "^8.0.1",
     "canvas-confetti": "^1.9.4",
     "googleapis": "^174.0.1",

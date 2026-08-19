@@ -27,6 +27,7 @@ import {
 import confetti from 'canvas-confetti';
 import { StorageEngine } from '../lib/storageEngine';
 import { GasBackendClient } from '../lib/gasBackend';
+import { SupabaseBackendClient } from '../lib/supabaseBackend';
 import { generateAuditPdfReport } from '../lib/pdfGenerator';
 import { generateAuditExcelReport } from '../lib/excelGenerator';
 import { PhotoModal } from './PhotoModal';
@@ -85,11 +86,17 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
     setAllEquipment(StorageEngine.getEquipment());
   }, []);
 
-  // Auto-sync master checkpoints from Google Sheets on load
-  const syncCheckpointsFromGoogleSheet = useCallback(async () => {
+  // Auto-sync master checkpoints from Supabase / Google Sheets on load
+  const syncCheckpointsFromCloud = useCallback(async () => {
     setSyncingCloud(true);
     try {
-      const cloudCheckpoints = await GasBackendClient.syncMasterData();
+      let cloudCheckpoints;
+      if (SupabaseBackendClient.isConfigured()) {
+        cloudCheckpoints = await SupabaseBackendClient.fetchCheckpoints();
+      }
+      if (!cloudCheckpoints || cloudCheckpoints.length === 0) {
+        cloudCheckpoints = await GasBackendClient.syncMasterData();
+      }
       if (cloudCheckpoints && cloudCheckpoints.length > 0) {
         setAllCheckpoints(cloudCheckpoints);
       }
@@ -101,8 +108,8 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
   }, []);
 
   useEffect(() => {
-    syncCheckpointsFromGoogleSheet();
-  }, [syncCheckpointsFromGoogleSheet]);
+    syncCheckpointsFromCloud();
+  }, [syncCheckpointsFromCloud]);
 
   // Form Header State
   const [sectionId, setSectionId] = useState<string>(initialDraft?.header?.sectionId || '');
@@ -634,7 +641,13 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
     // This runs silently after the user is already on the success screen.
     (async () => {
       try {
-        const syncResult = await GasBackendClient.submitAudit(header, results, actions);
+        let syncResult;
+        if (SupabaseBackendClient.isConfigured()) {
+          syncResult = await SupabaseBackendClient.submitAudit(header, results, actions);
+        }
+        if (!syncResult || syncResult.status !== 'SUCCESS') {
+          syncResult = await GasBackendClient.submitAudit(header, results, actions);
+        }
         // Update sync badge silently if the modal is still open
         setLastSubmittedAudit((prev) => prev ? { ...prev, syncResult } : prev);
       } catch (err: any) {
@@ -673,10 +686,10 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
 
         <div className="flex items-center space-x-2 shrink-0">
           <button
-            onClick={syncCheckpointsFromGoogleSheet}
+            onClick={syncCheckpointsFromCloud}
             disabled={syncingCloud}
             className="flex items-center space-x-1.5 px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-2xl text-xs font-extrabold transition border border-indigo-200"
-            title="Sync all audit checkpoints from Google Sheets Checkpoint_Master tab"
+            title="Sync all audit checkpoints from Supabase / Google Sheets"
           >
             <RefreshCw className={`w-3.5 h-3.5 text-indigo-600 ${syncingCloud ? 'animate-spin' : ''}`} />
             <span>{syncingCloud ? 'Syncing...' : 'Sync Checkpoints'}</span>

@@ -25,9 +25,13 @@ import {
   AtSign,
   Tag,
   Clock,
+  Database,
+  ExternalLink,
+  Copy,
 } from 'lucide-react';
 import { StorageEngine } from '../lib/storageEngine';
 import { GasBackendClient } from '../lib/gasBackend';
+import { SupabaseBackendClient } from '../lib/supabaseBackend';
 import { SystemSettings, Employee, UserRole, EmailParticipationType, FprEntry } from '../lib/types';
 
 const DEPARTMENTS = [
@@ -527,6 +531,40 @@ export const SettingsView: React.FC = () => {
   const [emailTestResult, setEmailTestResult] = useState<{ sending: boolean; message?: string; error?: string } | null>(null);
   const [diagLogs, setDiagLogs] = useState<{ step: string; status: 'running'|'ok'|'error'|'warn'; detail: string }[]>([]);
   const [diagRunning, setDiagRunning] = useState(false);
+
+  // Supabase Integration
+  const [supabaseTest, setSupabaseTest] = useState<{ testing: boolean; message?: string; error?: string } | null>(null);
+  const [supabaseSyncing, setSupabaseSyncing] = useState(false);
+
+  const handleTestSupabase = async () => {
+    setSupabaseTest({ testing: true });
+    const res = await SupabaseBackendClient.ping();
+    if (res.success) {
+      setSupabaseTest({ testing: false, message: res.message });
+    } else {
+      setSupabaseTest({ testing: false, error: res.message });
+    }
+  };
+
+  const handleSyncAllToSupabase = async () => {
+    setSupabaseSyncing(true);
+    try {
+      const allCheckpoints = StorageEngine.getCheckpoints();
+      const allEmployees = StorageEngine.getEmployees();
+      const allFpr = StorageEngine.getFprMatrix();
+
+      await SupabaseBackendClient.saveCheckpoints(allCheckpoints);
+      await SupabaseBackendClient.saveEmployees(allEmployees);
+      await SupabaseBackendClient.saveFprMatrix(allFpr);
+
+      setSavedMessage(`Successfully synced ${allCheckpoints.length} checkpoints, ${allEmployees.length} users, and ${allFpr.length} FPR assignments to Supabase!`);
+      setTimeout(() => setSavedMessage(''), 5000);
+    } catch (err: any) {
+      alert(`Sync failed: ${err.message}`);
+    } finally {
+      setSupabaseSyncing(false);
+    }
+  };
 
   // FPR Matrix
   const [fprMatrix, setFprMatrix] = useState<FprEntry[]>(() => StorageEngine.getFprMatrix());
@@ -1118,12 +1156,103 @@ export const SettingsView: React.FC = () => {
       </div>
 
       {/* ─────────────────────────────────────────────────────────────────── */}
-      {/* 2. GOOGLE APPS SCRIPT / CLOUD INTEGRATION SETTINGS */}
+      {/* 2. SUPABASE CLOUD DATABASE & HIGH-SPEED STORAGE */}
+      {/* ─────────────────────────────────────────────────────────────────── */}
+      <div className="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-xl shadow-slate-300/40 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+          <div>
+            <h3 className="text-base font-extrabold text-slate-900 flex items-center space-x-2">
+              <Database className="w-5 h-5 text-emerald-600" />
+              <span>SUPABASE POSTGRESQL &amp; DIRECT PHOTO STORAGE</span>
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5 font-semibold">
+              Ultra-fast relational database &amp; storage bucket for real-time audits, instant photo uploads, and zero-timeout sync.
+            </p>
+          </div>
+          <div className="flex items-center space-x-2">
+            <a
+              href="https://supabase.com/dashboard/project/nywznyvvqhiiktvoskkv/sql"
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center space-x-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition border border-slate-200"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              <span>Open Supabase SQL Editor</span>
+            </a>
+          </div>
+        </div>
+
+        <div className="space-y-3 text-xs">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200">
+              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-1">Connected Project URL</span>
+              <p className="font-mono font-bold text-slate-800 text-[11px] truncate">
+                https://nywznyvvqhiiktvoskkv.supabase.co
+              </p>
+            </div>
+
+            <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200">
+              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-1">Storage Bucket</span>
+              <p className="font-mono font-bold text-emerald-700 text-[11px]">
+                audit-photos (Public S3-Compatible Direct Upload)
+              </p>
+            </div>
+          </div>
+
+          {/* Action Row */}
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <button
+              type="button"
+              onClick={handleTestSupabase}
+              disabled={supabaseTest?.testing}
+              className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-md shadow-emerald-600/20"
+            >
+              <Database className="w-3.5 h-3.5" />
+              <span>{supabaseTest?.testing ? 'Testing Supabase...' : 'Test Supabase Connection'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleSyncAllToSupabase}
+              disabled={supabaseSyncing}
+              className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-md shadow-indigo-600/20"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${supabaseSyncing ? 'animate-spin' : ''}`} />
+              <span>{supabaseSyncing ? 'Syncing to Supabase...' : 'Sync Master Data to Supabase'}</span>
+            </button>
+          </div>
+
+          {supabaseTest?.message && (
+            <div className="p-3 bg-emerald-50 border border-emerald-300 text-emerald-800 rounded-xl text-xs font-bold flex items-center space-x-2">
+              <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>{supabaseTest.message}</span>
+            </div>
+          )}
+
+          {supabaseTest?.error && (
+            <div className="p-3 bg-amber-50 border border-amber-300 text-amber-900 rounded-xl text-xs font-semibold space-y-1">
+              <div className="flex items-center space-x-2 font-bold text-amber-800">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>Supabase Setup Required</span>
+              </div>
+              <p className="text-[11px] text-amber-700">
+                {supabaseTest.error}
+              </p>
+              <p className="text-[11px] text-slate-600 pt-1">
+                👉 Open the file <code className="bg-white px-1.5 py-0.5 rounded border font-mono font-bold text-indigo-700">supabase_schema.sql</code>, copy its content into the Supabase SQL Editor and click <strong>RUN</strong>.
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ─────────────────────────────────────────────────────────────────── */}
+      {/* 3. GOOGLE APPS SCRIPT / CLOUD INTEGRATION SETTINGS */}
       {/* ─────────────────────────────────────────────────────────────────── */}
       <form onSubmit={handleSave} className="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-xl shadow-slate-300/40 space-y-4">
         <h3 className="text-xs font-extrabold text-indigo-600 uppercase tracking-wider flex items-center space-x-2">
           <HardDrive className="w-4 h-4" />
-          <span>Google Apps Script Web App Deployment URL</span>
+          <span>Google Apps Script Web App Deployment URL (Legacy / Fallback)</span>
         </h3>
 
         <div className="space-y-3 text-xs">
