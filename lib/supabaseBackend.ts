@@ -390,11 +390,14 @@ export class SupabaseBackendClient {
       }));
 
       const { error } = await supabase.from('employees').upsert(rows);
-      if (error) throw error;
+      if (error) {
+        console.error('[Supabase Save Employees Error]:', error);
+        throw new Error(error.message);
+      }
       return true;
-    } catch (err) {
+    } catch (err: any) {
       console.error('[Supabase Save Employees Error]:', err);
-      return false;
+      throw err;
     }
   }
 
@@ -442,11 +445,14 @@ export class SupabaseBackendClient {
       }));
 
       const { error } = await supabase.from('fpr_matrix').upsert(rows);
-      if (error) throw error;
+      if (error) {
+        console.error('[Supabase Save FPR Matrix Error]:', error);
+        throw new Error(error.message);
+      }
       return true;
-    } catch (err) {
+    } catch (err: any) {
       console.error('[Supabase Save FPR Matrix Error]:', err);
-      return false;
+      throw err;
     }
   }
 

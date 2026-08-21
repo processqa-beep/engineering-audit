@@ -547,14 +547,21 @@ export const SettingsView: React.FC = () => {
       const allEmployees = StorageEngine.getEmployees();
       const allFpr = StorageEngine.getFprMatrix();
 
-      await SupabaseBackendClient.saveCheckpoints(allCheckpoints);
-      await SupabaseBackendClient.saveEmployees(allEmployees);
-      await SupabaseBackendClient.saveFprMatrix(allFpr);
+      if (allCheckpoints.length === 0 && allFpr.length === 0 && allEmployees.length === 0) {
+        alert('Notice: No checkpoints, FPR entries, or users found in local storage to push.');
+        return;
+      }
 
-      setSavedMessage(`Successfully synced ${allCheckpoints.length} checkpoints, ${allEmployees.length} users, and ${allFpr.length} FPR assignments to Supabase!`);
+      if (allCheckpoints.length > 0) await SupabaseBackendClient.saveCheckpoints(allCheckpoints);
+      if (allEmployees.length > 0) await SupabaseBackendClient.saveEmployees(allEmployees);
+      if (allFpr.length > 0) await SupabaseBackendClient.saveFprMatrix(allFpr);
+
+      const msg = `✓ Successfully saved to Supabase: ${allCheckpoints.length} checkpoints, ${allFpr.length} FPR assignments, ${allEmployees.length} users!`;
+      setSavedMessage(msg);
+      alert(msg);
       setTimeout(() => setSavedMessage(''), 5000);
     } catch (err: any) {
-      alert(`Sync failed: ${err.message}`);
+      alert(`Push to Supabase failed: ${err.message}`);
     } finally {
       setSupabaseSyncing(false);
     }
