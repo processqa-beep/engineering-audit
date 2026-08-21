@@ -642,6 +642,30 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
         }
         // Update sync badge silently if the modal is still open
         setLastSubmittedAudit((prev) => prev ? { ...prev, syncResult } : prev);
+
+        // Dispatch email notification from process.qa@borosil.com if there are recipients
+        const toList = Array.from(new Set(actions.map((a) => a.assignedEmail).filter(Boolean)));
+        const ccList = Array.from(
+          new Set(
+            actions
+              .map((a) => a.ccEmail)
+              .filter(Boolean)
+              .flatMap((c) => (c || '').split(',').map((x) => x.trim()).filter(Boolean))
+          )
+        );
+
+        if (toList.length > 0 || ccList.length > 0) {
+          fetch('/api/send-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              to: toList,
+              cc: ccList,
+              header,
+              actions,
+            }),
+          }).catch((mailErr) => console.warn('[Background email dispatch notice]:', mailErr));
+        }
       } catch (err: any) {
         console.log('[Background sync notice]:', err?.message);
         setLastSubmittedAudit((prev) =>

@@ -115,9 +115,34 @@ export const MailConfigView: React.FC = () => {
     StorageEngine.saveMailConfigs(updated);
   };
 
-  const handleTestEmail = (email: string) => {
-    setTestSentMessage(`Test alert triggered for ${email}!`);
-    setTimeout(() => setTestSentMessage(''), 4000);
+  const handleTestEmail = async (email: string) => {
+    setTestSentMessage(`Sending test alert to ${email} from process.qa@borosil.com...`);
+    try {
+      const res = await fetch('/api/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: email,
+          subject: '✅ Test Alert: Borosil Engineering Audit Notification',
+          customHtml: `
+            <div style="font-family: Arial, sans-serif; padding: 20px; border: 1px solid #cbd5e1; border-radius: 8px; max-width: 600px;">
+              <h2 style="color: #1e1b4b; margin-top: 0;">Borosil Renewables Ltd. • Engineering Audit System</h2>
+              <p>This is a <strong>test email alert</strong> dispatched from <code>Process.qa@borosil.com</code>.</p>
+              <p>Automated plant deviation alerts are configured and active!</p>
+            </div>
+          `,
+        }),
+      });
+      const data = await res.json();
+      if (data.status === 'SUCCESS' || data.status === 'SIMULATED') {
+        setTestSentMessage(`✓ ${data.message}`);
+      } else {
+        setTestSentMessage(`Notice: ${data.message}`);
+      }
+    } catch (err: any) {
+      setTestSentMessage(`Error: ${err.message}`);
+    }
+    setTimeout(() => setTestSentMessage(''), 6000);
   };
 
   return (
