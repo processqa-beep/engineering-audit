@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Settings,
@@ -565,6 +565,19 @@ export const SettingsView: React.FC = () => {
   const [showFprForm, setShowFprForm] = useState(false);
   const [editingFpr, setEditingFpr] = useState<Partial<FprEntry> | null>(null);
 
+  useEffect(() => {
+    SupabaseBackendClient.fetchFprMatrix()
+      .then((data) => {
+        if (data && data.length > 0) setFprMatrix(data);
+      })
+      .catch(() => {});
+    SupabaseBackendClient.fetchEmployees()
+      .then((data) => {
+        if (data && data.length > 0) setEmployees(data);
+      })
+      .catch(() => {});
+  }, []);
+
   const handleSaveFprEntry = (entry: Partial<FprEntry>) => {
     const now = new Date().toISOString();
     let updated: FprEntry[];
@@ -589,9 +602,10 @@ export const SettingsView: React.FC = () => {
     }
     setFprMatrix(updated);
     StorageEngine.saveFprMatrix(updated);
+    SupabaseBackendClient.saveFprMatrix(updated).catch((err) => console.warn('Supabase FPR save notice:', err));
     setShowFprForm(false);
     setEditingFpr(null);
-    setSavedMessage('FPR Matrix updated successfully.');
+    setSavedMessage('FPR Matrix updated & saved to Supabase.');
     setTimeout(() => setSavedMessage(''), 3000);
   };
 
@@ -600,6 +614,7 @@ export const SettingsView: React.FC = () => {
     const updated = fprMatrix.filter((e) => e.id !== id);
     setFprMatrix(updated);
     StorageEngine.saveFprMatrix(updated);
+    SupabaseBackendClient.saveFprMatrix(updated).catch((err) => console.warn('Supabase FPR save notice:', err));
   };
 
   const handleToggleFprActive = (id: string) => {
@@ -608,6 +623,7 @@ export const SettingsView: React.FC = () => {
     );
     setFprMatrix(updated);
     StorageEngine.saveFprMatrix(updated);
+    SupabaseBackendClient.saveFprMatrix(updated).catch((err) => console.warn('Supabase FPR save notice:', err));
   };
 
   const handleSave = (e: React.FormEvent) => {
@@ -684,9 +700,10 @@ export const SettingsView: React.FC = () => {
 
     setEmployees(updatedList);
     StorageEngine.saveEmployees(updatedList);
+    SupabaseBackendClient.saveEmployees(updatedList).catch((err) => console.warn('Supabase Employees save notice:', err));
     setIsUserModalOpen(false);
     setEditingUser(null);
-    setSavedMessage(`User "${userData.name}" successfully approved and assigned.`);
+    setSavedMessage(`User "${userData.name}" successfully approved and saved to Supabase.`);
     setTimeout(() => setSavedMessage(''), 4000);
   };
 

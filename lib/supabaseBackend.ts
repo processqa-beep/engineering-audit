@@ -563,4 +563,30 @@ export class SupabaseBackendClient {
       return { status: 'LOCAL_SAVED', message: 'Saved locally.' };
     }
   }
+
+  // ── FULL SYSTEM SYNC ────────────────────────────────────────────────────────
+  public static async syncAllFromCloud(): Promise<{ success: boolean; message: string }> {
+    if (!this.isConfigured()) return { success: false, message: 'Supabase not configured' };
+    try {
+      const [ck, emp, fpr, aud, act] = await Promise.allSettled([
+        this.fetchCheckpoints(),
+        this.fetchEmployees(),
+        this.fetchFprMatrix(),
+        this.fetchAudits(),
+        this.fetchActions(),
+      ]);
+
+      let msg = 'Synced from Supabase: ';
+      if (ck.status === 'fulfilled') msg += `${ck.value.length} checkpoints, `;
+      if (fpr.status === 'fulfilled') msg += `${fpr.value.length} FPR rules, `;
+      if (emp.status === 'fulfilled') msg += `${emp.value.length} users, `;
+      if (aud.status === 'fulfilled') msg += `${aud.value.length} audits, `;
+      if (act.status === 'fulfilled') msg += `${act.value.length} actions`;
+
+      return { success: true, message: msg };
+    } catch (err: any) {
+      console.warn('[Supabase Global Sync Error]:', err);
+      return { success: false, message: err?.message || 'Sync error' };
+    }
+  }
 }

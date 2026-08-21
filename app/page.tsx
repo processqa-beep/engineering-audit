@@ -14,6 +14,7 @@ import { AuditPointSetupView } from '../components/AuditPointSetupView';
 import { PlantStructurePanel } from '../components/PlantStructurePanel';
 import { LoginPage } from '../components/LoginPage';
 import { StorageEngine } from '../lib/storageEngine';
+import { SupabaseBackendClient } from '../lib/supabaseBackend';
 import { AuthUser } from '../lib/types';
 import {
   LayoutDashboard,
@@ -41,6 +42,13 @@ export default function Home() {
     // Only set currentUser if an explicit login session exists
     setCurrentUser(storedUser || null);
     setAuthInitialized(true);
+
+    // Initial background sync from Supabase so incognito & new devices load full data
+    SupabaseBackendClient.syncAllFromCloud().then(() => {
+      const actions = StorageEngine.getActions();
+      const openCount = actions.filter((a) => a.status === 'Open' || a.status === 'In Progress').length;
+      setOpenActionCount(openCount);
+    }).catch(() => {});
 
     const actions = StorageEngine.getActions();
     const openCount = actions.filter((a) => a.status === 'Open' || a.status === 'In Progress').length;
