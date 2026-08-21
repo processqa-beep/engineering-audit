@@ -9,6 +9,7 @@ export async function POST(req: NextRequest) {
       cc,
       subject,
       header,
+      results,
       actions,
       customHtml,
     } = body;
@@ -26,35 +27,64 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Build email HTML content
+    const emailAttachments: any[] = [];
     let htmlContent = customHtml;
-    if (!htmlContent && header) {
-      const isFail = header.overallStatus === 'FAIL' || (header.ngCount && header.ngCount > 0);
-      const badgeColor = isFail ? '#e11d48' : '#059669';
-      const badgeText = isFail ? 'FAIL / DEVIATIONS OBSERVED' : 'PASS / 100% COMPLIANT';
 
-      const actionRows = (actions || []).map((a: any, idx: number) => `
-        <tr style="border-bottom: 1px solid #e2e8f0; font-size: 13px;">
-          <td style="padding: 10px; font-weight: bold; color: #1e293b;">#${idx + 1}</td>
-          <td style="padding: 10px; color: #0f172a;">
-            <strong>${a.componentName || 'Component'}</strong><br/>
-            <span style="color: #64748b; font-size: 12px;">${a.checkpointText || ''}</span>
-          </td>
-          <td style="padding: 10px; color: #dc2626; font-weight: 600;">
-            ${a.observation || 'Deviation finding'}
-          </td>
-          <td style="padding: 10px; color: #0369a1;">
-            ${a.recommendedAction || 'Recommended corrective action'}
-          </td>
-          <td style="padding: 10px; color: #334155;">
-            <strong>${a.responsiblePerson || 'Assigned Lead'}</strong><br/>
-            <span style="color: #64748b; font-size: 11px;">${a.assignedEmail || ''}</span>
-          </td>
-          <td style="padding: 10px; color: #b45309; font-weight: bold;">
-            ${a.targetDate || 'Within 3 days'}
-          </td>
-        </tr>
-      `).join('');
+    if (!htmlContent && header) {
+      // Find NG results or map actions
+      const ngResults = (results || []).filter((r: any) => r.status === 'NG' || r.status === 'Observation');
+      const itemsToDisplay = (ngResults.length > 0 ? ngResults : (actions || []));
+
+      const deviationRows = itemsToDisplay.map((item: any, idx: number) => {
+        // Find matching action if item is from results
+        const matchingAction = (actions || []).find((a: any) => a.checkpointText === item.checkpointText || a.componentName === item.componentName) || item;
+
+        const sr = idx + 1;
+        const component = item.componentName || matchingAction.componentName || '-';
+        const checkpoint = item.checkpointText || matchingAction.checkpointText || '-';
+        const stdParam = item.standardParameter || '-';
+        const actualVal = item.actualValue || item.observation || '-';
+        const isCritical = item.isCritical || matchingAction.priority === 'Critical';
+        const critText = isCritical ? '<span style="color: #dc2626; font-weight: bold;">Critical</span>' : '<span style="color: #d97706; font-weight: bold;">Medium</span>';
+        const obs = item.observationNotes || item.observation || matchingAction.observation || '-';
+        const impact = item.whatImpactIfThisPartGetsFail || item.impactOfFailure || matchingAction.whatImpactIfThisPartGetsFail || 'Operational wear / equipment stoppage risk';
+
+        let photoHtml = '<span style="color: #94a3b8; font-size: 11px;">No Photo</span>';
+        if (item.photoUrl || matchingAction.photoUrl) {
+          const pUrl = item.photoUrl || matchingAction.photoUrl;
+          if (pUrl.startsWith('data:image')) {
+            const cid = `photo_sr_${sr}`;
+            const parts = pUrl.split(';base64,');
+            const mime = parts[0].split(':')[1] || 'image/jpeg';
+            const buffer = Buffer.from(parts[1], 'base64');
+            emailAttachments.push({
+              filename: `Audit_${header.auditId}_Deviation_Sr${sr}.jpg`,
+              content: buffer,
+              contentType: mime,
+              cid: cid,
+            });
+            photoHtml = `<img src="cid:${cid}" alt="Photo evidence" style="max-width: 140px; max-height: 110px; border-radius: 4px; border: 1px solid #cbd5e1; display: block; margin-top: 4px;" />`;
+          } else if (pUrl.startsWith('http')) {
+            photoHtml = `<a href="${pUrl}" target="_blank"><img src="${pUrl}" alt="Photo evidence" style="max-width: 140px; max-height: 110px; border-radius: 4px; border: 1px solid #cbd5e1; display: block; margin-top: 4px;" /></a>`;
+          }
+        }
+
+        return `
+          <tr style="border-bottom: 1px solid #e2e8f0; font-size: 12px; vertical-align: top;">
+            <td style="padding: 8px 10px; font-weight: bold; text-align: center; border: 1px solid #cbd5e1;">${sr}</td>
+            <td style="padding: 8px 10px; border: 1px solid #cbd5e1; font-weight: 600; color: #0f172a;">${component}</td>
+            <td style="padding: 8px 10px; border: 1px solid #cbd5e1; color: #334155;">${checkpoint}</td>
+            <td style="padding: 8px 10px; border: 1px solid #cbd5e1; color: #475569;">${stdParam}</td>
+            <td style="padding: 8px 10px; border: 1px solid #cbd5e1; color: #dc2626; font-weight: bold;">${actualVal}</td>
+            <td style="padding: 8px 10px; border: 1px solid #cbd5e1; text-align: center;">${critText}</td>
+            <td style="padding: 8px 10px; border: 1px solid #cbd5e1; color: #1e293b;">${obs}</td>
+            <td style="padding: 8px 10px; border: 1px solid #cbd5e1; color: #475569;">${impact}</td>
+            <td style="padding: 8px 10px; border: 1px solid #cbd5e1; text-align: center;">${photoHtml}</td>
+          </tr>
+        `;
+      }).join('');
+
+      const auditDateDisplay = header.date ? new Date(header.date).toString() : new Date().toString();
 
       htmlContent = `
         <!DOCTYPE html>
@@ -62,59 +92,84 @@ export async function POST(req: NextRequest) {
         <head>
           <meta charset="utf-8">
           <style>
-            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f8fafc; margin: 0; padding: 20px; color: #1e293b; }
-            .card { background-color: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; max-width: 750px; margin: 0 auto; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
-            .header { background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%); color: #ffffff; padding: 24px; text-align: left; }
-            .badge { display: inline-block; padding: 6px 14px; border-radius: 20px; color: #ffffff; font-weight: bold; font-size: 12px; background-color: ${badgeColor}; }
-            .meta-grid { display: table; width: 100%; padding: 16px 24px; background-color: #f1f5f9; border-bottom: 1px solid #e2e8f0; font-size: 13px; }
-            .meta-cell { display: table-cell; padding: 4px 12px; }
-            .table-container { padding: 20px 24px; }
-            table { width: 100%; border-collapse: collapse; text-align: left; }
-            th { background-color: #f8fafc; padding: 10px; color: #475569; font-size: 12px; text-transform: uppercase; border-bottom: 2px solid #cbd5e1; }
-            .footer { background-color: #f8fafc; padding: 16px 24px; text-align: center; font-size: 12px; color: #64748b; border-top: 1px solid #e2e8f0; }
+            body { font-family: Calibri, Arial, Helvetica, sans-serif; font-size: 14px; color: #1e293b; line-height: 1.5; background-color: #ffffff; margin: 0; padding: 20px; }
+            .container { max-width: 950px; margin: 0 auto; }
+            .heading { font-size: 15px; font-weight: bold; color: #1e3a8a; border-bottom: 2px solid #2563eb; padding-bottom: 4px; margin-top: 24px; margin-bottom: 12px; }
+            .info-table { width: 100%; max-width: 700px; border-collapse: collapse; margin-bottom: 20px; font-size: 13px; }
+            .info-table td { padding: 6px 12px; border: 1px solid #cbd5e1; }
+            .info-table td.lbl { background-color: #f8fafc; font-weight: bold; color: #334155; width: 180px; }
+            .info-table td.val { color: #0f172a; }
+            .dev-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 10px; margin-bottom: 20px; }
+            .dev-table th { background-color: #1e3a8a; color: #ffffff; padding: 8px 10px; text-align: left; font-weight: bold; border: 1px solid #1e3a8a; font-size: 12px; }
+            .dev-table tr:nth-child(even) { background-color: #f8fafc; }
+            .portal-btn { display: inline-block; background-color: #2563eb; color: #ffffff !important; padding: 10px 20px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 13px; margin: 15px 0; }
           </style>
         </head>
         <body>
-          <div class="card">
-            <div class="header">
-              <p style="margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #a5b4fc;">Borosil Renewables Ltd. • Engineering Audit System</p>
-              <h2 style="margin: 6px 0 12px 0; font-size: 20px;">PLANT AUDIT DEVIATION NOTIFICATION</h2>
-              <span class="badge">${badgeText} • Score: ${header.compliancePercent || 0}%</span>
-            </div>
+          <div class="container">
+            <p style="margin-top: 0;">Dear Team,</p>
+            <p>Please review the following deviations identified during today's Engineering Audit. Kindly take the necessary corrective action and ensure timely closure of the identified points.</p>
 
-            <div class="meta-grid">
-              <div class="meta-cell"><strong>Audit ID:</strong> ${header.auditId}</div>
-              <div class="meta-cell"><strong>Section:</strong> ${header.sectionName || header.sectionId}</div>
-              <div class="meta-cell"><strong>Line:</strong> ${header.lineName || header.lineId}</div>
-              <div class="meta-cell"><strong>Auditor:</strong> ${header.auditorName || 'Mehul Chikhaliya'}</div>
-              <div class="meta-cell"><strong>Date & Time:</strong> ${header.date} ${header.time || ''}</div>
-            </div>
+            <div class="heading">Audit Information</div>
+            <table class="info-table">
+              <tr>
+                <td class="lbl">Audit Date</td>
+                <td class="val">${auditDateDisplay}</td>
+              </tr>
+              <tr>
+                <td class="lbl">Auditor</td>
+                <td class="val">${header.auditorName || 'Mehul Chikhaliya'}</td>
+              </tr>
+              <tr>
+                <td class="lbl">Section</td>
+                <td class="val">${header.sectionName || header.sectionId}</td>
+              </tr>
+              <tr>
+                <td class="lbl">Sub Section</td>
+                <td class="val">${header.subSectionName || header.subSectionId || '-'}</td>
+              </tr>
+              <tr>
+                <td class="lbl">Line / Machine</td>
+                <td class="val">${header.lineName || header.lineId}${header.equipmentName ? ` – ${header.equipmentName}` : ''}</td>
+              </tr>
+            </table>
 
-            <div class="table-container">
-              <h3 style="margin-top: 0; font-size: 15px; color: #0f172a;">Assigned Corrective Action Points (${(actions || []).length}):</h3>
-              ${(actions && actions.length > 0) ? `
-                <table>
-                  <thead>
-                    <tr>
-                      <th>#</th>
-                      <th>Equipment / Checkpoint</th>
-                      <th>Observation Finding</th>
-                      <th>Recommended Action</th>
-                      <th>Assigned To</th>
-                      <th>Target Date</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    ${actionRows}
-                  </tbody>
-                </table>
-              ` : `<p style="color: #059669; font-weight: bold;">✓ All checkpoints verified OK. No corrective actions required.</p>`}
-            </div>
+            <div class="heading">Engineering Audit Deviation Summary</div>
+            <table class="dev-table">
+              <thead>
+                <tr>
+                  <th style="width: 30px; text-align: center;">Sr.</th>
+                  <th>Component</th>
+                  <th>Checkpoint</th>
+                  <th>Standard Parameter</th>
+                  <th>Actual Value</th>
+                  <th style="text-align: center;">Criticality</th>
+                  <th>Observation</th>
+                  <th>Potential Impact</th>
+                  <th style="text-align: center;">Photo / Evidence</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${deviationRows}
+              </tbody>
+            </table>
 
-            <div class="footer">
-              This is an automated notification dispatched from the <strong>Borosil Engineering Audit Portal</strong>.<br/>
-              Sender: <code>${user}</code> • For queries, contact Process QA Department.
-            </div>
+            <p style="margin: 20px 0;">
+              <a href="https://engineering-audit.vercel.app/?tab=actions" class="portal-btn" style="color: #ffffff !important;">
+                View & Update Actions in Portal →
+              </a>
+            </p>
+
+            <p style="color: #334155; font-size: 13px;">
+              Kindly review the above engineering observations and ensure that the necessary corrective actions are completed within the specified timeline.
+              <br/><br/>
+              Please update the corrective action and closure status in the BRL Engineering Audit System after completion.
+            </p>
+
+            <p style="margin-top: 25px; color: #1e293b; font-size: 13px;">
+              Regards,<br/>
+              <strong>Process QA</strong>
+            </p>
           </div>
         </body>
         </html>
@@ -125,35 +180,26 @@ export async function POST(req: NextRequest) {
     const transporter = nodemailer.createTransport({
       host,
       port,
-      secure: port === 465, // true for 465, false for 587
+      secure: port === 465,
       auth: pass ? {
         user,
         pass,
       } : undefined,
       tls: {
-        rejectUnauthorized: false, // Prevents corporate SSL interception errors
+        rejectUnauthorized: false,
       },
     });
 
     const mailOptions: any = {
       from: fromAddress,
       to: Array.isArray(to) ? to.join(', ') : to,
-      subject: subject || `[Audit Alert] ${header?.sectionName || 'Plant'} - ${header?.auditId || 'Deviation Notice'}`,
+      subject: subject || `[Audit Alert] ${header?.sectionName || 'Plant'} - ${header?.lineName || ''} Deviation Notice`,
       html: htmlContent,
+      attachments: emailAttachments,
     };
 
     if (cc) {
       mailOptions.cc = Array.isArray(cc) ? cc.join(', ') : cc;
-    }
-
-    // Send email
-    if (!pass) {
-      console.log('[SMTP Notice]: No SMTP_PASSWORD provided in environment. Simulating dispatch for:', mailOptions.to);
-      return NextResponse.json({
-        status: 'SIMULATED',
-        message: `Email prepared for ${mailOptions.to}. Configure SMTP_PASSWORD in .env.local to enable live delivery from ${user}.`,
-        details: { to: mailOptions.to, cc: mailOptions.cc, subject: mailOptions.subject },
-      });
     }
 
     const info = await transporter.sendMail(mailOptions);

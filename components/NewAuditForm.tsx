@@ -667,6 +667,7 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
               to: toList,
               cc: ccList,
               header,
+              results,
               actions,
             }),
           }).catch((mailErr) => console.warn('[Background email dispatch notice]:', mailErr));
