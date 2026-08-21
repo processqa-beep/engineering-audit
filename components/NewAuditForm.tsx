@@ -392,7 +392,7 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
       const img = new Image();
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        const MAX_DIM = 500;
+        const MAX_DIM = 600;
         let width = img.width;
         let height = img.height;
 
@@ -408,8 +408,13 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         if (ctx) {
+          // Enable smooth scaling
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = 'medium';
           ctx.drawImage(img, 0, 0, width, height);
-          const compressedBase64 = canvas.toDataURL('image/jpeg', 0.55);
+
+          // Highly efficient compression (~25 KB - 40 KB)
+          const compressedBase64 = canvas.toDataURL('image/jpeg', 0.45);
           setCheckpointStates((prev) => {
             const updated = [...prev];
             updated[index] = { ...updated[index], photoUrl: compressedBase64 };
