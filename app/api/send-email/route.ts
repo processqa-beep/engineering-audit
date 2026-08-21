@@ -13,11 +13,11 @@ export async function POST(req: NextRequest) {
       customHtml,
     } = body;
 
-    const host = process.env.SMTP_HOST || 'smtp.office365.com';
+    const host = process.env.SMTP_HOST || 'smtp.gmail.com';
     const port = Number(process.env.SMTP_PORT || 587);
     const user = process.env.SMTP_USER || 'process.qa@borosil.com';
-    const pass = process.env.SMTP_PASSWORD || '';
-    const fromAddress = process.env.SMTP_FROM || `Borosil Process QA <${user}>`;
+    const pass = process.env.SMTP_PASSWORD || 'mkse ghmg fuua uncx';
+    const fromAddress = process.env.SMTP_FROM || `Process QA <${user}>`;
 
     if (!to && !cc) {
       return NextResponse.json(
