@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ShieldCheck,
   AlertCircle,
@@ -18,6 +18,7 @@ import {
   PlusCircle,
 } from 'lucide-react';
 import { StorageEngine } from '../lib/storageEngine';
+import { SupabaseBackendClient } from '../lib/supabaseBackend';
 import { AuthUser, Employee } from '../lib/types';
 
 interface LoginPageProps {
@@ -56,6 +57,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [successMessage, setSuccessMessage] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
+
+  useEffect(() => {
+    SupabaseBackendClient.fetchEmployees().catch(() => {});
+  }, []);
 
   // ── 1. SIGN IN SUBMISSION ──────────────────────────────────────────────────
   const handleLoginSubmit = (e: React.FormEvent) => {
@@ -198,22 +203,76 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
 
     setLoading(true);
 
-    setTimeout(() => {
-      const res = StorageEngine.requestAccess(regName, cleanEmail, finalDept, regPassword);
+    (async () => {
+      try {
+        // Sync latest employees first
+        await SupabaseBackendClient.fetchEmployees().catch(() => {});
+        const res = StorageEngine.requestAccess(regName, cleanEmail, finalDept, regPassword);
 
-      setLoading(false);
-      if (res.success) {
-        setSuccessMessage(
-          '✅ Access Request Submitted! Your profile has been sent to the System Administrator. Once the Admin reviews and assigns your role in the portal, you will be able to sign in.'
-        );
-        // Switch back to login mode with blank password
-        setLoginEmail(cleanEmail);
-        setLoginPassword('');
-        setActiveMode('LOGIN');
-      } else {
-        setErrorMessage(res.message);
+        if (res.success) {
+          // Push updated pending user to Supabase
+          const all = StorageEngine.getEmployees();
+          await SupabaseBackendClient.saveEmployees(all).catch((err) => console.warn('Supabase save error:', err));
+
+          // Dispatch Admin Notification Email to Mehul Chikhaliya & Process QA
+          fetch('/api/send-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              to: ['mehul.chikhaliya@borosil.com', 'process.qa@borosil.com'],
+              subject: `[Access Request] New User Registration – ${regName} (${finalDept})`,
+              customHtml: `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                  <style>
+                    body { font-family: Calibri, Arial, sans-serif; font-size: 14px; color: #1e293b; line-height: 1.5; padding: 20px; }
+                    .card { background-color: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 20px; max-width: 600px; }
+                    .btn { display: inline-block; background-color: #4f46e5; color: #ffffff !important; padding: 10px 22px; text-decoration: none; border-radius: 6px; font-weight: bold; margin-top: 15px; }
+                  </style>
+                </head>
+                <body>
+                  <div class="card">
+                    <h3 style="margin-top: 0; color: #1e1b4b;">New Portal Access Request</h3>
+                    <p>Dear Admin,</p>
+                    <p>A new employee has registered on the <strong>Borosil Plant Engineering Audit Portal</strong> and is awaiting your role approval:</p>
+                    <ul>
+                      <li><strong>Name:</strong> ${regName}</li>
+                      <li><strong>Email:</strong> ${cleanEmail}</li>
+                      <li><strong>Department:</strong> ${finalDept}</li>
+                      <li><strong>Requested Date:</strong> ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</li>
+                    </ul>
+                    <p>Please log in to the portal to review and assign their system role (Auditor, Engineering, QA, Viewer, or Admin):</p>
+                    <p>
+                      <a href="https://brl-engineering-audit.vercel.app/?tab=settings" class="btn" style="color: #ffffff !important;">
+                        Review & Assign Role in Settings →
+                      </a>
+                    </p>
+                    <p style="color: #64748b; font-size: 12px; margin-top: 25px;">
+                      Borosil Renewables Ltd. • Engineering Audit System
+                    </p>
+                  </div>
+                </body>
+                </html>
+              `,
+            }),
+          }).catch((err) => console.warn('Admin email notice error:', err));
+
+          setSuccessMessage(
+            '✅ Access Request Submitted! Your profile has been sent to the System Administrator (Mehul Chikhaliya). Once the Admin reviews and assigns your role in the portal, you will be able to sign in.'
+          );
+          setLoginEmail(cleanEmail);
+          setLoginPassword('');
+          setActiveMode('LOGIN');
+        } else {
+          setErrorMessage(res.message);
+        }
+      } catch (err: any) {
+        setErrorMessage(err.message || 'An error occurred submitting access request.');
+      } finally {
+        setLoading(false);
       }
-    }, 500);
+    })();
   };
 
   return (

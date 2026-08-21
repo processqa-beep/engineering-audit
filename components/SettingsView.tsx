@@ -708,6 +708,53 @@ export const SettingsView: React.FC = () => {
     setEmployees(updatedList);
     StorageEngine.saveEmployees(updatedList);
     SupabaseBackendClient.saveEmployees(updatedList).catch((err) => console.warn('Supabase Employees save notice:', err));
+
+    // If this was approving a user, send welcome / approval email
+    if (userData.email) {
+      fetch('/api/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: userData.email,
+          cc: 'mehul.chikhaliya@borosil.com',
+          subject: `[Approved] Borosil Engineering Audit Portal Access Granted`,
+          customHtml: `
+            <!DOCTYPE html>
+            <html>
+            <head>
+              <style>
+                body { font-family: Calibri, Arial, sans-serif; font-size: 14px; color: #1e293b; line-height: 1.5; padding: 20px; }
+                .card { background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 20px; max-width: 600px; }
+                .btn { display: inline-block; background-color: #059669; color: #ffffff !important; padding: 10px 22px; text-decoration: none; border-radius: 6px; font-weight: bold; margin-top: 15px; }
+              </style>
+            </head>
+            <body>
+              <div class="card">
+                <h3 style="margin-top: 0; color: #065f46;">Access Request Approved ✓</h3>
+                <p>Dear ${userData.name || 'Team Member'},</p>
+                <p>Your access request for the <strong>Borosil Plant Engineering Audit Portal</strong> has been approved by the Administrator.</p>
+                <ul>
+                  <li><strong>Assigned Role:</strong> ${userData.role || 'Auditor'}</li>
+                  <li><strong>Department:</strong> ${userData.department || 'Process QA'}</li>
+                  <li><strong>Login Email:</strong> ${userData.email}</li>
+                </ul>
+                <p>You can now sign in with your password to start using the portal:</p>
+                <p>
+                  <a href="https://brl-engineering-audit.vercel.app/" class="btn" style="color: #ffffff !important;">
+                    Sign In to Engineering Audit Portal →
+                  </a>
+                </p>
+                <p style="color: #64748b; font-size: 12px; margin-top: 25px;">
+                  Borosil Renewables Ltd. • Engineering Audit System
+                </p>
+              </div>
+            </body>
+            </html>
+          `,
+        }),
+      }).catch((err) => console.warn('Welcome email error:', err));
+    }
+
     setIsUserModalOpen(false);
     setEditingUser(null);
     setSavedMessage(`User "${userData.name}" successfully approved and saved to Supabase.`);
@@ -719,6 +766,7 @@ export const SettingsView: React.FC = () => {
     StorageEngine.rejectUser(emp.id);
     const updated = employees.map((e) => (e.id === emp.id ? { ...e, status: 'Rejected' as any } : e));
     setEmployees(updated);
+    SupabaseBackendClient.saveEmployees(updated).catch((err) => console.warn('Supabase reject save error:', err));
     setSavedMessage(`Access request for "${emp.name}" rejected.`);
     setTimeout(() => setSavedMessage(''), 4000);
   };
