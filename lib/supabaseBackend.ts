@@ -15,8 +15,8 @@ import { StorageEngine } from './storageEngine';
 
 export class SupabaseBackendClient {
   public static isConfigured(): boolean {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://nywznyvvqhiiktvoskkv.supabase.co';
+    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'sb_publishable_wEYpcobIlO1eWIjA7cRdFQ_SkMrwmpZ';
     return Boolean(url && key && url.includes('supabase.co'));
   }
 
