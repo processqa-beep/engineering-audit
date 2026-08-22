@@ -109,6 +109,7 @@ export default function Home() {
           {activeTab === 'new-audit' && (
             <NewAuditForm
               initialDraft={activeDraft}
+              currentUser={currentUser}
               onNavigate={setActiveTab}
               onSuccess={(auditId) => {
                 setActiveDraft(null);

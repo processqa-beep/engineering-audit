@@ -187,6 +187,37 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
     StorageEngine.updateActionDetailed(editingAction.actionId, updates);
     setActions(StorageEngine.getActions());
 
+    // If status is Closed, send Action Closure Notification email
+    if (newStatus === 'Closed') {
+      const closedActionItem: ActionItem = {
+        ...editingAction,
+        ...updates,
+      };
+
+      const toList = Array.from(
+        new Set([editingAction.assignedEmail, 'mehul.chikhaliya@borosil.com'].filter(Boolean))
+      );
+      const ccList = Array.from(
+        new Set(
+          [editingAction.ccEmail, 'process.qa@borosil.com']
+            .filter(Boolean)
+            .flatMap((c) => (c || '').split(',').map((x) => x.trim()).filter(Boolean))
+        )
+      );
+
+      fetch('/api/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: toList,
+          cc: ccList,
+          type: 'ACTION_CLOSURE',
+          actionClosure: closedActionItem,
+          subject: `[ACTION CLOSED] ${editingAction.componentName} – ${editingAction.lineName || editingAction.sectionName} (Audit ${editingAction.auditId})`,
+        }),
+      }).catch((mailErr) => console.warn('[Closure email dispatch notice]:', mailErr));
+    }
+
     try {
       await SupabaseBackendClient.updateActionDetailed(editingAction.actionId, updates);
     } catch (err) {

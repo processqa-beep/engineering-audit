@@ -12,6 +12,8 @@ export async function POST(req: NextRequest) {
       results,
       actions,
       customHtml,
+      type,
+      actionClosure,
     } = body;
 
     const host = process.env.SMTP_HOST || 'smtp.gmail.com';
@@ -30,7 +32,180 @@ export async function POST(req: NextRequest) {
     const emailAttachments: any[] = [];
     let htmlContent = customHtml;
 
-    if (!htmlContent && header) {
+    if (!htmlContent && type === 'ACTION_CLOSURE' && actionClosure) {
+      const act = actionClosure;
+      let findingPhotoHtml = '<span style="color: #94a3b8; font-size: 11px;">No photo attached</span>';
+      let afterPhotoHtml = '<span style="color: #94a3b8; font-size: 11px;">No photo attached</span>';
+
+      if (act.photoUrl) {
+        if (act.photoUrl.startsWith('data:image')) {
+          const cid = `finding_photo_${Date.now()}`;
+          const parts = act.photoUrl.split(';base64,');
+          const mime = parts[0].split(':')[1] || 'image/jpeg';
+          const buffer = Buffer.from(parts[1], 'base64');
+          emailAttachments.push({
+            filename: `Finding_${act.actionId}.jpg`,
+            content: buffer,
+            contentType: mime,
+            cid,
+          });
+          findingPhotoHtml = `<a href="cid:${cid}" target="_blank"><img src="cid:${cid}" style="max-width: 140px; max-height: 110px; border-radius: 6px; border: 1px solid #cbd5e1; display: block; margin: 0 auto;" /></a>`;
+        } else if (act.photoUrl.startsWith('http')) {
+          findingPhotoHtml = `<a href="${act.photoUrl}" target="_blank"><img src="${act.photoUrl}" style="max-width: 140px; max-height: 110px; border-radius: 6px; border: 1px solid #cbd5e1; display: block; margin: 0 auto;" /></a>`;
+        }
+      }
+
+      if (act.closurePhotoUrl) {
+        if (act.closurePhotoUrl.startsWith('data:image')) {
+          const cid = `after_photo_${Date.now()}`;
+          const parts = act.closurePhotoUrl.split(';base64,');
+          const mime = parts[0].split(':')[1] || 'image/jpeg';
+          const buffer = Buffer.from(parts[1], 'base64');
+          emailAttachments.push({
+            filename: `Closure_${act.actionId}.jpg`,
+            content: buffer,
+            contentType: mime,
+            cid,
+          });
+          afterPhotoHtml = `<a href="cid:${cid}" target="_blank"><img src="cid:${cid}" style="max-width: 140px; max-height: 110px; border-radius: 6px; border: 2px solid #10b981; display: block; margin: 0 auto;" /></a>`;
+        } else if (act.closurePhotoUrl.startsWith('http')) {
+          afterPhotoHtml = `<a href="${act.closurePhotoUrl}" target="_blank"><img src="${act.closurePhotoUrl}" style="max-width: 140px; max-height: 110px; border-radius: 6px; border: 2px solid #10b981; display: block; margin: 0 auto;" /></a>`;
+        }
+      }
+
+      const closedDt = act.closedDate || new Date().toISOString().substring(0, 10);
+      const lineEquip = `${act.lineName || act.lineId || 'Line'}${act.equipmentName ? ` – ${act.equipmentName}` : ''}`;
+
+      htmlContent = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <style>
+            body { font-family: Calibri, Arial, Helvetica, sans-serif; font-size: 14px; color: #1e293b; line-height: 1.5; background-color: #ffffff; margin: 0; padding: 20px; }
+            .container { max-width: 880px; margin: 0 auto; }
+            .badge-closed { display: inline-block; background-color: #10b981; color: #ffffff; padding: 5px 14px; border-radius: 6px; font-weight: bold; font-size: 13px; }
+            .card { background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px 20px; margin: 16px 0; }
+            .capa-card { background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 18px 22px; margin: 16px 0; }
+            .info-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+            .info-table td { padding: 6px 6px; }
+            .info-lbl { color: #64748b; font-weight: bold; width: 22%; }
+            .info-val { color: #0f172a; width: 28%; font-weight: 600; }
+            .capa-lbl { color: #166534; font-weight: bold; width: 25%; }
+            .capa-val { color: #0f172a; width: 75%; }
+            .heading { font-size: 15px; font-weight: bold; color: #0f172a; margin: 0 0 10px 0; }
+            .portal-btn { display: inline-block; background-color: #0284c7; color: #ffffff !important; padding: 12px 28px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 14px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div style="margin-bottom: 12px;">
+              <span class="badge-closed">✓ AUDIT DEVIATION RESOLVED &amp; CLOSED</span>
+              <span style="font-size: 13px; color: #64748b; font-weight: bold; margin-left: 12px;">Action ID: ${act.actionId}</span>
+            </div>
+
+            <p style="margin-top: 10px;">Dear Team,</p>
+            <p>Please note that the following deviation identified during the Engineering Audit has been <strong>successfully resolved and closed</strong> by the responsible department.</p>
+
+            <!-- Deviation Overview -->
+            <div class="card">
+              <div class="heading" style="color: #1e40af;">Audit &amp; Checkpoint Information</div>
+              <table class="info-table">
+                <tr>
+                  <td class="info-lbl">Audit ID</td>
+                  <td class="info-val">${act.auditId}</td>
+                  <td class="info-lbl">Section</td>
+                  <td class="info-val">${act.sectionName || act.sectionId}</td>
+                </tr>
+                <tr>
+                  <td class="info-lbl">Line / Equipment</td>
+                  <td class="info-val">${lineEquip}</td>
+                  <td class="info-lbl">Component</td>
+                  <td class="info-val">${act.componentName}</td>
+                </tr>
+                <tr>
+                  <td class="info-lbl">Checkpoint</td>
+                  <td class="info-val" colspan="3">${act.checkpointText}</td>
+                </tr>
+                <tr>
+                  <td class="info-lbl">Original Observation</td>
+                  <td class="info-val" colspan="3" style="color: #dc2626;">${act.observation}</td>
+                </tr>
+              </table>
+            </div>
+
+            <!-- CAPA & Closure Resolution Details -->
+            <div class="capa-card">
+              <div class="heading" style="color: #15803d;">Resolution &amp; CAPA Summary</div>
+              <table class="info-table">
+                <tr>
+                  <td class="capa-lbl">Closed By:</td>
+                  <td class="capa-val"><strong>${act.closedBy || act.responsiblePerson}</strong> (${act.responsibleDepartment || 'Department Lead'})</td>
+                </tr>
+                <tr>
+                  <td class="capa-lbl">Closure Date:</td>
+                  <td class="capa-val"><strong>${closedDt}</strong></td>
+                </tr>
+                <tr>
+                  <td class="capa-lbl">Target Closure Date (TCD):</td>
+                  <td class="capa-val">${act.targetClosureDate || act.targetDate || '-'}</td>
+                </tr>
+                <tr>
+                  <td class="capa-lbl">Root Cause Analysis (RCA):</td>
+                  <td class="capa-val">${act.rootCause || '-'}</td>
+                </tr>
+                <tr>
+                  <td class="capa-lbl">Corrective Action Taken:</td>
+                  <td class="capa-val">${act.correctiveAction || act.recommendedAction || '-'}</td>
+                </tr>
+                <tr>
+                  <td class="capa-lbl">Preventive Action (CAPA):</td>
+                  <td class="capa-val">${act.preventiveAction || '-'}</td>
+                </tr>
+                <tr>
+                  <td class="capa-lbl">Maintenance Remarks / SAP Order:</td>
+                  <td class="capa-val">${act.closureRemark || '-'}</td>
+                </tr>
+              </table>
+            </div>
+
+            <!-- Evidence Comparison -->
+            <div style="margin: 20px 0;">
+              <table style="width: 100%; border-collapse: collapse; text-align: center;">
+                <tr>
+                  <th style="width: 50%; padding: 8px; font-size: 13px; color: #dc2626; background-color: #fef2f2; border: 1px solid #fecaca;">
+                    🔴 Finding (Before Photo)
+                  </th>
+                  <th style="width: 50%; padding: 8px; font-size: 13px; color: #16a34a; background-color: #f0fdf4; border: 1px solid #bbf7d0;">
+                    🟢 Resolved (After Evidence Photo)
+                  </th>
+                </tr>
+                <tr>
+                  <td style="padding: 12px; border: 1px solid #e2e8f0; vertical-align: middle;">
+                    ${findingPhotoHtml}
+                  </td>
+                  <td style="padding: 12px; border: 1px solid #e2e8f0; vertical-align: middle;">
+                    ${afterPhotoHtml}
+                  </td>
+                </tr>
+              </table>
+            </div>
+
+            <div style="text-align: center; margin: 30px 0;">
+              <a href="https://brl-engineering-audit.vercel.app/?tab=actions" class="portal-btn" style="color: #ffffff !important;">
+                Open Action Tracker in Portal →
+              </a>
+            </div>
+
+            <p style="margin-top: 25px; color: #1e293b; font-size: 13px;">
+              Regards,<br/>
+              <strong>Process QA</strong>
+            </p>
+          </div>
+        </body>
+        </html>
+      `;
+    } else if (!htmlContent && header) {
       // Find NG results or map actions
       const ngResults = (results || []).filter((r: any) => r.status === 'NG' || r.status === 'Observation');
       const itemsToDisplay = (ngResults.length > 0 ? ngResults : (actions || []));

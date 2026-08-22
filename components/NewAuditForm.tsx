@@ -42,6 +42,7 @@ import {
   ActionItem,
   StatusType,
   OverallStatusType,
+  AuthUser,
 } from '../lib/types';
 
 interface NewAuditFormProps {
@@ -49,6 +50,7 @@ interface NewAuditFormProps {
   onCancel: () => void;
   onNavigate?: (tab: string) => void;
   initialDraft?: any;
+  currentUser?: AuthUser | null;
 }
 
 interface CheckpointState {
@@ -69,7 +71,7 @@ interface ComponentGroup {
   items: { state: CheckpointState; originalIndex: number }[];
 }
 
-export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel, onNavigate, initialDraft }) => {
+export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel, onNavigate, initialDraft, currentUser }) => {
   const [sections, setSections] = useState<Section[]>(() => StorageEngine.getSections());
   const [allSubSections, setAllSubSections] = useState<SubSection[]>(() => StorageEngine.getSubSections());
   const [allLines, setAllLines] = useState<Line[]>(() => StorageEngine.getLines());
@@ -118,7 +120,15 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
   const [auditTime, setAuditTime] = useState<string>(
     initialDraft?.header?.time || new Date().toTimeString().substring(0, 5)
   );
-  const [auditorName, setAuditorName] = useState<string>(initialDraft?.header?.auditorName || '');
+  const [auditorName, setAuditorName] = useState<string>(
+    initialDraft?.header?.auditorName || currentUser?.name || 'Mehul Chikhaliya'
+  );
+
+  useEffect(() => {
+    if (currentUser?.name && !initialDraft?.header?.auditorName) {
+      setAuditorName(currentUser.name);
+    }
+  }, [currentUser, initialDraft]);
 
   const [checkpointStates, setCheckpointStates] = useState<CheckpointState[]>([]);
   const [submitting, setSubmitting] = useState<boolean>(false);
@@ -813,21 +823,17 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 text-xs">
-              {/* 1. Auditor Name */}
+              {/* 1. Auditor Name (Auto-filled from Logged In User) */}
               <div>
                 <label className="text-slate-700 font-bold block mb-1">
-                  Auditor Name <span className="text-rose-500">*</span>
+                  Auditor Name
                 </label>
-                <div className="relative">
-                  <User className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                  <input
-                    type="text"
-                    placeholder="Auditor Name..."
-                    value={auditorName}
-                    onChange={(e) => setAuditorName(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 text-slate-900 rounded-xl pl-9 pr-3 py-2 font-bold focus:border-indigo-500 focus:bg-white focus:outline-none transition shadow-xs"
-                    required
-                  />
+                <div className="flex items-center space-x-2 bg-indigo-50/70 border border-indigo-200 text-slate-900 rounded-xl px-3 py-2 font-bold shadow-xs">
+                  <User className="w-4 h-4 text-indigo-600 shrink-0" />
+                  <span className="truncate">{auditorName || currentUser?.name || 'Auditor'}</span>
+                  <span className="text-[10px] text-indigo-600 font-black ml-auto shrink-0 bg-white px-2 py-0.5 rounded-md border border-indigo-100 shadow-xs">
+                    ✓ Logged In
+                  </span>
                 </div>
               </div>
 
