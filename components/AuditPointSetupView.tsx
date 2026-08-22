@@ -24,6 +24,7 @@ import {
   Layers,
   Sparkles,
   Send,
+  Image as ImageIcon,
 } from 'lucide-react';
 
 import { StorageEngine } from '../lib/storageEngine';
@@ -241,6 +242,81 @@ function ManualAddModal({
               </select>
             </div>
 
+            {/* Component Reference SOP / Standard Photo */}
+            <div className="sm:col-span-2 space-y-1.5 pt-2 border-t border-slate-100">
+              <label className="font-bold text-slate-700 block text-xs">Component Reference / Standard Photo (SOP)</label>
+              <div className="flex items-center space-x-3">
+                {form.componentReferencePhotoUrl ? (
+                  <div className="relative group">
+                    <img
+                      src={form.componentReferencePhotoUrl}
+                      alt="Reference"
+                      className="w-16 h-16 object-cover rounded-xl border border-slate-300 shadow-xs"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => set('componentReferencePhotoUrl', '')}
+                      className="absolute -top-1.5 -right-1.5 bg-rose-600 text-white rounded-full p-0.5 shadow hover:bg-rose-700 transition"
+                      title="Remove photo"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="w-16 h-16 rounded-xl border border-dashed border-slate-300 flex items-center justify-center text-slate-400 bg-slate-50">
+                    <ImageIcon className="w-6 h-6" />
+                  </div>
+                )}
+
+                <div className="flex-1">
+                  <label className="cursor-pointer inline-flex items-center space-x-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-3 py-1.5 rounded-xl text-xs font-bold transition">
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>{form.componentReferencePhotoUrl ? 'Change Reference Photo' : 'Upload Reference Photo'}</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const reader = new FileReader();
+                        reader.onload = (evt) => {
+                          const rawDataUrl = evt.target?.result as string;
+                          if (!rawDataUrl) return;
+                          const img = new Image();
+                          img.onload = () => {
+                            const canvas = document.createElement('canvas');
+                            const MAX_DIM = 600;
+                            let w = img.width;
+                            let h = img.height;
+                            if (w > h && w > MAX_DIM) {
+                              h = Math.round((h * MAX_DIM) / w);
+                              w = MAX_DIM;
+                            } else if (h > MAX_DIM) {
+                              w = Math.round((w * MAX_DIM) / h);
+                              h = MAX_DIM;
+                            }
+                            canvas.width = w;
+                            canvas.height = h;
+                            const ctx = canvas.getContext('2d');
+                            if (ctx) {
+                              ctx.imageSmoothingEnabled = true;
+                              ctx.drawImage(img, 0, 0, w, h);
+                              const compressed = canvas.toDataURL('image/jpeg', 0.5);
+                              set('componentReferencePhotoUrl', compressed);
+                            }
+                          };
+                          img.src = rawDataUrl;
+                        };
+                        reader.readAsDataURL(file);
+                      }}
+                    />
+                  </label>
+                  <p className="text-[10px] text-slate-400 mt-1">Upload reference condition / standard photo for this component (compressed to &lt;50 KB).</p>
+                </div>
+              </div>
+            </div>
+
             {/* Active */}
             <div className="sm:col-span-2 flex items-center space-x-3">
               <label className="font-bold text-slate-700 text-xs">Active (include in future audits)</label>
@@ -441,9 +517,11 @@ function ImportPreviewModal({
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// MAIN VIEW
-// ──────────────────────────────────────────────────────────────────────────────
-export const AuditPointSetupView: React.FC = () => {
+interface AuditPointSetupViewProps {
+  isAdmin?: boolean;
+}
+
+export const AuditPointSetupView: React.FC<AuditPointSetupViewProps> = ({ isAdmin = false }) => {
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>(StorageEngine.getCheckpoints());
   const [sections]    = useState(StorageEngine.getSections());
   const [subSections] = useState(StorageEngine.getSubSections());

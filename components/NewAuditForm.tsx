@@ -1139,18 +1139,33 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
                                     placeholder="Remark..."
                                     value={state.observationNotes}
                                     onChange={(e) => handleRemarksChange(originalIndex, e.target.value)}
-                                    className="flex-1 min-w-0 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-[10px] text-slate-900 font-semibold focus:bg-white focus:border-indigo-500 focus:outline-none transition"
+                                    className="flex-1 min-w-0 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-[10px] text-slate-900 font-semibold focus:bg-white focus:border-indigo-500 focus:outline-none transition"
                                   />
 
+                                  {/* Camera Button */}
                                   <label
-                                    className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-indigo-600 border border-slate-200 cursor-pointer transition shrink-0"
-                                    title="Capture / Upload Photo"
+                                    className="p-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 cursor-pointer transition shrink-0"
+                                    title="Take Photo (Camera)"
                                   >
                                     <Camera className="w-3.5 h-3.5" />
                                     <input
                                       type="file"
                                       accept="image/*"
                                       capture="environment"
+                                      onChange={(e) => handlePhotoUpload(originalIndex, e)}
+                                      className="hidden"
+                                    />
+                                  </label>
+
+                                  {/* Gallery / File Picker Button */}
+                                  <label
+                                    className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-indigo-600 border border-slate-200 cursor-pointer transition shrink-0"
+                                    title="Choose from Gallery / Files"
+                                  >
+                                    <ImageIcon className="w-3.5 h-3.5" />
+                                    <input
+                                      type="file"
+                                      accept="image/*"
                                       onChange={(e) => handlePhotoUpload(originalIndex, e)}
                                       className="hidden"
                                     />
@@ -1165,7 +1180,7 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
                                       onClick={() => setActivePhotoUrl(state.photoUrl)}
                                       className="w-8 h-8 object-cover rounded-lg border border-slate-300 cursor-pointer shadow-xs hover:scale-105 transition"
                                     />
-                                    <span className="text-[9px] text-indigo-600 font-bold">📎</span>
+                                    <span className="text-[9px] text-indigo-600 font-bold">📎 Photo Attached</span>
                                   </div>
                                 )}
                               </td>

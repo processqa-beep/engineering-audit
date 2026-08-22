@@ -60,7 +60,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
   const [isMounted, setIsMounted] = useState<boolean>(false);
 
   // Dynamic Dashboard Filters
-  const [timeHorizon, setTimeHorizon] = useState<'ALL' | 'TODAY' | '7DAYS' | '30DAYS' | 'THIS_MONTH'>('ALL');
+  const [timeHorizon, setTimeHorizon] = useState<'ALL' | 'TODAY' | '7DAYS' | '30DAYS' | 'THIS_MONTH' | 'CUSTOM'>('ALL');
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
   const [selectedSection, setSelectedSection] = useState<string>('ALL');
   const [selectedLine, setSelectedLine] = useState<string>('ALL');
   const [selectedAuditor, setSelectedAuditor] = useState<string>('ALL');
@@ -121,7 +123,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
     const thisMonthStr = todayStr.substring(0, 7);
 
     return audits.filter((a) => {
-      // Time Horizon
+      // Date Range Filters
+      if (startDate && a.date < startDate) return false;
+      if (endDate && a.date > endDate) return false;
+
+      // Time Horizon Presets
       if (timeHorizon === 'TODAY' && a.date !== todayStr) return false;
       if (timeHorizon === '7DAYS' && a.date < d7) return false;
       if (timeHorizon === '30DAYS' && a.date < d30) return false;
@@ -156,7 +162,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
 
       return true;
     });
-  }, [audits, timeHorizon, selectedSection, selectedLine, selectedAuditor, selectedStatus, searchQuery]);
+  }, [audits, timeHorizon, startDate, endDate, selectedSection, selectedLine, selectedAuditor, selectedStatus, searchQuery]);
 
   // Filtered Results & Actions
   const filteredAuditIds = useMemo(() => new Set(filteredAudits.map((a) => a.auditId)), [filteredAudits]);
@@ -377,9 +383,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
               </div>
               <span>PLANT ENGINEERING EXECUTIVE DASHBOARD</span>
             </h2>
-            <p className="text-xs text-slate-500 mt-1 font-semibold">
-              Live plant compliance metrics, line deviation analysis, auditor activity tracking, and equipment failure hotspots.
-            </p>
           </div>
 
           {/* Quick Actions */}
@@ -394,32 +397,79 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
           </div>
         </div>
 
-        {/* Time Horizon Pills */}
-        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100">
-          <span className="text-xs font-extrabold text-slate-500 flex items-center space-x-1 mr-1">
-            <Calendar className="w-3.5 h-3.5 text-slate-400" />
-            <span>Time Horizon:</span>
-          </span>
+        {/* Time Horizon & Start/End Date Range */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-100">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-xs font-extrabold text-slate-500 flex items-center space-x-1 mr-1">
+              <Calendar className="w-3.5 h-3.5 text-slate-400" />
+              <span>Time Horizon:</span>
+            </span>
 
-          {[
-            { id: 'ALL', label: 'All Time' },
-            { id: 'TODAY', label: 'Today' },
-            { id: '7DAYS', label: 'Last 7 Days' },
-            { id: '30DAYS', label: 'Last 30 Days' },
-            { id: 'THIS_MONTH', label: 'This Month' },
-          ].map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setTimeHorizon(t.id as any)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition ${
-                timeHorizon === t.id
-                  ? 'bg-indigo-600 text-white shadow-sm'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
+            {[
+              { id: 'ALL', label: 'All Time' },
+              { id: 'TODAY', label: 'Today' },
+              { id: '7DAYS', label: 'Last 7 Days' },
+              { id: '30DAYS', label: 'Last 30 Days' },
+              { id: 'THIS_MONTH', label: 'This Month' },
+            ].map((t) => (
+              <button
+                key={t.id}
+                onClick={() => {
+                  setTimeHorizon(t.id as any);
+                  setStartDate('');
+                  setEndDate('');
+                }}
+                className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition ${
+                  timeHorizon === t.id && !startDate && !endDate
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Start Date and End Date Pickers */}
+          <div className="flex items-center space-x-2 bg-slate-50 p-1 rounded-2xl border border-slate-200 text-xs">
+            <div className="flex items-center space-x-1 px-2">
+              <span className="text-[11px] font-bold text-slate-500">From:</span>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => {
+                  setStartDate(e.target.value);
+                  setTimeHorizon('CUSTOM');
+                }}
+                className="bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-semibold text-slate-800 focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+            <div className="flex items-center space-x-1 px-2">
+              <span className="text-[11px] font-bold text-slate-500">To:</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => {
+                  setEndDate(e.target.value);
+                  setTimeHorizon('CUSTOM');
+                }}
+                className="bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-semibold text-slate-800 focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+            {(startDate || endDate) && (
+              <button
+                onClick={() => {
+                  setStartDate('');
+                  setEndDate('');
+                  setTimeHorizon('ALL');
+                }}
+                className="px-2 py-1 text-[11px] font-bold text-rose-600 hover:bg-rose-50 rounded-lg transition"
+                title="Clear date filter"
+              >
+                ✕ Clear
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Dynamic Multi-Filter Bar */}

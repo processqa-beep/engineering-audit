@@ -446,6 +446,19 @@ export class StorageEngine {
     this.updateActionStatus(actionId, status, closureRemark, closurePhotoUrl);
   }
 
+  public static updateActionDetailed(actionId: string, updates: Partial<ActionItem>): void {
+    const actions = this.getActions();
+    const idx = actions.findIndex((a) => a.actionId === actionId);
+    if (idx >= 0) {
+      actions[idx] = {
+        ...actions[idx],
+        ...updates,
+        closedDate: updates.status === 'Closed' ? (updates.closedDate || new Date().toISOString().substring(0, 10)) : actions[idx].closedDate,
+      };
+      setItem(STORAGE_KEYS.ACTIONS, actions);
+    }
+  }
+
   public static getTemplates(): any[] { return []; }
 
   // ── MAIL CONFIGS ──────────────────────────────────────────────────────────

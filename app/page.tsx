@@ -100,6 +100,7 @@ export default function Home() {
           activeTab={activeTab}
           onTabChange={setActiveTab}
           openActionCount={openActionCount}
+          isAdmin={currentUser.role === 'Admin'}
         />
 
         {/* Scrollable Main Content Area */}
@@ -120,20 +121,28 @@ export default function Home() {
             />
           )}
           {activeTab === 'drafts' && <DraftsView onResumeDraft={handleResumeDraft} />}
-          {activeTab === 'actions' && <ActionTrackingView onNavigate={setActiveTab} />}
+          {activeTab === 'actions' && <ActionTrackingView onNavigate={setActiveTab} currentUser={currentUser} />}
           {activeTab === 'audits' && <AuditHistoryView />}
-          {activeTab === 'audit-point-setup' && <AuditPointSetupView />}
-          {activeTab === 'plant-structure' && (
-            <div className="space-y-4">
-              <div className="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-xl shadow-slate-300/40">
-                <h2 className="text-lg font-extrabold text-slate-900 mb-1">Plant Structure Settings</h2>
-                <p className="text-xs text-slate-500 font-semibold">Manage your plant hierarchy — Sections, Sub-Sections, and Lines / Machines.</p>
-              </div>
-              <PlantStructurePanel />
-            </div>
+          {activeTab === 'audit-point-setup' && (
+            currentUser.role === 'Admin' ? <AuditPointSetupView isAdmin={true} /> : <DashboardView onNavigate={setActiveTab} />
           )}
-          {activeTab === 'mail' && <MailConfigView />}
-          {activeTab === 'settings' && <SettingsView />}
+          {activeTab === 'plant-structure' && (
+            currentUser.role === 'Admin' ? (
+              <div className="space-y-4">
+                <div className="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-xl shadow-slate-300/40">
+                  <h2 className="text-lg font-extrabold text-slate-900 mb-1">Plant Structure Settings</h2>
+                  <p className="text-xs text-slate-500 font-semibold">Manage your plant hierarchy — Sections, Sub-Sections, and Lines / Machines.</p>
+                </div>
+                <PlantStructurePanel />
+              </div>
+            ) : <DashboardView onNavigate={setActiveTab} />
+          )}
+          {activeTab === 'mail' && (
+            currentUser.role === 'Admin' ? <MailConfigView /> : <DashboardView onNavigate={setActiveTab} />
+          )}
+          {activeTab === 'settings' && (
+            currentUser.role === 'Admin' ? <SettingsView /> : <DashboardView onNavigate={setActiveTab} />
+          )}
         </main>
       </div>
 
@@ -170,16 +179,6 @@ export default function Home() {
         </button>
 
         <button
-          onClick={() => setActiveTab('audit-point-setup')}
-          className={`flex flex-col items-center justify-center py-1 px-2 rounded-lg text-[10px] font-bold transition ${
-            activeTab === 'audit-point-setup' ? 'text-indigo-600' : 'hover:text-slate-900'
-          }`}
-        >
-          <FileSpreadsheet className="w-5 h-5 mb-0.5 text-emerald-600" />
-          <span>Setup</span>
-        </button>
-
-        <button
           onClick={() => setActiveTab('actions')}
           className={`relative flex flex-col items-center justify-center py-1 px-2 rounded-lg text-[10px] font-bold transition ${
             activeTab === 'actions' ? 'text-indigo-600' : 'hover:text-slate-900'
@@ -193,6 +192,28 @@ export default function Home() {
             </span>
           )}
         </button>
+
+        <button
+          onClick={() => setActiveTab('audits')}
+          className={`flex flex-col items-center justify-center py-1 px-2 rounded-lg text-[10px] font-bold transition ${
+            activeTab === 'audits' ? 'text-indigo-600' : 'hover:text-slate-900'
+          }`}
+        >
+          <History className="w-5 h-5 mb-0.5 text-blue-600" />
+          <span>History</span>
+        </button>
+
+        {currentUser.role === 'Admin' && (
+          <button
+            onClick={() => setActiveTab('settings')}
+            className={`flex flex-col items-center justify-center py-1 px-2 rounded-lg text-[10px] font-bold transition ${
+              activeTab === 'settings' ? 'text-indigo-600' : 'hover:text-slate-900'
+            }`}
+          >
+            <Settings className="w-5 h-5 mb-0.5 text-slate-700" />
+            <span>Settings</span>
+          </button>
+        )}
       </nav>
     </div>
   );

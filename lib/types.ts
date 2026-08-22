@@ -270,11 +270,17 @@ export interface ActionItem {
   ccPerson?: string;           // CC person name (HOD/Process Owner)
   ccEmail?: string;            // CC email
   targetDate: string;
+  targetClosureDate?: string;  // TCD
   priority: ActionPriority;
   status: ActionStatus;
+  rootCause?: string;          // Root Cause Analysis (RCA)
+  correctiveAction?: string;   // Corrective Action taken
+  preventiveAction?: string;   // Preventive Action to stop recurrence
   closureRemark?: string;
-  closurePhotoUrl?: string;
+  closurePhotoUrl?: string;    // After Photo (evidence of fix)
+  photoUrl?: string;           // Finding / Before Photo
   closedDate?: string;
+  closedBy?: string;
   createdAt: string;
 }
 

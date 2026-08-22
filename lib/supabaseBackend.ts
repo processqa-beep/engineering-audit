@@ -570,6 +570,44 @@ export class SupabaseBackendClient {
     }
   }
 
+  public static async updateActionDetailed(
+    actionId: string,
+    updates: Partial<ActionItem>
+  ): Promise<{ status: string; message: string }> {
+    StorageEngine.updateActionDetailed(actionId, updates);
+    if (!this.isConfigured()) return { status: 'LOCAL_SAVED', message: 'Saved locally.' };
+
+    try {
+      const payload: any = {
+        updated_at: new Date().toISOString(),
+      };
+      if (updates.status) payload.status = updates.status;
+      if (updates.rootCause !== undefined) payload.root_cause = updates.rootCause;
+      if (updates.correctiveAction !== undefined) payload.corrective_action = updates.correctiveAction;
+      if (updates.preventiveAction !== undefined) payload.preventive_action = updates.preventiveAction;
+      if (updates.targetClosureDate !== undefined) payload.target_closure_date = updates.targetClosureDate;
+      if (updates.closureRemark !== undefined) payload.closure_remark = updates.closureRemark;
+      if (updates.closurePhotoUrl !== undefined) payload.closure_photo_url = updates.closurePhotoUrl;
+      if (updates.status === 'Closed') {
+        payload.closed_date = updates.closedDate || new Date().toISOString().substring(0, 10);
+        if (updates.closedBy) payload.closed_by = updates.closedBy;
+      }
+
+      const { error } = await supabase
+        .from('action_items')
+        .update(payload)
+        .eq('action_id', actionId);
+
+      if (error) {
+        console.warn('[Supabase Detailed Action Update Warning]:', error.message);
+      }
+      return { status: 'SUCCESS', message: 'Action details updated in Supabase.' };
+    } catch (err: any) {
+      console.warn('[Supabase Action Update Error]:', err);
+      return { status: 'LOCAL_SAVED', message: 'Saved locally.' };
+    }
+  }
+
   // ── FULL SYSTEM SYNC ────────────────────────────────────────────────────────
   public static async syncAllFromCloud(): Promise<{ success: boolean; message: string }> {
     if (!this.isConfigured()) return { success: false, message: 'Supabase not configured' };

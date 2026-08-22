@@ -19,19 +19,27 @@ interface SidebarProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
   openActionCount?: number;
+  isAdmin?: boolean;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, openActionCount = 0 }) => {
-  const navItems = [
+export const Sidebar: React.FC<SidebarProps> = ({
+  activeTab,
+  onTabChange,
+  openActionCount = 0,
+  isAdmin = false,
+}) => {
+  const allNavItems = [
     { id: 'dashboard',          label: 'Executive Dashboard',           icon: LayoutDashboard },
     { id: 'new-audit',          label: 'New Audit Form',                icon: ClipboardPlus },
     { id: 'drafts',             label: 'Saved Drafts',                  icon: Save },
     { id: 'actions',            label: 'Action Tracking',               icon: AlertOctagon, count: openActionCount },
     { id: 'audits',             label: 'Audit History & Reports',       icon: History },
-    { id: 'audit-point-setup',  label: 'Audit Point Setup (Excel)',     icon: FileSpreadsheet,  badge: 'Setup' },
-    { id: 'plant-structure',    label: 'Plant Structure Settings',      icon: Layers,            badge: 'Structure' },
-    { id: 'mail',               label: 'Mail Alert Notifications',      icon: Mail,              badge: 'Mail' },
+    { id: 'audit-point-setup',  label: 'Audit Point Setup (Excel)',     icon: FileSpreadsheet,  badge: 'Admin', adminOnly: true },
+    { id: 'plant-structure',    label: 'Plant Structure Settings',      icon: Layers,            badge: 'Admin', adminOnly: true },
+    { id: 'mail',               label: 'Mail Alert Notifications',      icon: Mail,              badge: 'Admin', adminOnly: true },
   ];
+
+  const navItems = allNavItems.filter((item) => !item.adminOnly || isAdmin);
 
   return (
     <aside className="w-16 bg-white border-r border-slate-200/80 shrink-0 hidden md:flex flex-col items-center justify-between py-4 shadow-sm h-full z-30 select-none">
@@ -74,23 +82,25 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, openAc
         })}
       </div>
 
-      {/* Single Settings Gear Icon at Bottom */}
-      <div className="relative group flex items-center justify-center w-full px-2">
-        <button
-          onClick={() => onTabChange('settings')}
-          className={`w-11 h-11 rounded-2xl flex items-center justify-center transition ${
-            activeTab === 'settings'
-              ? 'bg-indigo-600 text-white shadow-md'
-              : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100'
-          }`}
-        >
-          <Settings className="w-5 h-5" />
-        </button>
-        <div className="absolute left-16 z-50 px-3 py-1.5 bg-slate-900 text-white text-xs font-semibold rounded-xl shadow-xl whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity duration-200">
-          <span>System Settings</span>
-          <div className="absolute -left-1 top-1/2 -translate-y-1/2 border-y-4 border-y-transparent border-r-4 border-r-slate-900" />
+      {/* Single Settings Gear Icon at Bottom - Only for Admin */}
+      {isAdmin && (
+        <div className="relative group flex items-center justify-center w-full px-2">
+          <button
+            onClick={() => onTabChange('settings')}
+            className={`w-11 h-11 rounded-2xl flex items-center justify-center transition ${
+              activeTab === 'settings'
+                ? 'bg-indigo-600 text-white shadow-md'
+                : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100'
+            }`}
+          >
+            <Settings className="w-5 h-5" />
+          </button>
+          <div className="absolute left-16 z-50 px-3 py-1.5 bg-slate-900 text-white text-xs font-semibold rounded-xl shadow-xl whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity duration-200">
+            <span>System Settings</span>
+            <div className="absolute -left-1 top-1/2 -translate-y-1/2 border-y-4 border-y-transparent border-r-4 border-r-slate-900" />
+          </div>
         </div>
-      </div>
+      )}
     </aside>
   );
 };

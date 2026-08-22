@@ -62,20 +62,10 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onTabChange, current
           </div>
         )}
 
-        {/* Role Selector Badge */}
-        <div className="flex items-center space-x-1 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-extrabold">
-          <UserCheck className="w-3.5 h-3.5 text-slate-500 ml-1.5" />
-          <select
-            value={role}
-            onChange={(e) => handleRoleSwitch(e.target.value as UserRole)}
-            className="bg-transparent text-slate-800 text-xs font-extrabold focus:outline-none cursor-pointer pr-1"
-          >
-            <option value="Admin">Admin</option>
-            <option value="Engineering">Engineering</option>
-            <option value="QA">QA</option>
-            <option value="Auditor">Auditor</option>
-            <option value="Viewer">Viewer</option>
-          </select>
+        {/* Assigned Role Badge */}
+        <div className="flex items-center space-x-1.5 bg-indigo-50/80 px-2.5 py-1 rounded-xl border border-indigo-200 text-xs font-extrabold text-indigo-900">
+          <UserCheck className="w-3.5 h-3.5 text-indigo-600" />
+          <span>{currentUser?.role || role}</span>
         </div>
 
         {/* Quick New Audit Button */}
