@@ -465,9 +465,9 @@ export class SupabaseBackendClient {
         .select('*')
         .order('date', { ascending: false });
 
-      if (error || !data) return StorageEngine.getAudits();
+      if (error || !data || data.length === 0) return StorageEngine.getAudits();
 
-      return data.map((d: any) => ({
+      const mapped: AuditHeader[] = data.map((d: any) => ({
         auditId: d.audit_id,
         date: d.date,
         time: d.time,
@@ -493,8 +493,54 @@ export class SupabaseBackendClient {
         createdAt: d.created_at,
         updatedAt: d.updated_at,
       }));
+
+      StorageEngine.saveAudits(mapped);
+      return mapped;
     } catch {
       return StorageEngine.getAudits();
+    }
+  }
+
+  public static async fetchAuditResults(auditId?: string): Promise<AuditResult[]> {
+    if (!this.isConfigured()) return StorageEngine.getAuditResults();
+    try {
+      let query = supabase.from('audit_results').select('*');
+      if (auditId) query = query.eq('audit_id', auditId);
+      const { data, error } = await query;
+
+      if (error || !data || data.length === 0) return StorageEngine.getAuditResults();
+
+      const mapped: AuditResult[] = data.map((d: any) => ({
+        id: d.id,
+        auditId: d.audit_id,
+        checkpointId: d.checkpoint_id,
+        srNo: d.sr_no,
+        sectionName: d.section_name,
+        subSectionName: d.sub_section_name,
+        lineName: d.line_name,
+        equipmentName: d.equipment_name,
+        componentName: d.component_name,
+        functionOfComponent: d.function_of_component,
+        whatImpactIfThisPartGetsFail: d.what_impact_if_this_part_gets_fail,
+        functionOfPart: d.function_of_part,
+        partFailureType: d.part_failure_type,
+        impactOfFailure: d.impact_of_failure,
+        checkpointText: d.checkpoint_text,
+        standardParameter: d.standard_parameter,
+        actualValue: d.actual_value,
+        status: d.status,
+        observationNotes: d.observation_notes,
+        recommendedAction: d.recommended_action,
+        photoUrl: d.photo_url,
+        isCritical: d.is_critical,
+        auditor: d.auditor,
+        timestamp: d.timestamp,
+      }));
+
+      StorageEngine.saveAuditResults(mapped);
+      return mapped;
+    } catch {
+      return StorageEngine.getAuditResults();
     }
   }
 
@@ -506,9 +552,9 @@ export class SupabaseBackendClient {
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (error || !data) return StorageEngine.getActions();
+      if (error || !data || data.length === 0) return StorageEngine.getActions();
 
-      return data.map((d: any) => ({
+      const mapped: ActionItem[] = data.map((d: any) => ({
         actionId: d.action_id,
         auditId: d.audit_id,
         sectionId: d.section_id,
@@ -529,13 +575,21 @@ export class SupabaseBackendClient {
         ccPerson: d.cc_person,
         ccEmail: d.cc_email,
         targetDate: d.target_date,
+        targetClosureDate: d.target_closure_date,
         priority: d.priority,
         status: d.status,
+        rootCause: d.root_cause,
+        correctiveAction: d.corrective_action,
+        preventiveAction: d.preventive_action,
         closureRemark: d.closure_remark,
         closurePhotoUrl: d.closure_photo_url,
         closedDate: d.closed_date,
+        closedBy: d.closed_by,
         createdAt: d.created_at,
       }));
+
+      StorageEngine.saveActions(mapped);
+      return mapped;
     } catch {
       return StorageEngine.getActions();
     }
@@ -612,11 +666,12 @@ export class SupabaseBackendClient {
   public static async syncAllFromCloud(): Promise<{ success: boolean; message: string }> {
     if (!this.isConfigured()) return { success: false, message: 'Supabase not configured' };
     try {
-      const [ck, emp, fpr, aud, act] = await Promise.allSettled([
+      const [ck, emp, fpr, aud, res, act] = await Promise.allSettled([
         this.fetchCheckpoints(),
         this.fetchEmployees(),
         this.fetchFprMatrix(),
         this.fetchAudits(),
+        this.fetchAuditResults(),
         this.fetchActions(),
       ]);
 
@@ -625,6 +680,7 @@ export class SupabaseBackendClient {
       if (fpr.status === 'fulfilled') msg += `${fpr.value.length} FPR rules, `;
       if (emp.status === 'fulfilled') msg += `${emp.value.length} users, `;
       if (aud.status === 'fulfilled') msg += `${aud.value.length} audits, `;
+      if (res.status === 'fulfilled') msg += `${res.value.length} results, `;
       if (act.status === 'fulfilled') msg += `${act.value.length} actions`;
 
       return { success: true, message: msg };

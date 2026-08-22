@@ -14,6 +14,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { StorageEngine } from '../lib/storageEngine';
+import { SupabaseBackendClient } from '../lib/supabaseBackend';
 import { generateAuditPdfReport } from '../lib/pdfGenerator';
 import { generateAuditExcelReport } from '../lib/excelGenerator';
 import { AuditHeader, AuditResult } from '../lib/types';
@@ -28,9 +29,31 @@ export const AuditHistoryView: React.FC = () => {
   const [selectedAuditHeader, setSelectedAuditHeader] = useState<AuditHeader | null>(null);
   const [activePhotoUrl, setActivePhotoUrl] = useState<string | undefined>();
 
-  useEffect(() => {
+  const [syncingCloud, setSyncingCloud] = useState<boolean>(false);
+
+  const loadAudits = async () => {
     setAudits(StorageEngine.getAudits());
     setAuditResults(StorageEngine.getAuditResults());
+
+    if (SupabaseBackendClient.isConfigured()) {
+      setSyncingCloud(true);
+      try {
+        const [cloudAudits, cloudResults] = await Promise.all([
+          SupabaseBackendClient.fetchAudits(),
+          SupabaseBackendClient.fetchAuditResults(),
+        ]);
+        if (cloudAudits && cloudAudits.length > 0) setAudits(cloudAudits);
+        if (cloudResults && cloudResults.length > 0) setAuditResults(cloudResults);
+      } catch (err) {
+        console.warn('Audit history cloud fetch notice:', err);
+      } finally {
+        setSyncingCloud(false);
+      }
+    }
+  };
+
+  useEffect(() => {
+    loadAudits();
   }, []);
 
   const filteredAudits = audits.filter((a) => {
@@ -63,20 +86,29 @@ export const AuditHistoryView: React.FC = () => {
             <span>AUDIT HISTORY &amp; REPORTS</span>
           </h2>
           <p className="text-xs text-slate-500 mt-1 font-semibold">
-            View completed engineering audit snapshots, PDF reports, Excel downloads, and evaluation history.
+            View completed engineering audit snapshots, PDF reports, Excel downloads, and evaluation history across all devices.
           </p>
         </div>
 
-        {/* Search & Filter */}
-        <div className="flex items-center space-x-3">
+        {/* Search, Filter & Cloud Refresh */}
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={loadAudits}
+            disabled={syncingCloud}
+            className="flex items-center space-x-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-3.5 py-2 rounded-xl text-xs font-bold transition border border-indigo-200"
+          >
+            <History className={`w-3.5 h-3.5 ${syncingCloud ? 'animate-spin' : ''}`} />
+            <span>{syncingCloud ? 'Syncing...' : 'Sync Cloud Records'}</span>
+          </button>
+
           <div className="relative">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
             <input
               type="text"
-              placeholder="Search Audit ID, Auditor, Sub-Section..."
+              placeholder="Search Audit ID, Auditor..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="bg-slate-50 border border-slate-200 text-slate-900 rounded-xl pl-9 pr-3 py-2 text-xs font-bold focus:bg-white focus:border-indigo-500 focus:outline-none transition shadow-xs w-64"
+              className="bg-slate-50 border border-slate-200 text-slate-900 rounded-xl pl-9 pr-3 py-2 text-xs font-bold focus:bg-white focus:border-indigo-500 focus:outline-none transition shadow-xs w-56"
             />
           </div>
         </div>

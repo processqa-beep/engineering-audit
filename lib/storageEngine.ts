@@ -382,8 +382,20 @@ export class StorageEngine {
     return getItem(STORAGE_KEYS.AUDITS, initialAudits);
   }
 
+  public static saveAudits(audits: AuditHeader[]): void {
+    setItem(STORAGE_KEYS.AUDITS, audits);
+  }
+
   public static getAuditResults(): AuditResult[] {
     return getItem(STORAGE_KEYS.AUDIT_RESULTS, initialAuditResults);
+  }
+
+  public static saveAuditResults(results: AuditResult[]): void {
+    setItem(STORAGE_KEYS.AUDIT_RESULTS, results);
+  }
+
+  public static saveActions(actions: ActionItem[]): void {
+    setItem(STORAGE_KEYS.ACTIONS, actions);
   }
 
   public static saveAudit(header: AuditHeader, results: AuditResult[], actions: ActionItem[]): void {
@@ -397,13 +409,11 @@ export class StorageEngine {
     }
     setItem(STORAGE_KEYS.AUDITS, audits.slice(0, MAX_AUDIT_HEADERS));
 
-    // ── 2. Audit Results — store ONLY the latest audit's results (slim) ───
-    // Older audit details live permanently in Google Sheets.
-    // We keep 1 audit's results locally so PDF can be re-generated immediately.
+    // ── 2. Audit Results ───
     const slimResults = results.map(slimResult);
     setItem(STORAGE_KEYS.AUDIT_RESULTS, slimResults);
 
-    // ── 3. Action Items (last 150 open items) ─────────────────────────────
+    // ── 3. Action Items ───────────────────────────────────────────────────
     if (actions && actions.length > 0) {
       const allActions = this.getActions();
       const newActionIds = new Set(actions.map((a) => a.actionId));

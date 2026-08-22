@@ -54,6 +54,16 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
   const [activePhotoModal, setActivePhotoModal] = useState<string | null>(null);
   const [saving, setSaving] = useState<boolean>(false);
 
+  React.useEffect(() => {
+    if (SupabaseBackendClient.isConfigured()) {
+      SupabaseBackendClient.fetchActions()
+        .then((cloudActions) => {
+          if (cloudActions && cloudActions.length > 0) setActions(cloudActions);
+        })
+        .catch((err) => console.warn('Action cloud fetch notice:', err));
+    }
+  }, []);
+
   // Check if current user is allowed to edit this specific action item
   const canUserEditAction = (act: ActionItem): boolean => {
     if (!currentUser) return false;
