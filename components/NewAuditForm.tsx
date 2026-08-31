@@ -1012,7 +1012,7 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
                           <th className="px-3 py-3 w-20 text-center">Criticality</th>
                           <th className="px-3 py-3 w-32">Actual Observation</th>
                           <th className="px-3 py-3 w-24 text-center">Status</th>
-                          <th className="px-3 py-3 w-44">Assign To</th>
+                          <th className="px-3 py-3 w-44">Assign Dept (FPR Auto)</th>
                           <th className="px-3 py-3 w-44">Recommended Action</th>
                           <th className="px-3 py-3 w-32">Remarks &amp; Photo</th>
                         </tr>
@@ -1148,14 +1148,14 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
                                 </select>
                               </td>
 
-                              {/* 7. Assign To (Dept + FPR Person from Matrix) */}
+                              {/* 7. Assign Dept (Auto-bound FPR & HOD CC) */}
                               <td className="px-3 py-3">
-                                <div className="space-y-1">
+                                <div className="space-y-1.5">
                                   {/* Department Selector */}
                                   <select
                                     value={state.assignedDept}
                                     onChange={(e) => handleAssignedDeptChange(originalIndex, e.target.value)}
-                                    className="w-full bg-indigo-50 border border-indigo-200 rounded-lg px-2 py-1 text-[10px] font-bold text-indigo-900 focus:outline-none focus:border-indigo-500"
+                                    className="w-full bg-indigo-50 border border-indigo-200 rounded-lg px-2 py-1.5 text-[10px] font-bold text-indigo-900 focus:outline-none focus:border-indigo-500 shadow-xs cursor-pointer"
                                   >
                                     <option value="">-- Select Dept --</option>
                                     {deptOptions.map((d) => (
@@ -1165,50 +1165,26 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
                                     ))}
                                   </select>
 
-                                  {/* FPR Person selector within selected department */}
-                                  {availablePersons.length > 0 ? (
-                                    <select
-                                      value={state.assignedTo}
-                                      onChange={(e) => handleAssignedToChange(originalIndex, e.target.value)}
-                                      className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-[10px] font-bold text-slate-800 focus:outline-none focus:border-indigo-500"
-                                    >
-                                      <option value="">-- Select FPR Person --</option>
-                                      {availablePersons.map((p, pIdx) => (
-                                        <option key={`${p.name}-${pIdx}`} value={p.name}>
-                                          {p.label}
-                                        </option>
-                                      ))}
-                                    </select>
-                                  ) : (
-                                    <input
-                                      type="text"
-                                      placeholder="Responsible person..."
-                                      value={state.assignedTo}
-                                      onChange={(e) => handleAssignedToChange(originalIndex, e.target.value)}
-                                      className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-[10px] font-semibold text-slate-800 focus:outline-none focus:border-indigo-500"
-                                    />
-                                  )}
-
-                                  {/* FPR Match Badge */}
-                                  {fprMatch && (
+                                  {/* Auto-resolved FPR Lead & HOD CC from Matrix */}
+                                  {fprMatch ? (
                                     <div
-                                      className="text-[9px] text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200/80 font-bold flex items-center space-x-1"
-                                      title={`FPR Lead Email: ${fprMatch.fprEmail}`}
+                                      className="bg-emerald-50/90 border border-emerald-200 text-emerald-900 rounded-lg p-1.5 text-[10px] space-y-0.5 shadow-xs"
+                                      title={`FPR: ${fprMatch.fprName} (${fprMatch.fprEmail})\nHOD CC: ${fprMatch.hodName} (${fprMatch.hodEmail})`}
                                     >
-                                      <span>✓ FPR: {fprMatch.fprName}</span>
+                                      <div className="flex items-center space-x-1 font-bold">
+                                        <User className="w-3 h-3 text-emerald-600 shrink-0" />
+                                        <span className="truncate">FPR: <strong>{fprMatch.fprName}</strong></span>
+                                      </div>
+                                      {fprMatch.hodName && (
+                                        <div className="flex items-center space-x-1 text-[9px] text-emerald-700 font-semibold truncate">
+                                          <span className="text-emerald-500 font-bold shrink-0">CC:</span>
+                                          <span className="truncate">{fprMatch.hodName}</span>
+                                        </div>
+                                      )}
                                     </div>
-                                  )}
-
-                                  {/* CC HOD / Process Owner info */}
-                                  {ccDisplayText && (
-                                    <div
-                                      className="text-[9px] text-slate-500 flex items-center space-x-1"
-                                      title={ccTooltip}
-                                    >
-                                      <span className="font-bold text-slate-400 shrink-0">CC:</span>
-                                      <span className="font-semibold text-indigo-600 truncate max-w-[130px]">
-                                        {ccDisplayText}
-                                      </span>
+                                  ) : (
+                                    <div className="bg-slate-50 border border-slate-200 text-slate-500 rounded-lg px-2 py-1 text-[9px] font-semibold flex items-center space-x-1">
+                                      <span>FPR: {state.assignedDept || 'Department'} Lead</span>
                                     </div>
                                   )}
                                 </div>
