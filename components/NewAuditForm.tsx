@@ -300,16 +300,24 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
     }
 
     const states: CheckpointState[] = matched.map((ck) => {
+      // Check if draft has a saved state for this checkpoint
+      const draftItem = initialDraft?.states?.find(
+        (s: any) =>
+          s.checkpoint?.id === ck.id ||
+          (s.checkpoint?.checkpointText === ck.checkpointText &&
+            s.component?.name === ck.componentName)
+      );
+
       // Look up best default department from FPR matrix for this section/line, else 'Maintenance'
       const activeFprs = StorageEngine.getFprMatrix().filter((f) => f.active);
       const sectionFpr = activeFprs.find(
         (f) => (f.sectionId === targetSecId || f.sectionId === 'ALL') && (f.lineId === lineId || f.lineId === 'ALL')
       );
-      const defaultDept = sectionFpr ? sectionFpr.department : 'Maintenance';
+      const defaultDept = draftItem?.assignedDept || (sectionFpr ? sectionFpr.department : 'Maintenance');
       const fprMatch = StorageEngine.lookupFpr(defaultDept, targetSecId, lineId);
       const employees = StorageEngine.getEmployees();
       const deptEmp = employees.find((e) => e.department === defaultDept && e.status === 'Approved' && e.active);
-      const defaultPerson = fprMatch?.fprName || deptEmp?.name || '';
+      const defaultPerson = draftItem?.assignedTo || fprMatch?.fprName || deptEmp?.name || '';
 
       return {
         checkpoint: ck,
@@ -323,12 +331,13 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
           impactOfFailure: ck.impactOfFailure,
           recommendedAction: ck.recommendedAction,
         },
-        status: '' as any,
-        actualValue: '',
-        observationNotes: '',
-        recommendedAction: ck.recommendedAction || '',
+        status: draftItem?.status || ('' as any),
+        actualValue: draftItem?.actualValue || '',
+        observationNotes: draftItem?.observationNotes || '',
+        recommendedAction: draftItem?.recommendedAction || ck.recommendedAction || '',
         assignedDept: defaultDept,
         assignedTo: defaultPerson,
+        photoUrl: draftItem?.photoUrl || undefined,
       };
     });
 
@@ -845,7 +854,60 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
         </div>
       ) : (
         /* STEP 2: CASCADING DROPDOWNS & AUDIT FORM */
-        <form onSubmit={handleSubmit} className="space-y-6 animate-fade-in">
+        <form onSubmit={handleSubmit} className="space-y-5 animate-fade-in">
+          {/* UPPER ACTION BAR (No need to scroll down) */}
+          <div className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200/90 shadow-xl shadow-slate-300/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sticky top-1 z-20 backdrop-blur-md bg-white/95">
+            <div className="flex items-center space-x-3">
+              <span
+                className={`px-3 py-1.5 text-xs font-extrabold rounded-xl shrink-0 ${
+                  summary.overall === 'PASS'
+                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                    : summary.overall === 'PASS WITH OBSERVATIONS'
+                    ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                    : 'bg-rose-100 text-rose-800 border border-rose-300'
+                }`}
+              >
+                {summary.overall}
+              </span>
+              <div className="text-xs">
+                <span className="font-extrabold text-slate-900">
+                  {summary.okCount + summary.ngCount + summary.obsCount + summary.naCount} / {checkpointStates.length} Evaluated
+                </span>
+                <span className="text-slate-500 font-semibold ml-2 text-[11px]">
+                  ({summary.okCount} OK, {summary.ngCount} NG)
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-2.5 self-end sm:self-auto">
+              <button
+                type="button"
+                onClick={handleSaveDraft}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs transition border border-slate-200 flex items-center space-x-1.5 cursor-pointer shadow-xs"
+              >
+                <Save className="w-4 h-4 text-indigo-600" />
+                <span>Save Draft</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={onCancel}
+                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-bold text-xs transition border border-slate-200 cursor-pointer"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="submit"
+                disabled={submitting}
+                className="bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white px-5 py-2 rounded-xl font-extrabold text-xs shadow-lg shadow-indigo-500/25 transition active:scale-95 disabled:opacity-50 flex items-center space-x-1.5 cursor-pointer"
+              >
+                <Send className="w-3.5 h-3.5" />
+                <span>{submitting ? 'Submitting...' : 'Submit Engineering Audit'}</span>
+              </button>
+            </div>
+          </div>
+
           {/* HEADER SELECTION GRID */}
           <div className="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-xl shadow-slate-300/40 space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">

@@ -112,16 +112,14 @@ export async function POST(req: NextRequest) {
               <div class="heading" style="color: #1e40af;">Audit &amp; Checkpoint Information</div>
               <table class="info-table">
                 <tr>
-                  <td class="info-lbl">Audit ID</td>
-                  <td class="info-val">${act.auditId}</td>
                   <td class="info-lbl">Section</td>
                   <td class="info-val">${act.sectionName || act.sectionId}</td>
-                </tr>
-                <tr>
                   <td class="info-lbl">Line / Equipment</td>
                   <td class="info-val">${lineEquip}</td>
+                </tr>
+                <tr>
                   <td class="info-lbl">Component</td>
-                  <td class="info-val">${act.componentName}</td>
+                  <td class="info-val" colspan="3">${act.componentName}</td>
                 </tr>
                 <tr>
                   <td class="info-lbl">Checkpoint</td>
@@ -266,7 +264,26 @@ export async function POST(req: NextRequest) {
         `;
       }).join('');
 
-      const auditDateDisplay = header.date ? new Date(header.date).toString() : new Date().toString();
+      const formatISTDate = (dateVal?: string, timeVal?: string): string => {
+        if (!dateVal) return new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' });
+        try {
+          const clean = dateVal.split('T')[0];
+          const parts = clean.split('-');
+          if (parts.length === 3) {
+            const y = parts[0];
+            const m = parseInt(parts[1], 10);
+            const d = parts[2];
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            const mon = months[m - 1] || parts[1];
+            return timeVal ? `${d}-${mon}-${y} at ${timeVal}` : `${d}-${mon}-${y}`;
+          }
+          return new Date(dateVal).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' });
+        } catch {
+          return dateVal;
+        }
+      };
+
+      const auditDateDisplay = formatISTDate(header.date, header.time);
       const lineEquip = `${header.lineName || header.lineId || 'Line'}${header.equipmentName ? ` – ${header.equipmentName}` : ''}`;
 
       htmlContent = `
@@ -280,8 +297,8 @@ export async function POST(req: NextRequest) {
             .info-card { background-color: #ebf5fb; border: 1px solid #d4e6f1; border-radius: 8px; padding: 18px 22px; margin: 16px 0 24px 0; }
             .info-table { width: 100%; border-collapse: collapse; font-size: 13px; }
             .info-table td { padding: 6px 6px; }
-            .info-lbl { color: #566573; font-weight: bold; width: 14%; }
-            .info-val { color: #17202a; width: 36%; }
+            .info-lbl { color: #566573; font-weight: bold; width: 16%; }
+            .info-val { color: #17202a; width: 34%; }
             .heading { font-size: 15px; font-weight: bold; color: #1a5276; margin: 0 0 12px 0; }
             .sub-heading { font-size: 15px; font-weight: bold; color: #1a5276; margin: 24px 0 10px 0; }
             .dev-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 10px; margin-bottom: 20px; }
@@ -298,22 +315,20 @@ export async function POST(req: NextRequest) {
               <div class="heading">Audit Information</div>
               <table class="info-table">
                 <tr>
-                  <td class="info-lbl">Audit ID</td>
-                  <td class="info-val" style="font-weight: bold;">${header.auditId}</td>
                   <td class="info-lbl">Audit Date</td>
-                  <td class="info-val">${auditDateDisplay}</td>
-                </tr>
-                <tr>
+                  <td class="info-val" style="font-weight: bold; color: #1a5276;">${auditDateDisplay}</td>
                   <td class="info-lbl">Auditor</td>
                   <td class="info-val">${header.auditorName || 'Mehul'}</td>
-                  <td class="info-lbl">Section</td>
-                  <td class="info-val">${header.sectionName || header.sectionId}</td>
                 </tr>
                 <tr>
+                  <td class="info-lbl">Section</td>
+                  <td class="info-val">${header.sectionName || header.sectionId}</td>
                   <td class="info-lbl">Sub Section</td>
                   <td class="info-val">${header.subSectionName || header.subSectionId || '-'}</td>
+                </tr>
+                <tr>
                   <td class="info-lbl">Line / Machine</td>
-                  <td class="info-val">${lineEquip}</td>
+                  <td class="info-val" colspan="3">${lineEquip}</td>
                 </tr>
               </table>
             </div>
