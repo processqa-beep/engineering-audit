@@ -839,8 +839,60 @@ export const SettingsView: React.FC = () => {
       )}
 
       {/* ─────────────────────────────────────────────────────────────────── */}
-      {/* 1. USER MANAGEMENT SECTION */}
+      {/* 0. CLOUD DATABASE (SUPABASE) STATUS & SYNC PANEL */}
       {/* ─────────────────────────────────────────────────────────────────── */}
+      <div className="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-xl shadow-slate-300/40 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-100">
+          <div>
+            <h3 className="text-base font-extrabold text-slate-900 flex items-center space-x-2">
+              <Database className="w-5 h-5 text-indigo-600" />
+              <span>CLOUD DATABASE (SUPABASE) LIVE SYNC</span>
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5 font-semibold">
+              Connects all devices &amp; Incognito sessions via Server Proxy. Keep your database active to ensure real-time sharing.
+            </p>
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={handleTestSupabase}
+              disabled={supabaseTest?.testing}
+              className="flex items-center space-x-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs transition border border-slate-200 cursor-pointer disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${supabaseTest?.testing ? 'animate-spin' : ''}`} />
+              <span>{supabaseTest?.testing ? 'Testing...' : 'Test Cloud Status'}</span>
+            </button>
+            <button
+              onClick={handleSyncAllToSupabase}
+              disabled={supabaseSyncing}
+              className="flex items-center space-x-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-extrabold text-xs shadow-md shadow-indigo-500/20 transition cursor-pointer disabled:opacity-50"
+            >
+              <HardDrive className={`w-3.5 h-3.5 ${supabaseSyncing ? 'animate-spin' : ''}`} />
+              <span>{supabaseSyncing ? 'Pushing Data...' : 'Push All Local Data to Cloud'}</span>
+            </button>
+          </div>
+        </div>
+
+        {supabaseTest && !supabaseTest.testing && (
+          <div className={`p-4 rounded-2xl text-xs font-bold flex items-start space-x-2.5 animate-fade-in ${
+            supabaseTest.message ? 'bg-emerald-50 text-emerald-900 border border-emerald-300' : 'bg-rose-50 text-rose-900 border border-rose-300'
+          }`}>
+            {supabaseTest.message ? <Check className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" /> : <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />}
+            <div className="space-y-1">
+              <div>{supabaseTest.message || `Cloud Error: ${supabaseTest.error}`}</div>
+              {supabaseTest.error && (
+                <p className="text-[11px] font-normal text-rose-700">
+                  Tip: If your Supabase free project was paused due to inactivity, log in to{' '}
+                  <a href="https://supabase.com/dashboard" target="_blank" rel="noreferrer" className="underline font-bold text-indigo-600 hover:text-indigo-800">
+                    supabase.com/dashboard
+                  </a>{' '}
+                  and click <strong>&quot;Restore Project&quot;</strong>. Then click &quot;Push All Local Data to Cloud&quot; above.
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
       <div className="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-xl shadow-slate-300/40 space-y-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-100">
           <div>
