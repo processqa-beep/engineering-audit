@@ -61,6 +61,12 @@ export default function Home() {
         setActiveTab(tabParam);
       }
     }
+  }, []);
+
+  useEffect(() => {
+    const actions = StorageEngine.getActions();
+    const openCount = actions.filter((a) => a.status === 'Open' || a.status === 'In Progress').length;
+    setOpenActionCount(openCount);
   }, [activeTab]);
 
   const handleLogout = () => {

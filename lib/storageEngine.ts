@@ -134,21 +134,18 @@ export class StorageEngine {
   // Checkpoints are NOT seeded — user must upload Excel.
   public static initializeDemoData(force: boolean = false): void {
     if (typeof window === 'undefined') return;
-    const isInitialized = localStorage.getItem('plant_eng_portal_initialized_v5');
+    const isInitialized = localStorage.getItem('plant_eng_portal_initialized_v7');
     if (!isInitialized || force) {
-      setItem(STORAGE_KEYS.SECTIONS,     initialSections);
-      setItem(STORAGE_KEYS.SUB_SECTIONS, initialSubSections);
-      setItem(STORAGE_KEYS.LINES,        initialLines);
-      setItem(STORAGE_KEYS.EQUIPMENT,    initialEquipment);
-      setItem(STORAGE_KEYS.COMPONENTS,   initialComponents);
-      setItem(STORAGE_KEYS.CHECKPOINTS,  initialCheckpoints);   // []
-      setItem(STORAGE_KEYS.EMPLOYEES,    initialEmployees);
-      setItem(STORAGE_KEYS.AUDITS,       []);
-      setItem(STORAGE_KEYS.AUDIT_RESULTS, []);
-      setItem(STORAGE_KEYS.ACTIONS,      []);
-      setItem(STORAGE_KEYS.MAIL_CONFIGS, initialMailConfigs);
-      setItem(STORAGE_KEYS.SETTINGS,     defaultSettings);
-      localStorage.setItem('plant_eng_portal_initialized_v6', 'true');
+      if (!localStorage.getItem(STORAGE_KEYS.SECTIONS)) setItem(STORAGE_KEYS.SECTIONS, initialSections);
+      if (!localStorage.getItem(STORAGE_KEYS.SUB_SECTIONS)) setItem(STORAGE_KEYS.SUB_SECTIONS, initialSubSections);
+      if (!localStorage.getItem(STORAGE_KEYS.LINES)) setItem(STORAGE_KEYS.LINES, initialLines);
+      if (!localStorage.getItem(STORAGE_KEYS.EQUIPMENT)) setItem(STORAGE_KEYS.EQUIPMENT, initialEquipment);
+      if (!localStorage.getItem(STORAGE_KEYS.COMPONENTS)) setItem(STORAGE_KEYS.COMPONENTS, initialComponents);
+      if (!localStorage.getItem(STORAGE_KEYS.CHECKPOINTS)) setItem(STORAGE_KEYS.CHECKPOINTS, initialCheckpoints);
+      if (!localStorage.getItem(STORAGE_KEYS.EMPLOYEES)) setItem(STORAGE_KEYS.EMPLOYEES, initialEmployees);
+      if (!localStorage.getItem(STORAGE_KEYS.MAIL_CONFIGS)) setItem(STORAGE_KEYS.MAIL_CONFIGS, initialMailConfigs);
+      if (!localStorage.getItem(STORAGE_KEYS.SETTINGS)) setItem(STORAGE_KEYS.SETTINGS, defaultSettings);
+      localStorage.setItem('plant_eng_portal_initialized_v7', 'true');
     }
   }
 

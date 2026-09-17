@@ -684,14 +684,34 @@ export const AuditPointSetupView: React.FC<AuditPointSetupViewProps> = ({ isAdmi
 
 
   // ── Toggle active ─────────────────────────────────────────────────────────
-  const handleToggleActive = (ck: Checkpoint) => {
+  const handleToggleActive = async (ck: Checkpoint) => {
     if (ck.active) {
       if (!confirm(`Deactivate "${ck.checkpointText}"? It will be hidden from new audits. Historical data is preserved.`)) return;
       StorageEngine.deactivateCheckpoint(ck.id);
     } else {
       StorageEngine.activateCheckpoint(ck.id);
     }
-    reload();
+    const updated = StorageEngine.getCheckpoints();
+    setCheckpoints(updated);
+    try {
+      await SupabaseBackendClient.saveCheckpoints(updated);
+    } catch (err) {
+      console.warn('Active toggle sync notice:', err);
+    }
+  };
+
+  // ── Delete Checkpoint ───────────────────────────────────────────────────────
+  const handleDeleteCheckpoint = async (ck: Checkpoint) => {
+    if (!confirm(`Are you sure you want to permanently delete checkpoint:\n"${ck.checkpointText}"?`)) return;
+    const current = StorageEngine.getCheckpoints();
+    const updated = current.filter((c) => c.id !== ck.id);
+    StorageEngine.saveCheckpoints(updated);
+    setCheckpoints(updated);
+    try {
+      await SupabaseBackendClient.saveCheckpoints(updated);
+    } catch (err) {
+      console.warn('Delete checkpoint sync notice:', err);
+    }
   };
 
   // ── Filtered table ────────────────────────────────────────────────────────
@@ -912,7 +932,7 @@ export const AuditPointSetupView: React.FC<AuditPointSetupViewProps> = ({ isAdmi
                   <th className="px-4 py-3.5 w-14">Unit</th>
                   <th className="px-4 py-3.5 w-20 text-center">Criticality</th>
                   <th className="px-4 py-3.5 w-36">Applicable Lines</th>
-                  <th className="px-4 py-3.5 w-16 text-center">Active</th>
+                  <th className="px-4 py-3.5 w-24 text-center">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-800">
@@ -952,17 +972,26 @@ export const AuditPointSetupView: React.FC<AuditPointSetupViewProps> = ({ isAdmi
                       )}
                     </td>
                     <td className="px-4 py-3.5 text-center">
-                      <button
-                        onClick={() => handleToggleActive(ck)}
-                        title={ck.active ? 'Deactivate (removes from future audits)' : 'Activate'}
-                        className={`p-1.5 rounded-xl transition border ${
-                          ck.active
-                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200'
-                            : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200'
-                        }`}
-                      >
-                        {ck.active ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
-                      </button>
+                      <div className="flex items-center justify-center space-x-1.5">
+                        <button
+                          onClick={() => handleToggleActive(ck)}
+                          title={ck.active ? 'Deactivate (removes from future audits)' : 'Activate'}
+                          className={`p-1.5 rounded-xl transition border cursor-pointer ${
+                            ck.active
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-amber-50 hover:text-amber-700 hover:border-amber-200'
+                              : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200'
+                          }`}
+                        >
+                          {ck.active ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
+                        </button>
+                        <button
+                          onClick={() => handleDeleteCheckpoint(ck)}
+                          title="Permanently Delete Checkpoint"
+                          className="p-1.5 rounded-xl transition border bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100 hover:text-rose-800 cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
