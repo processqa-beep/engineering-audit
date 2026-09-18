@@ -14,6 +14,7 @@ export async function POST(req: NextRequest) {
       customHtml,
       type,
       actionClosure,
+      department,
     } = body;
 
     const host = process.env.SMTP_HOST || 'smtp.gmail.com';
@@ -333,7 +334,7 @@ export async function POST(req: NextRequest) {
               </table>
             </div>
 
-            <div class="sub-heading">Engineering Audit Deviation Summary</div>
+            <div class="sub-heading">Engineering Audit Deviation Summary${department ? ` (${department} Department)` : ''}</div>
             <table class="dev-table">
               <thead>
                 <tr>
@@ -375,7 +376,7 @@ export async function POST(req: NextRequest) {
       `;
     }
 
-    // Format Subject: ENGINEERING AUDIT DEVIATION – BL#1 – Line Equipment (18-Aug-2026 at 07:18)
+    // Format Subject: ENGINEERING AUDIT DEVIATION – Instrumentation – BL#1 – Line Equipment (18-Aug-2026 at 07:18)
     const auditDt = header?.date ? new Date(header.date) : new Date();
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     const day = String(auditDt.getDate()).padStart(2, '0');
@@ -384,7 +385,8 @@ export async function POST(req: NextRequest) {
     const tm = header?.time || auditDt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
     const formattedDateTime = `${day}-${mon}-${yr} at ${tm}`;
     const lineEquip = `${header?.lineName || header?.lineId || 'Line'}${header?.equipmentName ? ` – ${header.equipmentName}` : ''}`;
-    const finalSubject = subject || `ENGINEERING AUDIT DEVIATION – ${lineEquip} (${formattedDateTime})`;
+    const deptTag = department ? ` – ${department}` : '';
+    const finalSubject = subject || `ENGINEERING AUDIT DEVIATION${deptTag} – ${lineEquip} (${formattedDateTime})`;
 
     // Configure transporter
     const transporter = nodemailer.createTransport({

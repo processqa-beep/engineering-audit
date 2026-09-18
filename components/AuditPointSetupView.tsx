@@ -25,6 +25,7 @@ import {
   Sparkles,
   Send,
   Image as ImageIcon,
+  Pencil,
 } from 'lucide-react';
 
 import { StorageEngine } from '../lib/storageEngine';
@@ -49,27 +50,33 @@ const ACTION_BADGE: Record<ImportAction, string> = {
 };
 
 // ──────────────────────────────────────────────────────────────────────────────
-// MANUAL ADD FORM (simple modal)
+// CHECKPOINT FORM MODAL (Add & Edit)
 // ──────────────────────────────────────────────────────────────────────────────
-function ManualAddModal({
+function CheckpointFormModal({
+  initialData,
+  title,
   sections,
   subSections,
   lines,
   onClose,
   onSave,
 }: {
+  initialData?: Checkpoint | null;
+  title?: string;
   sections: { id: string; name: string }[];
   subSections: { id: string; name: string; sectionId: string }[];
   lines: { id: string; name: string; sectionId: string }[];
   onClose: () => void;
   onSave: (ck: Partial<Checkpoint>) => void;
 }) {
-  const [form, setForm] = useState<Partial<Checkpoint>>({
+  const [form, setForm] = useState<Partial<Checkpoint>>(() => ({
     active: true,
     criticality: 'Medium',
     applicableLines: ['ALL'],
+    applicableSubSections: ['ALL'],
     parameterType: 'OK_NG',
-  });
+    ...(initialData || {}),
+  }));
 
   const set = (field: keyof Checkpoint, val: any) =>
     setForm((p) => ({ ...p, [field]: val }));
@@ -90,8 +97,8 @@ function ManualAddModal({
       <div className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl border border-slate-200 overflow-y-auto max-h-[90vh]">
         <div className="sticky top-0 bg-white px-6 py-4 border-b border-slate-100 flex items-center justify-between z-10">
           <h3 className="font-extrabold text-slate-900 text-base flex items-center space-x-2">
-            <Plus className="w-4 h-4 text-indigo-600" />
-            <span>ADD AUDIT POINT MANUALLY</span>
+            {initialData ? <Pencil className="w-4 h-4 text-indigo-600" /> : <Plus className="w-4 h-4 text-indigo-600" />}
+            <span>{title || (initialData ? 'EDIT AUDIT POINT' : 'ADD AUDIT POINT MANUALLY')}</span>
           </h3>
           <button onClick={onClose} className="p-1.5 rounded-xl hover:bg-slate-100 transition text-slate-500">
             <X className="w-4 h-4" />
@@ -151,6 +158,18 @@ function ManualAddModal({
                 placeholder="BL#1, BL#2, BL#3  or  ALL"
                 value={form.applicableLines?.join(', ') || 'ALL'}
                 onChange={(e) => set('applicableLines', e.target.value.split(',').map((s) => s.trim()).filter(Boolean))}
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 font-semibold focus:border-indigo-500 focus:outline-none"
+              />
+            </div>
+
+            {/* Applicable Sub-Sections */}
+            <div>
+              <label className="font-bold text-slate-700 block mb-1">Applicable Sub-Sections (e.g. M1, M2 or ALL)</label>
+              <input
+                type="text"
+                placeholder="M1, M2  or  ALL"
+                value={form.applicableSubSections?.join(', ') || 'ALL'}
+                onChange={(e) => set('applicableSubSections', e.target.value.split(',').map((s) => s.trim()).filter(Boolean))}
                 className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 font-semibold focus:border-indigo-500 focus:outline-none"
               />
             </div>
@@ -339,7 +358,7 @@ function ManualAddModal({
             Cancel
           </button>
           <button onClick={handleSave} className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-xs shadow-md transition">
-            Save Audit Point
+            {initialData ? 'Update Checkpoint' : 'Save Audit Point'}
           </button>
         </div>
       </div>
@@ -538,8 +557,12 @@ export const AuditPointSetupView: React.FC<AuditPointSetupViewProps> = ({ isAdmi
   const [preview, setPreview]             = useState<ImportPreviewSummary | null>(null);
   const [uploadSuccess, setUploadSuccess] = useState<{ imported: number; updated: number } | null>(null);
 
-  // Manual Add Modal
+  // Manual Add & Edit Modal
   const [showManualAdd, setShowManualAdd] = useState(false);
+  const [editingCheckpoint, setEditingCheckpoint] = useState<Checkpoint | null>(null);
+
+  // Batch Selection
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const [syncingCloud, setSyncingCloud] = useState(false);
   const [dumpingCloud, setDumpingCloud] = useState(false);
@@ -633,55 +656,94 @@ export const AuditPointSetupView: React.FC<AuditPointSetupViewProps> = ({ isAdmi
     }
   };
 
-  // ── Manual Add handler ────────────────────────────────────────────────────
-  const handleManualSave = async (form: Partial<Checkpoint>) => {
+  // ── Manual Add / Edit handler ─────────────────────────────────────────────
+  const handleSaveCheckpoint = async (form: Partial<Checkpoint>) => {
     const now = new Date().toISOString();
-    const newCk: Checkpoint = {
-      id: `CK-MANUAL-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
-      srNo: form.srNo || (checkpoints.length + 1),
-      sectionId: form.sectionId || 'GR',
-      sectionName: form.sectionName || form.sectionId || 'Grinding',
-      subSectionId: form.subSectionId || 'GR-M1',
-      subSectionName: form.subSectionName || form.subSectionId || 'M1',
-      lineId: form.lineId || 'ALL',
-      lineName: form.lineName || form.lineId || 'ALL',
-      equipmentId: form.equipmentId || '',
-      equipmentName: form.equipmentName || '',
-      componentId: form.componentId || '',
-      componentName: form.componentName?.trim() || 'Component',
-      componentReferencePhotoUrl: form.componentReferencePhotoUrl,
-      functionOfComponent: form.functionOfComponent,
-      whatImpactIfThisPartGetsFail: form.whatImpactIfThisPartGetsFail,
-      functionOfPart: form.functionOfPart,
-      partFailureType: form.partFailureType,
-      impactOfFailure: form.impactOfFailure,
-      checkpointText: form.checkpointText?.trim() || 'Audit Checkpoint',
-      standardParameter: form.standardParameter?.trim() || 'Visual Check',
-      parameterType: form.parameterType || 'OK_NG',
-      minimum: form.minimum,
-      maximum: form.maximum,
-      unit: form.unit || '',
-      applicableLines: form.applicableLines || ['ALL'],
-      criticality: form.criticality || 'Medium',
-      isCritical: form.criticality === 'Critical',
-      active: form.active !== false,
-      createdAt: now,
-      updatedAt: now,
-    };
-
     const current = StorageEngine.getCheckpoints();
-    const updatedAll = [newCk, ...current];
-    StorageEngine.saveCheckpoints(updatedAll);
-    reload();
 
-    // Auto-save to Supabase
-    try {
-      await SupabaseBackendClient.saveCheckpoints(updatedAll);
-    } catch (dumpErr) {
-      console.warn('Auto-save to Supabase notice:', dumpErr);
+    if (editingCheckpoint) {
+      const selectedSec = sections.find((s) => s.id === form.sectionId);
+      const selectedSub = subSections.find((ss) => ss.id === form.subSectionId);
+      const selectedLine = lines.find((l) => l.id === form.lineId);
+
+      const updated = current.map((c) => {
+        if (c.id === editingCheckpoint.id) {
+          return {
+            ...c,
+            ...form,
+            id: c.id,
+            sectionName: selectedSec?.name || form.sectionName || form.sectionId || c.sectionName,
+            subSectionName: selectedSub?.name || form.subSectionName || form.subSectionId || c.subSectionName,
+            lineName: selectedLine?.name || form.lineName || form.lineId || c.lineName,
+            criticality: form.criticality || c.criticality || 'Medium',
+            isCritical: (form.criticality || '').toLowerCase() === 'critical',
+            updatedAt: now,
+          } as Checkpoint;
+        }
+        return c;
+      });
+
+      StorageEngine.saveCheckpoints(updated);
+      setCheckpoints(updated);
+      setEditingCheckpoint(null);
+
+      try {
+        await SupabaseBackendClient.saveCheckpoints(updated);
+      } catch (err) {
+        console.warn('Update checkpoint sync notice:', err);
+      }
+    } else {
+      const selectedSec = sections.find((s) => s.id === form.sectionId);
+      const selectedSub = subSections.find((ss) => ss.id === form.subSectionId);
+      const selectedLine = lines.find((l) => l.id === form.lineId);
+
+      const newCk: Checkpoint = {
+        id: `CK-MANUAL-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`,
+        srNo: form.srNo || (checkpoints.length + 1),
+        sectionId: form.sectionId || 'GR',
+        sectionName: selectedSec?.name || form.sectionName || form.sectionId || 'Grinding',
+        subSectionId: form.subSectionId || 'General',
+        subSectionName: selectedSub?.name || form.subSectionName || form.subSectionId || 'General',
+        lineId: form.lineId || 'ALL',
+        lineName: selectedLine?.name || form.lineName || form.lineId || 'ALL',
+        equipmentId: form.equipmentId || '',
+        equipmentName: form.equipmentName || '',
+        componentId: form.componentId || '',
+        componentName: form.componentName?.trim() || 'Component',
+        componentReferencePhotoUrl: form.componentReferencePhotoUrl,
+        functionOfComponent: form.functionOfComponent,
+        whatImpactIfThisPartGetsFail: form.whatImpactIfThisPartGetsFail,
+        functionOfPart: form.functionOfPart,
+        partFailureType: form.partFailureType,
+        impactOfFailure: form.impactOfFailure,
+        checkpointText: form.checkpointText?.trim() || 'Audit Checkpoint',
+        standardParameter: form.standardParameter?.trim() || 'Visual Check',
+        parameterType: form.parameterType || 'OK_NG',
+        minimum: form.minimum,
+        maximum: form.maximum,
+        unit: form.unit || '',
+        applicableLines: form.applicableLines || ['ALL'],
+        applicableSubSections: form.applicableSubSections || ['ALL'],
+        criticality: form.criticality || 'Medium',
+        isCritical: (form.criticality || '').toLowerCase() === 'critical',
+        active: form.active !== false,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      const updatedAll = [newCk, ...current];
+      StorageEngine.saveCheckpoints(updatedAll);
+      reload();
+      setShowManualAdd(false);
+
+      // Auto-save to Supabase
+      try {
+        await SupabaseBackendClient.saveCheckpoints(updatedAll);
+      } catch (dumpErr) {
+        console.warn('Auto-save to Supabase notice:', dumpErr);
+      }
     }
   };
-
 
   // ── Toggle active ─────────────────────────────────────────────────────────
   const handleToggleActive = async (ck: Checkpoint) => {
@@ -700,18 +762,68 @@ export const AuditPointSetupView: React.FC<AuditPointSetupViewProps> = ({ isAdmi
     }
   };
 
-  // ── Delete Checkpoint ───────────────────────────────────────────────────────
+  // ── Delete Single Checkpoint ──────────────────────────────────────────────
   const handleDeleteCheckpoint = async (ck: Checkpoint) => {
     if (!confirm(`Are you sure you want to permanently delete checkpoint:\n"${ck.checkpointText}"?`)) return;
     const current = StorageEngine.getCheckpoints();
     const updated = current.filter((c) => c.id !== ck.id);
     StorageEngine.saveCheckpoints(updated);
     setCheckpoints(updated);
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.delete(ck.id);
+      return next;
+    });
     try {
       await SupabaseBackendClient.saveCheckpoints(updated);
     } catch (err) {
       console.warn('Delete checkpoint sync notice:', err);
     }
+  };
+
+  // ── Batch Delete Checkpoints ──────────────────────────────────────────────
+  const handleBatchDelete = async () => {
+    if (selectedIds.size === 0) return;
+    if (
+      !confirm(
+        `Are you sure you want to permanently delete ${selectedIds.size} selected checkpoint(s)? This action cannot be undone.`
+      )
+    ) {
+      return;
+    }
+
+    const current = StorageEngine.getCheckpoints();
+    const updated = current.filter((c) => !selectedIds.has(c.id));
+    StorageEngine.saveCheckpoints(updated);
+    setCheckpoints(updated);
+    setSelectedIds(new Set());
+
+    try {
+      await SupabaseBackendClient.saveCheckpoints(updated);
+      alert(`✓ Successfully deleted ${selectedIds.size} checkpoints.`);
+    } catch (err) {
+      console.warn('Batch delete sync notice:', err);
+    }
+  };
+
+  const toggleSelectAll = (visibleItems: Checkpoint[]) => {
+    if (selectedIds.size === visibleItems.length && visibleItems.length > 0) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(visibleItems.map((c) => c.id)));
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
   };
 
   // ── Filtered table ────────────────────────────────────────────────────────
@@ -893,6 +1005,37 @@ export const AuditPointSetupView: React.FC<AuditPointSetupViewProps> = ({ isAdmi
         </span>
       </div>
 
+      {/* ── Batch Selection Toolbar ────────────────────────────────────────── */}
+      {selectedIds.size > 0 && (
+        <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-sm animate-fade-in">
+          <div className="flex items-center space-x-2">
+            <span className="font-extrabold text-sm text-indigo-950">
+              {selectedIds.size} point{selectedIds.size > 1 ? 's' : ''} selected
+            </span>
+            <span className="text-xs text-indigo-600 font-semibold">
+              (out of {filtered.length} visible points)
+            </span>
+          </div>
+          <div className="flex items-center space-x-2">
+            <button
+              type="button"
+              onClick={() => setSelectedIds(new Set())}
+              className="px-3 py-1.5 rounded-xl bg-white border border-slate-300 text-slate-700 text-xs font-bold hover:bg-slate-50 transition"
+            >
+              Clear Selection
+            </button>
+            <button
+              type="button"
+              onClick={handleBatchDelete}
+              className="px-4 py-1.5 rounded-xl bg-rose-600 text-white text-xs font-extrabold hover:bg-rose-700 transition flex items-center space-x-1.5 shadow-sm cursor-pointer"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Delete Selected ({selectedIds.size})</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── Checkpoint Master Table ────────────────────────────────────────── */}
       {checkpoints.length === 0 ? (
         <div className="bg-white p-12 rounded-3xl border border-slate-200/90 shadow-xl shadow-slate-300/40 text-center space-y-4">
@@ -921,6 +1064,15 @@ export const AuditPointSetupView: React.FC<AuditPointSetupViewProps> = ({ isAdmi
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-100/90 text-slate-700 font-extrabold text-xs uppercase tracking-wider border-b border-slate-200">
+                  <th className="px-3 py-3.5 w-10 text-center">
+                    <input
+                      type="checkbox"
+                      checked={filtered.length > 0 && selectedIds.size === filtered.length}
+                      onChange={() => toggleSelectAll(filtered)}
+                      className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                      title="Select / Deselect All Visible"
+                    />
+                  </th>
                   <th className="px-4 py-3.5 w-8 text-center">#</th>
                   <th className="px-4 py-3.5 w-24">Section</th>
                   <th className="px-4 py-3.5 w-24">Sub Section</th>
@@ -932,15 +1084,23 @@ export const AuditPointSetupView: React.FC<AuditPointSetupViewProps> = ({ isAdmi
                   <th className="px-4 py-3.5 w-14">Unit</th>
                   <th className="px-4 py-3.5 w-20 text-center">Criticality</th>
                   <th className="px-4 py-3.5 w-36">Applicable Lines</th>
-                  <th className="px-4 py-3.5 w-24 text-center">Actions</th>
+                  <th className="px-4 py-3.5 w-28 text-center">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-800">
                 {filtered.map((ck, idx) => (
                   <tr
                     key={ck.id}
-                    className={`transition ${ck.active ? 'hover:bg-slate-50/80' : 'opacity-50 bg-slate-50/60'}`}
+                    className={`transition ${selectedIds.has(ck.id) ? 'bg-indigo-50/70' : ck.active ? 'hover:bg-slate-50/80' : 'opacity-50 bg-slate-50/60'}`}
                   >
+                    <td className="px-3 py-3.5 text-center">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(ck.id)}
+                        onChange={() => toggleSelect(ck.id)}
+                        className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                      />
+                    </td>
                     <td className="px-4 py-3.5 text-center text-slate-400 font-mono text-[11px]">{idx + 1}</td>
                     <td className="px-4 py-3.5 font-bold text-indigo-700">{ck.sectionName || ck.sectionId}</td>
                     <td className="px-4 py-3.5 font-semibold text-slate-700">{ck.subSectionName || ck.subSectionId}</td>
@@ -973,6 +1133,13 @@ export const AuditPointSetupView: React.FC<AuditPointSetupViewProps> = ({ isAdmi
                     </td>
                     <td className="px-4 py-3.5 text-center">
                       <div className="flex items-center justify-center space-x-1.5">
+                        <button
+                          onClick={() => setEditingCheckpoint(ck)}
+                          title="Edit Checkpoint Details & Spec"
+                          className="p-1.5 rounded-xl transition border bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100 hover:text-indigo-900 cursor-pointer"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
                         <button
                           onClick={() => handleToggleActive(ck)}
                           title={ck.active ? 'Deactivate (removes from future audits)' : 'Activate'}
@@ -1010,14 +1177,19 @@ export const AuditPointSetupView: React.FC<AuditPointSetupViewProps> = ({ isAdmi
         />
       )}
 
-      {/* ── Manual Add Modal ─────────────────────────────────────────────────── */}
-      {showManualAdd && typeof window !== 'undefined' && (
-        <ManualAddModal
+      {/* ── Manual Add / Edit Modal ──────────────────────────────────────────── */}
+      {(showManualAdd || editingCheckpoint) && typeof window !== 'undefined' && (
+        <CheckpointFormModal
+          initialData={editingCheckpoint}
+          title={editingCheckpoint ? 'EDIT AUDIT POINT' : 'ADD AUDIT POINT MANUALLY'}
           sections={sections}
           subSections={subSections}
           lines={lines}
-          onClose={() => setShowManualAdd(false)}
-          onSave={handleManualSave}
+          onClose={() => {
+            setShowManualAdd(false);
+            setEditingCheckpoint(null);
+          }}
+          onSave={handleSaveCheckpoint}
         />
       )}
     </div>

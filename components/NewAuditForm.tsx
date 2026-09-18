@@ -232,7 +232,52 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
       if (!al || al.length === 0) return true;                              // no restriction → applies to all
       if (al.some((l) => l.trim().toLowerCase() === 'all')) return true;   // ALL → applies everywhere
       if (!targetLineName) return true;                                      // no line selected → show all
-      return al.some((l) => l.trim().toLowerCase() === targetLineName);
+      return al.some((l) => {
+        const clean = l.trim().toLowerCase();
+        return (
+          clean === targetLineName ||
+          clean.includes(targetLineName) ||
+          targetLineName.includes(clean)
+        );
+      });
+    };
+
+    // applicableSubSections helper: checkpoint applies to selected sub-section?
+    const subSectionApplies = (ck: Checkpoint): boolean => {
+      if (!subSectionId || subSectionId === 'ALL') return true;
+      const targetSub = subSectionId.trim().toLowerCase();
+      const selectedSub = allSubSections.find((ss) => ss.id === subSectionId);
+      const targetSubName = (selectedSub?.name || '').trim().toLowerCase();
+
+      // 1. Check applicableSubSections array if present
+      if (ck.applicableSubSections && ck.applicableSubSections.length > 0) {
+        if (ck.applicableSubSections.some((s) => s.trim().toLowerCase() === 'all')) return true;
+        if (
+          ck.applicableSubSections.some((s) => {
+            const clean = s.trim().toLowerCase();
+            return (
+              clean === targetSub ||
+              clean === targetSubName ||
+              clean.includes(targetSub) ||
+              targetSub.includes(clean)
+            );
+          })
+        ) {
+          return true;
+        }
+      }
+
+      // 2. Check subSectionId / subSectionName comma-separated strings
+      const rawSub = `${ck.subSectionId || ''},${ck.subSectionName || ''}`.toLowerCase();
+      const subList = rawSub.split(/[,;]+/).map((s) => s.trim()).filter(Boolean);
+      if (subList.length === 0 || subList.includes('all')) return true;
+      return subList.some(
+        (s) =>
+          s === targetSub ||
+          s === targetSubName ||
+          s.includes(targetSub) ||
+          targetSub.includes(s)
+      );
     };
 
     // 1. Primary strict match
@@ -254,25 +299,10 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
         (targetSecId.startsWith('ct') && (ckSecId.includes('cut') || ckSecName.includes('cut')));
 
       if (!secMatch) return false;
-
-      // Sub-Section match
-      if (subSectionId && subSectionId !== 'ALL') {
-        const targetSub = subSectionId.toLowerCase().trim();
-        const ckSubId = (ck.subSectionId || '').toLowerCase().trim();
-        const ckSubName = (ck.subSectionName || '').toLowerCase().trim();
-
-        if (ckSubId === 'all' || ckSubName === 'all' || !ckSubId) {
-          // sub-section pass — now check line
-        } else if (!(ckSubId === targetSub || ckSubName === targetSub || ckSubId.includes(targetSub) || ckSubName.includes(targetSub))) {
-          return false;
-        }
-      }
-
-      // Line / applicableLines match
-      return lineApplies(ck);
+      return subSectionApplies(ck) && lineApplies(ck);
     });
 
-    // 2. Fallback: match by section keyword alone (but still respect applicableLines)
+    // 2. Fallback: match by section keyword + subsection + applicableLines
     if (matched.length === 0) {
       matched = allCheckpoints.filter((ck) => {
         if (!ck.active) return false;
@@ -287,7 +317,7 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
           (targetSecId.startsWith('ws') && (ckSecId.includes('wash') || ckSecName.includes('wash'))) ||
           (targetSecId.startsWith('tp') && (ckSecId.includes('temp') || ckSecName.includes('temp'))) ||
           (targetSecId.startsWith('ct') && (ckSecId.includes('cut') || ckSecName.includes('cut')));
-        return secKw && lineApplies(ck);
+        return secKw && subSectionApplies(ck) && lineApplies(ck);
       });
     }
 
@@ -469,6 +499,81 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
             updated[index] = { ...updated[index], photoUrl: compressedBase64 };
             return updated;
           });
+        }
+      };
+      img.src = rawDataUrl;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleUploadComponentReferencePhoto = (
+    componentName: string,
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const rawDataUrl = event.target?.result as string;
+      if (!rawDataUrl) return;
+
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_DIM = 800;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height && width > MAX_DIM) {
+          height = Math.round((height * MAX_DIM) / width);
+          width = MAX_DIM;
+        } else if (height > MAX_DIM) {
+          width = Math.round((width * MAX_DIM) / height);
+          height = MAX_DIM;
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = 'high';
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressedPhoto = canvas.toDataURL('image/jpeg', 0.55);
+
+          // 1. Update in allCheckpoints state
+          const updatedCheckpoints = allCheckpoints.map((ck) => {
+            if (ck.componentName?.toLowerCase().trim() === componentName.toLowerCase().trim()) {
+              return { ...ck, componentReferencePhotoUrl: compressedPhoto, updatedAt: new Date().toISOString() };
+            }
+            return ck;
+          });
+          setAllCheckpoints(updatedCheckpoints);
+
+          // 2. Update in current form state (checkpointStates)
+          setCheckpointStates((prev) =>
+            prev.map((cs) => {
+              if (cs.component.name?.toLowerCase().trim() === componentName.toLowerCase().trim()) {
+                return {
+                  ...cs,
+                  component: { ...cs.component, referencePhotoUrl: compressedPhoto },
+                  checkpoint: { ...cs.checkpoint, componentReferencePhotoUrl: compressedPhoto },
+                };
+              }
+              return cs;
+            })
+          );
+
+          // 3. Persist locally permanently
+          StorageEngine.saveCheckpoints(updatedCheckpoints);
+
+          // 4. Persist to Supabase backend permanently
+          SupabaseBackendClient.saveCheckpoints(updatedCheckpoints).catch((err) =>
+            console.warn('[Admin SOP photo cloud sync notice]:', err)
+          );
+
+          alert(`Standard SOP photo permanently saved for "${componentName}"!`);
         }
       };
       img.src = rawDataUrl;
@@ -703,29 +808,48 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
         // Update sync badge silently if the modal is still open
         setLastSubmittedAudit((prev) => prev ? { ...prev, syncResult } : prev);
 
-        // Dispatch email notification from process.qa@borosil.com if there are recipients
-        const toList = Array.from(new Set(actions.map((a) => a.assignedEmail).filter(Boolean)));
-        const ccList = Array.from(
-          new Set(
-            actions
-              .map((a) => a.ccEmail)
-              .filter(Boolean)
-              .flatMap((c) => (c || '').split(',').map((x) => x.trim()).filter(Boolean))
-          )
-        );
+        // Dispatch department-specific email notifications from process.qa@borosil.com
+        if (actions.length > 0) {
+          const deptActionMap = new Map<string, ActionItem[]>();
+          actions.forEach((act) => {
+            const dept = act.responsibleDepartment?.trim() || 'General Engineering';
+            if (!deptActionMap.has(dept)) {
+              deptActionMap.set(dept, []);
+            }
+            deptActionMap.get(dept)!.push(act);
+          });
 
-        if (toList.length > 0 || ccList.length > 0) {
-          fetch('/api/send-email', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              to: toList,
-              cc: ccList,
-              header,
-              results,
-              actions,
-            }),
-          }).catch((mailErr) => console.warn('[Background email dispatch notice]:', mailErr));
+          // Send an email to each assigned department with ONLY their specific points
+          for (const [dept, deptActions] of deptActionMap.entries()) {
+            const deptToList = Array.from(new Set(deptActions.map((a) => a.assignedEmail).filter(Boolean)));
+            const deptCcList = Array.from(
+              new Set(
+                deptActions
+                  .map((a) => a.ccEmail)
+                  .filter(Boolean)
+                  .flatMap((c) => (c || '').split(',').map((x) => x.trim()).filter(Boolean))
+              )
+            );
+
+            const deptResults = results.filter((r) =>
+              deptActions.some((a) => a.checkpointText === r.checkpointText || a.componentName === r.componentName)
+            );
+
+            if (deptToList.length > 0 || deptCcList.length > 0) {
+              fetch('/api/send-email', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  to: deptToList,
+                  cc: deptCcList,
+                  department: dept,
+                  header,
+                  results: deptResults.length > 0 ? deptResults : undefined,
+                  actions: deptActions,
+                }),
+              }).catch((mailErr) => console.warn(`[Background email dispatch notice for ${dept}]:`, mailErr));
+            }
+          }
         }
       } catch (err: any) {
         console.log('[Background sync notice]:', err?.message);
@@ -1040,7 +1164,20 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
                     </div>
 
                     {/* Right Header: Component Reference Photo & Pass Rate */}
-                    <div className="flex items-center space-x-3 text-xs shrink-0">
+                    <div className="flex flex-wrap items-center gap-2 text-xs shrink-0">
+                      {currentUser?.role === 'Admin' && (
+                        <label className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-extrabold transition border border-indigo-200/90 shadow-xs cursor-pointer">
+                          <Upload className="w-3.5 h-3.5 text-indigo-600" />
+                          <span>Upload SOP Photo</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => handleUploadComponentReferencePhoto(group.componentName, e)}
+                          />
+                        </label>
+                      )}
+
                       <button
                         type="button"
                         onClick={() => {

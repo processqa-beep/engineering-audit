@@ -88,9 +88,19 @@ function identityKey(row: Partial<Checkpoint>): string {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// PARSE APPLICABLE LINES
+// PARSE APPLICABLE LINES & SUB-SECTIONS
 // ──────────────────────────────────────────────────────────────────────────────
 function parseApplicableLines(raw: string | undefined): string[] {
+  if (!raw) return ['ALL'];
+  const trimmed = raw.toString().trim();
+  if (!trimmed || trimmed.toLowerCase() === 'all') return ['ALL'];
+  return trimmed
+    .split(/[,;]+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
+function parseApplicableSubSections(raw: string | undefined): string[] {
   if (!raw) return ['ALL'];
   const trimmed = raw.toString().trim();
   if (!trimmed || trimmed.toLowerCase() === 'all') return ['ALL'];
@@ -193,6 +203,7 @@ export async function parseCheckpointExcel(
     const min = parseNum(minRaw);
     const max = parseNum(maxRaw);
     const applicableLines = parseApplicableLines(applicableLinesRaw || lineMachine);
+    const applicableSubSections = parseApplicableSubSections(subSection);
     const active = !activeRaw || activeRaw.toLowerCase() === 'yes' || activeRaw.toLowerCase() === 'true';
 
     // Validate required fields
@@ -204,8 +215,9 @@ export async function parseCheckpointExcel(
     const partial: Partial<Checkpoint> = {
       sectionId: section,
       sectionName: section,
-      subSectionId: subSection || 'General',
-      subSectionName: subSection || 'General',
+      subSectionId: subSection || 'ALL',
+      subSectionName: subSection || 'ALL',
+      applicableSubSections,
       lineId: lineMachine || 'ALL',
       lineName: lineMachine || 'ALL',
       componentName,

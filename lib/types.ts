@@ -114,8 +114,9 @@ export interface Checkpoint {
   maximum?: number;
   unit?: string;
 
-  // Applicable Lines: e.g. ['BL#1','BL#2'] or ['ALL']
+  // Applicable Lines & Sub-Sections: e.g. ['BL#1','BL#2'] or ['ALL']
   applicableLines: string[];
+  applicableSubSections?: string[]; // e.g. ['M1', 'M2'] or ['ALL']
 
   // Classification
   criticality: string;     // 'Critical' | 'Major' | 'Minor' — open string so user can extend

@@ -88,7 +88,7 @@ const INSTRUCTIONS = [
   ['COLUMN GUIDE:'],
   ['Sr No.', 'Sequential number (auto-assigned on import if blank).'],
   ['Section', 'Engineering area: Grinding, Tempering, Arc Lehr, Cutting, Washing, Robot, Furnace, Packing, Utilities, Conveyor, Compressor, etc.'],
-  ['Sub Section', 'Sub-area: M1, M1A, M2, Furnace, Lehr, Cutting Machine, KUKA Robot, etc.'],
+  ['Sub Section', 'Sub-area: e.g. M1, M2, Furnace, Lehr or comma-separated "M1, M2" or "ALL" for all sub-sections.'],
   ['Line / Machine', 'Specific machine: BL#1, BL#2, TL#1, SG#2 Robot-1, etc. (for reference only — use Applicable Lines for multi-machine)'],
   ['Component Name', 'Part being inspected: Vacuum Belt, Heating Element, Drive Motor, etc.'],
   ['Function of Component', 'What this part does.'],
