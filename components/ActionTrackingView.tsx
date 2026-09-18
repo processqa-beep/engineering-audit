@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   AlertTriangle,
   Clock,
@@ -65,6 +66,18 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
         .catch((err) => console.warn('Action cloud fetch notice:', err));
     }
   }, []);
+
+  // Lock body scroll when popup/modal is open so page behind doesn't scroll
+  useEffect(() => {
+    if (editingAction || activePhotoModal) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [editingAction, activePhotoModal]);
 
   // Check if current user is allowed to edit this specific action item
   const canUserEditAction = (act: ActionItem): boolean => {
@@ -556,43 +569,69 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
       </div>
 
       {/* Full-Screen Photo Modal */}
-      {activePhotoModal && (
+      {activePhotoModal && typeof window !== 'undefined' && createPortal(
         <div
-          className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4"
+          className="fixed inset-0 z-[9999] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 overflow-hidden"
           onClick={() => setActivePhotoModal(null)}
         >
-          <div className="relative max-w-3xl max-h-[90vh] p-2 bg-white rounded-2xl shadow-2xl">
-            <img src={activePhotoModal} alt="Enlarged" className="max-w-full max-h-[85vh] object-contain rounded-xl" />
+          <div className="relative max-w-3xl max-h-[90vh] p-2 bg-white rounded-2xl shadow-2xl animate-fade-in" onClick={(e) => e.stopPropagation()}>
+            <img src={activePhotoModal} alt="Enlarged finding / evidence" className="max-w-full max-h-[82vh] object-contain rounded-xl" />
             <button
               onClick={() => setActivePhotoModal(null)}
-              className="absolute top-4 right-4 bg-slate-900/80 text-white p-1.5 rounded-full hover:bg-slate-900"
+              className="absolute top-4 right-4 bg-slate-900/80 hover:bg-slate-900 text-white p-2 rounded-full shadow-lg transition"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ─────────────────────────────────────────────────────────────────── */}
-      {/* UPDATE / CLOSURE / RCA MODAL */}
+      {/* UPDATE / CLOSURE / RCA MODAL (CENTERED POPUP, ZERO PAGE SCROLL) */}
       {/* ─────────────────────────────────────────────────────────────────── */}
-      {editingAction && (
-        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl animate-fade-in border border-slate-200 my-auto">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-              <h3 className="text-base font-extrabold text-slate-900 flex items-center space-x-2">
-                <Wrench className="w-5 h-5 text-indigo-600" />
-                <span>Action &amp; RCA Closure ({editingAction.actionId})</span>
-              </h3>
+      {editingAction && typeof window !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[9999] bg-slate-950/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-hidden animate-fade-in">
+          <div className="bg-white rounded-3xl max-w-xl w-full max-h-[88vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
+            {/* Sticky Header */}
+            <div className="bg-white px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
+              <div className="space-y-0.5">
+                <div className="flex items-center space-x-2">
+                  <span className="font-mono text-xs font-black text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded-lg border border-indigo-200">
+                    {editingAction.actionId}
+                  </span>
+                  <span className="text-[10px] font-bold text-slate-400">
+                    Audit #{editingAction.auditId}
+                  </span>
+                </div>
+                <h3 className="text-base font-extrabold text-slate-900 flex items-center space-x-2">
+                  <Wrench className="w-4 h-4 text-indigo-600 shrink-0" />
+                  <span className="truncate">{editingAction.componentName}</span>
+                </h3>
+              </div>
               <button
+                type="button"
                 onClick={() => setEditingAction(null)}
-                className="text-slate-400 hover:text-slate-700"
+                className="p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="space-y-3.5 text-xs">
+            {/* Scrollable Modal Body */}
+            <div className="p-6 overflow-y-auto space-y-4 text-xs flex-1">
+              {/* Deviation Details Summary */}
+              <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 space-y-1">
+                <div className="font-bold text-slate-700">
+                  <span className="text-slate-400 font-semibold">Checkpoint: </span>
+                  {editingAction.checkpointText}
+                </div>
+                <div className="font-bold text-rose-700">
+                  <span className="text-slate-400 font-semibold">Finding: </span>
+                  {editingAction.observation}
+                </div>
+              </div>
+
               {/* Status & TCD in 2 Columns */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
@@ -600,7 +639,7 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
                   <select
                     value={newStatus}
                     onChange={(e) => setNewStatus(e.target.value as any)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-indigo-500"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-indigo-500 shadow-xs"
                   >
                     <option value="Open">Open</option>
                     <option value="In Progress">In Progress</option>
@@ -615,12 +654,12 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
                     type="date"
                     value={newTcd}
                     onChange={(e) => setNewTcd(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-indigo-500"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-indigo-500 shadow-xs"
                   />
                 </div>
               </div>
 
-              {/* Root Cause Analysis */}
+              {/* Root Cause Analysis (RCA) */}
               <div>
                 <label className="text-slate-700 font-bold block mb-1">
                   Root Cause Analysis (RCA) <span className="text-slate-400 font-normal">(Why did the failure occur?)</span>
@@ -630,21 +669,21 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
                   placeholder="Explain the root mechanism or reason for deviation..."
                   value={newRootCause}
                   onChange={(e) => setNewRootCause(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 font-semibold focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 font-semibold focus:outline-none focus:border-indigo-500 transition shadow-xs"
                 />
               </div>
 
-              {/* Corrective Action */}
+              {/* Corrective Action Taken */}
               <div>
                 <label className="text-slate-700 font-bold block mb-1">
-                  Corrective Action Taken <span className="text-slate-400 font-normal">(Immediate fix)</span>
+                  Corrective Action Taken <span className="text-slate-400 font-normal">(Immediate repair / fix)</span>
                 </label>
                 <textarea
                   rows={2}
                   placeholder="Immediate repair, replacement, or calibration completed..."
                   value={newCorrectiveAction}
                   onChange={(e) => setNewCorrectiveAction(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 font-semibold focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 font-semibold focus:outline-none focus:border-indigo-500 transition shadow-xs"
                 />
               </div>
 
@@ -658,7 +697,7 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
                   placeholder="PM schedule update, design modification, or SOP training..."
                   value={newPreventiveAction}
                   onChange={(e) => setNewPreventiveAction(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 font-semibold focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 font-semibold focus:outline-none focus:border-indigo-500 transition shadow-xs"
                 />
               </div>
 
@@ -673,12 +712,13 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
                       <img
                         src={newClosurePhoto}
                         alt="After evidence"
-                        className="w-16 h-16 object-cover rounded-xl border border-emerald-300 shadow-xs"
+                        className="w-16 h-16 object-cover rounded-xl border-2 border-emerald-400 shadow-sm"
                       />
                       <button
                         type="button"
                         onClick={() => setNewClosurePhoto('')}
                         className="absolute -top-1.5 -right-1.5 bg-rose-600 text-white rounded-full p-0.5 shadow hover:bg-rose-700"
+                        title="Remove Photo"
                       >
                         <X className="w-3.5 h-3.5" />
                       </button>
@@ -691,7 +731,7 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
 
                   <div className="flex flex-wrap items-center gap-2">
                     {/* Camera */}
-                    <label className="cursor-pointer inline-flex items-center space-x-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-3 py-1.5 rounded-xl text-xs font-bold transition">
+                    <label className="cursor-pointer inline-flex items-center space-x-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-3 py-1.5 rounded-xl text-xs font-extrabold transition shadow-xs">
                       <Camera className="w-3.5 h-3.5" />
                       <span>Camera</span>
                       <input
@@ -704,7 +744,7 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
                     </label>
 
                     {/* Gallery */}
-                    <label className="cursor-pointer inline-flex items-center space-x-1 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 px-3 py-1.5 rounded-xl text-xs font-bold transition">
+                    <label className="cursor-pointer inline-flex items-center space-x-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 px-3 py-1.5 rounded-xl text-xs font-extrabold transition shadow-xs">
                       <ImageIcon className="w-3.5 h-3.5" />
                       <span>Gallery / File</span>
                       <input
@@ -726,16 +766,17 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
                   placeholder="Enter SAP work order number, spares consumed, or team notes..."
                   value={newRemarks}
                   onChange={(e) => setNewRemarks(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 font-semibold focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 font-semibold focus:outline-none focus:border-indigo-500 transition shadow-xs"
                 />
               </div>
             </div>
 
-            <div className="flex items-center justify-end space-x-2 pt-3 border-t border-slate-100">
+            {/* Sticky Footer */}
+            <div className="bg-slate-50 px-6 py-3.5 border-t border-slate-100 flex items-center justify-end space-x-2.5 shrink-0">
               <button
                 type="button"
                 onClick={() => setEditingAction(null)}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition"
+                className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-xs font-bold transition"
               >
                 Cancel
               </button>
@@ -743,14 +784,15 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
                 type="button"
                 disabled={saving}
                 onClick={handleSaveStatusUpdate}
-                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-extrabold transition shadow-md shadow-indigo-500/20 disabled:opacity-50 flex items-center space-x-1.5"
+                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-extrabold transition shadow-md shadow-indigo-500/20 disabled:opacity-50 flex items-center space-x-1.5 cursor-pointer"
               >
                 <FileCheck2 className="w-4 h-4" />
                 <span>{saving ? 'Saving...' : 'Save & Update Action'}</span>
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
