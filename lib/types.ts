@@ -204,6 +204,7 @@ export interface AuditHeader {
   equipmentName: string;
   auditorId: string;
   auditorName: string;
+  auditorEmail?: string;
   totalCheckpoints: number;
   okCount: number;
   ngCount: number;
@@ -247,6 +248,7 @@ export interface AuditResult {
   photoUrl?: string;
   isCritical: boolean;
   auditor: string;
+  auditorEmail?: string;
   timestamp: string;
 }
 
@@ -268,6 +270,7 @@ export interface ActionItem {
   responsiblePerson: string;
   responsibleDepartment?: string;
   assignedEmail?: string;      // direct email of the assigned person
+  auditorEmail?: string;       // auditor email to receive deviation copies
   ccPerson?: string;           // CC person name (HOD/Process Owner)
   ccEmail?: string;            // CC email
   targetDate: string;

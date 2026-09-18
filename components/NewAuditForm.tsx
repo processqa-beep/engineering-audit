@@ -73,6 +73,58 @@ interface ComponentGroup {
   items: { state: CheckpointState; originalIndex: number }[];
 }
 
+export function isNumericCheckpoint(ck: Checkpoint): boolean {
+  if (ck.parameterType === 'NUMBER' || ck.parameterType === 'PERCENTAGE') return true;
+  if (ck.minimum !== undefined && ck.minimum !== null && !isNaN(ck.minimum)) return true;
+  if (ck.maximum !== undefined && ck.maximum !== null && !isNaN(ck.maximum)) return true;
+  const sp = (ck.standardParameter || '').trim();
+  if (/^[-+]?\d*\.?\d+\s*(?:[-–—]|to)\s*[-+]?\d*\.?\d+/i.test(sp)) return true;
+  if (/^[<>]=?\s*[-+]?\d*\.?\d+/i.test(sp)) return true;
+  if (/^±\s*\d*\.?\d+/i.test(sp)) return true;
+  return false;
+}
+
+export function evaluateNumericStatus(ck: Checkpoint, val: string): StatusType | null {
+  const trimmed = (val || '').trim();
+  if (!trimmed) return null;
+  const num = parseFloat(trimmed);
+  if (isNaN(num)) return null;
+
+  let min = ck.minimum;
+  let max = ck.maximum;
+
+  // Fallback: extract min / max from standardParameter if not set
+  if (min === undefined && max === undefined && ck.standardParameter) {
+    const sp = ck.standardParameter.trim();
+    const rangeMatch = sp.match(/^([-+]?\d*\.?\d+)\s*(?:[-–—]|to)\s*([-+]?\d*\.?\d+)/i);
+    if (rangeMatch) {
+      min = parseFloat(rangeMatch[1]);
+      max = parseFloat(rangeMatch[2]);
+    } else {
+      const gteMatch = sp.match(/^>=\s*([-+]?\d*\.?\d+)/);
+      if (gteMatch) min = parseFloat(gteMatch[1]);
+      const lteMatch = sp.match(/^<=\s*([-+]?\d*\.?\d+)/);
+      if (lteMatch) max = parseFloat(lteMatch[1]);
+      const gtMatch = sp.match(/^>\s*([-+]?\d*\.?\d+)/);
+      if (gtMatch) min = parseFloat(gtMatch[1]) + 0.0001;
+      const ltMatch = sp.match(/^<\s*([-+]?\d*\.?\d+)/);
+      if (ltMatch) max = parseFloat(ltMatch[1]) - 0.0001;
+    }
+  }
+
+  if (min !== undefined && max !== undefined) {
+    return num >= min && num <= max ? 'OK' : 'NG';
+  }
+  if (min !== undefined) {
+    return num >= min ? 'OK' : 'NG';
+  }
+  if (max !== undefined) {
+    return num <= max ? 'OK' : 'NG';
+  }
+
+  return null;
+}
+
 export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel, onNavigate, initialDraft, currentUser }) => {
   const [sections, setSections] = useState<Section[]>(() => StorageEngine.getSections());
   const [allSubSections, setAllSubSections] = useState<SubSection[]>(() => StorageEngine.getSubSections());
@@ -399,14 +451,11 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
       const item = { ...updated[index] };
       item.actualValue = val;
 
-      const ck = item.checkpoint;
-      if (ck.parameterType === 'NUMBER' || ck.parameterType === 'PERCENTAGE') {
-        const num = parseFloat(val);
-        if (!isNaN(num)) {
-          if (ck.minimum !== undefined && ck.maximum !== undefined) {
-            item.status = num >= ck.minimum && num <= ck.maximum ? 'OK' : 'NG';
-          }
-        }
+      const autoStatus = evaluateNumericStatus(item.checkpoint, val);
+      if (autoStatus) {
+        item.status = autoStatus;
+      } else if (!val.trim()) {
+        item.status = '' as any;
       }
       updated[index] = item;
       return updated;
@@ -416,7 +465,13 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
   const handleStatusChange = (index: number, newStatus: StatusType) => {
     setCheckpointStates((prev) => {
       const updated = [...prev];
-      updated[index] = { ...updated[index], status: newStatus };
+      const item = { ...updated[index] };
+      item.status = newStatus;
+      // For text checkpoints, if actualValue is empty or was previous status, keep it in sync
+      if (!isNumericCheckpoint(item.checkpoint) || !item.actualValue) {
+        item.actualValue = newStatus;
+      }
+      updated[index] = item;
       return updated;
     });
   };
@@ -669,10 +724,18 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
     const randNum = Math.floor(1000 + Math.random() * 9000);
     const auditId = `ENG-${dateStr.replace(/-/g, '')}-${cleanLine}-${randNum}`;
 
+    const allEmployeesList = StorageEngine.getEmployees();
+    const allFprList = StorageEngine.getFprMatrix();
+
     const selectedSecObj = sections.find((s) => s.id === sectionId);
     const selectedSubSecObj = allSubSections.find((ss) => ss.id === subSectionId);
     const selectedLineObj = allLines.find((l) => l.id === lineId);
     const selectedEquipObj = allEquipment.find((e) => e.id === equipmentId);
+
+    const auditorEmail =
+      currentUser?.email ||
+      allEmployeesList.find((e: Employee) => e.name.toLowerCase().trim() === auditorName.toLowerCase().trim())?.email ||
+      '';
 
     const header: AuditHeader = {
       auditId,
@@ -686,8 +749,9 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
       lineName: selectedLineObj?.name || lineId || 'Line 1',
       equipmentId,
       equipmentName: selectedEquipObj?.name || equipmentId || 'Line Equipment',
-      auditorId: 'EMP-AUDITOR',
+      auditorId: currentUser?.id || 'EMP-AUDITOR',
       auditorName: auditorName.trim(),
+      auditorEmail: auditorEmail || undefined,
       totalCheckpoints: summary.total,
       okCount: summary.okCount,
       ngCount: summary.ngCount,
@@ -725,13 +789,12 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
       photoUrl: cs.photoUrl,
       isCritical: cs.checkpoint.isCritical || cs.checkpoint.criticality === 'Critical',
       auditor: auditorName.trim(),
+      auditorEmail: auditorEmail || undefined,
       timestamp: now.toISOString(),
     }));
 
     // Auto-create Actions in Action_Tracker for NG findings
     // Look up FPR matrix to resolve email addresses for per-point notifications
-    const allEmployeesList = StorageEngine.getEmployees();
-    const allFprList = StorageEngine.getFprMatrix();
     const actions: ActionItem[] = checkpointStates
       .filter((cs) => cs.status === 'NG')
       .map((cs, idx) => {
@@ -777,6 +840,7 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
           responsiblePerson,
           responsibleDepartment: cs.assignedDept,
           assignedEmail,
+          auditorEmail: auditorEmail || undefined,
           ccPerson,
           ccEmail,
           targetDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().substring(0, 10),
@@ -823,12 +887,13 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
           for (const [dept, deptActions] of deptActionMap.entries()) {
             const deptToList = Array.from(new Set(deptActions.map((a) => a.assignedEmail).filter(Boolean)));
             const deptCcList = Array.from(
-              new Set(
-                deptActions
+              new Set([
+                ...deptActions
                   .map((a) => a.ccEmail)
                   .filter(Boolean)
-                  .flatMap((c) => (c || '').split(',').map((x) => x.trim()).filter(Boolean))
-              )
+                  .flatMap((c) => (c || '').split(',').map((x) => x.trim()).filter(Boolean)),
+                ...(auditorEmail ? [auditorEmail.trim()] : []),
+              ])
             );
 
             const deptResults = results.filter((r) =>
@@ -842,6 +907,7 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
                 body: JSON.stringify({
                   to: deptToList,
                   cc: deptCcList,
+                  auditorEmail: auditorEmail || undefined,
                   department: dept,
                   header,
                   results: deptResults.length > 0 ? deptResults : undefined,
@@ -1311,15 +1377,37 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
                                 </span>
                               </td>
 
-                              {/* 5. Actual Observation */}
+                              {/* 5. Actual Observation / Input Value */}
                               <td className="px-3 py-3">
-                                <input
-                                  type="text"
-                                  placeholder="Value / observation..."
-                                  value={state.actualValue}
-                                  onChange={(e) => handleActualValueChange(originalIndex, e.target.value)}
-                                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 font-semibold focus:bg-white focus:border-indigo-500 focus:outline-none transition"
-                                />
+                                {isNumericCheckpoint(ck) ? (
+                                  <div className="space-y-1">
+                                    <input
+                                      type="number"
+                                      step="any"
+                                      placeholder={ck.unit ? `Value (${ck.unit})...` : 'Enter value...'}
+                                      value={state.actualValue}
+                                      onChange={(e) => handleActualValueChange(originalIndex, e.target.value)}
+                                      className={`w-full border rounded-lg px-2.5 py-1.5 text-xs font-bold focus:bg-white focus:outline-none transition shadow-xs ${
+                                        state.status === 'OK'
+                                          ? 'bg-emerald-50/70 border-emerald-300 text-emerald-900 focus:border-emerald-500'
+                                          : state.status === 'NG'
+                                          ? 'bg-rose-50/70 border-rose-300 text-rose-900 focus:border-rose-500'
+                                          : 'bg-slate-50 border-slate-300 text-slate-900 focus:border-indigo-500'
+                                      }`}
+                                    />
+                                    {ck.unit && (
+                                      <span className="text-[10px] text-slate-400 font-semibold block px-1">
+                                        Unit: {ck.unit}
+                                      </span>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div className="py-1">
+                                    <span className="inline-flex items-center space-x-1 text-[11px] text-slate-400 font-semibold italic bg-slate-50 border border-slate-200/80 px-2 py-1 rounded-md">
+                                      <span>Visual / Standard</span>
+                                    </span>
+                                  </div>
+                                )}
                               </td>
 
                               {/* 6. Status Selector */}
@@ -1327,7 +1415,7 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
                                 <select
                                   value={state.status || ''}
                                   onChange={(e) => handleStatusChange(originalIndex, e.target.value as StatusType)}
-                                  className={`w-full px-2 py-1.5 rounded-lg text-xs font-extrabold focus:outline-none cursor-pointer transition ${
+                                  className={`w-full px-2 py-1.5 rounded-lg text-xs font-extrabold focus:outline-none cursor-pointer transition shadow-xs ${
                                     state.status === 'OK'
                                       ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                                       : state.status === 'NG'

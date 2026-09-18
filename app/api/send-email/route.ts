@@ -422,6 +422,17 @@ export async function POST(req: NextRequest) {
       ccRecipients.push(ADMIN_EMAIL);
     }
 
+    // Automatically CC the logged in Auditor who submitted the audit
+    const auditorMail = (body.auditorEmail || header?.auditorEmail || '').trim();
+    if (auditorMail) {
+      const hasAuditor =
+        toRecipients.some((e: string) => e.toLowerCase() === auditorMail.toLowerCase()) ||
+        ccRecipients.some((e: string) => e.toLowerCase() === auditorMail.toLowerCase());
+      if (!hasAuditor) {
+        ccRecipients.push(auditorMail);
+      }
+    }
+
     const mailOptions: any = {
       from: fromAddress,
       to: toRecipients.join(', '),

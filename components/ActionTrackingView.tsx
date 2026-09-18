@@ -202,7 +202,7 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
       );
       const ccList = Array.from(
         new Set(
-          [editingAction.ccEmail, 'process.qa@borosil.com']
+          [editingAction.ccEmail, editingAction.auditorEmail, 'process.qa@borosil.com']
             .filter(Boolean)
             .flatMap((c) => (c || '').split(',').map((x) => x.trim()).filter(Boolean))
         )
