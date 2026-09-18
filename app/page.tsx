@@ -7,7 +7,6 @@ import { DashboardView } from '../components/DashboardView';
 import { NewAuditForm } from '../components/NewAuditForm';
 import { ActionTrackingView } from '../components/ActionTrackingView';
 import { AuditHistoryView } from '../components/AuditHistoryView';
-import { MailConfigView } from '../components/MailConfigView';
 import { DraftsView } from '../components/DraftsView';
 import { SettingsView } from '../components/SettingsView';
 import { AuditPointSetupView } from '../components/AuditPointSetupView';
@@ -23,7 +22,6 @@ import {
   History,
   Settings,
   CheckSquare,
-  Mail,
   Save,
   FileSpreadsheet,
 } from 'lucide-react';
@@ -87,6 +85,8 @@ export default function Home() {
     return <LoginPage onLoginSuccess={(user) => setCurrentUser(user)} />;
   }
 
+  const isAuditorOrAdmin = currentUser.role === 'Admin' || currentUser.role === 'QA' || currentUser.role === 'Auditor';
+
   return (
     <div className="h-screen max-h-screen overflow-hidden bg-slate-200/60 flex flex-col font-sans text-slate-800">
       {/* Fixed Top Navbar */}
@@ -107,31 +107,36 @@ export default function Home() {
           onTabChange={setActiveTab}
           openActionCount={openActionCount}
           isAdmin={currentUser.role === 'Admin'}
+          userRole={currentUser.role}
         />
 
         {/* Scrollable Main Content Area */}
         <main className="flex-1 p-4 md:p-6 overflow-y-auto max-w-7xl mx-auto w-full">
-          {activeTab === 'dashboard' && <DashboardView onNavigate={setActiveTab} />}
+          {activeTab === 'dashboard' && <DashboardView onNavigate={setActiveTab} currentUser={currentUser} />}
           {activeTab === 'new-audit' && (
-            <NewAuditForm
-              initialDraft={activeDraft}
-              currentUser={currentUser}
-              onNavigate={setActiveTab}
-              onSuccess={(auditId) => {
-                setActiveDraft(null);
-                setActiveTab('audits');
-              }}
-              onCancel={() => {
-                setActiveDraft(null);
-                setActiveTab('dashboard');
-              }}
-            />
+            isAuditorOrAdmin ? (
+              <NewAuditForm
+                initialDraft={activeDraft}
+                currentUser={currentUser}
+                onNavigate={setActiveTab}
+                onSuccess={(auditId) => {
+                  setActiveDraft(null);
+                  setActiveTab('audits');
+                }}
+                onCancel={() => {
+                  setActiveDraft(null);
+                  setActiveTab('dashboard');
+                }}
+              />
+            ) : <DashboardView onNavigate={setActiveTab} currentUser={currentUser} />
           )}
-          {activeTab === 'drafts' && <DraftsView onResumeDraft={handleResumeDraft} />}
+          {activeTab === 'drafts' && (
+            isAuditorOrAdmin ? <DraftsView onResumeDraft={handleResumeDraft} /> : <DashboardView onNavigate={setActiveTab} currentUser={currentUser} />
+          )}
           {activeTab === 'actions' && <ActionTrackingView onNavigate={setActiveTab} currentUser={currentUser} />}
           {activeTab === 'audits' && <AuditHistoryView />}
           {activeTab === 'audit-point-setup' && (
-            currentUser.role === 'Admin' ? <AuditPointSetupView isAdmin={true} /> : <DashboardView onNavigate={setActiveTab} />
+            currentUser.role === 'Admin' ? <AuditPointSetupView isAdmin={true} /> : <DashboardView onNavigate={setActiveTab} currentUser={currentUser} />
           )}
           {activeTab === 'plant-structure' && (
             currentUser.role === 'Admin' ? (
@@ -142,13 +147,10 @@ export default function Home() {
                 </div>
                 <PlantStructurePanel />
               </div>
-            ) : <DashboardView onNavigate={setActiveTab} />
-          )}
-          {activeTab === 'mail' && (
-            currentUser.role === 'Admin' ? <MailConfigView /> : <DashboardView onNavigate={setActiveTab} />
+            ) : <DashboardView onNavigate={setActiveTab} currentUser={currentUser} />
           )}
           {activeTab === 'settings' && (
-            currentUser.role === 'Admin' ? <SettingsView /> : <DashboardView onNavigate={setActiveTab} />
+            currentUser.role === 'Admin' ? <SettingsView /> : <DashboardView onNavigate={setActiveTab} currentUser={currentUser} />
           )}
         </main>
       </div>
@@ -165,25 +167,29 @@ export default function Home() {
           <span>Dashboard</span>
         </button>
 
-        <button
-          onClick={() => setActiveTab('new-audit')}
-          className={`flex flex-col items-center justify-center py-1 px-2 rounded-lg text-[10px] font-bold transition ${
-            activeTab === 'new-audit' ? 'text-indigo-600' : 'hover:text-slate-900'
-          }`}
-        >
-          <ClipboardPlus className="w-5 h-5 mb-0.5 text-indigo-600" />
-          <span>Audit</span>
-        </button>
+        {isAuditorOrAdmin && (
+          <button
+            onClick={() => setActiveTab('new-audit')}
+            className={`flex flex-col items-center justify-center py-1 px-2 rounded-lg text-[10px] font-bold transition ${
+              activeTab === 'new-audit' ? 'text-indigo-600' : 'hover:text-slate-900'
+            }`}
+          >
+            <ClipboardPlus className="w-5 h-5 mb-0.5 text-indigo-600" />
+            <span>Audit</span>
+          </button>
+        )}
 
-        <button
-          onClick={() => setActiveTab('drafts')}
-          className={`flex flex-col items-center justify-center py-1 px-2 rounded-lg text-[10px] font-bold transition ${
-            activeTab === 'drafts' ? 'text-indigo-600' : 'hover:text-slate-900'
-          }`}
-        >
-          <Save className="w-5 h-5 mb-0.5 text-amber-600" />
-          <span>Drafts</span>
-        </button>
+        {isAuditorOrAdmin && (
+          <button
+            onClick={() => setActiveTab('drafts')}
+            className={`flex flex-col items-center justify-center py-1 px-2 rounded-lg text-[10px] font-bold transition ${
+              activeTab === 'drafts' ? 'text-indigo-600' : 'hover:text-slate-900'
+            }`}
+          >
+            <Save className="w-5 h-5 mb-0.5 text-amber-600" />
+            <span>Drafts</span>
+          </button>
+        )}
 
         <button
           onClick={() => setActiveTab('actions')}

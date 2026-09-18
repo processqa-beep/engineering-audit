@@ -15,11 +15,14 @@ import {
   Layers,
 } from 'lucide-react';
 
+import { UserRole } from '../lib/types';
+
 interface SidebarProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
   openActionCount?: number;
   isAdmin?: boolean;
+  userRole?: UserRole;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -27,19 +30,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onTabChange,
   openActionCount = 0,
   isAdmin = false,
+  userRole = 'Viewer',
 }) => {
+  const isAuditorOrAdmin = isAdmin || userRole === 'QA' || userRole === 'Auditor';
+
   const allNavItems = [
     { id: 'dashboard',          label: 'Executive Dashboard',           icon: LayoutDashboard },
-    { id: 'new-audit',          label: 'New Audit Form',                icon: ClipboardPlus },
-    { id: 'drafts',             label: 'Saved Drafts',                  icon: Save },
+    { id: 'new-audit',          label: 'New Audit Form',                icon: ClipboardPlus,    auditorOnly: true },
+    { id: 'drafts',             label: 'Saved Drafts',                  icon: Save,             auditorOnly: true },
     { id: 'actions',            label: 'Action Tracking',               icon: AlertOctagon, count: openActionCount },
     { id: 'audits',             label: 'Audit History & Reports',       icon: History },
     { id: 'audit-point-setup',  label: 'Audit Point Setup (Excel)',     icon: FileSpreadsheet,  badge: 'Admin', adminOnly: true },
     { id: 'plant-structure',    label: 'Plant Structure Settings',      icon: Layers,            badge: 'Admin', adminOnly: true },
-    { id: 'mail',               label: 'Mail Alert Notifications',      icon: Mail,              badge: 'Admin', adminOnly: true },
   ];
 
-  const navItems = allNavItems.filter((item) => !item.adminOnly || isAdmin);
+  const navItems = allNavItems.filter((item) => {
+    if (item.adminOnly && !isAdmin) return false;
+    if (item.auditorOnly && !isAuditorOrAdmin) return false;
+    return true;
+  });
 
   return (
     <aside className="w-16 bg-white border-r border-slate-200/80 shrink-0 hidden md:flex flex-col items-center justify-between py-4 shadow-sm h-full z-30 select-none">

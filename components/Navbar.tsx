@@ -68,8 +68,8 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onTabChange, current
           <span>{currentUser?.role || role}</span>
         </div>
 
-        {/* Quick New Audit Button */}
-        {role !== 'Viewer' && (
+        {/* Quick New Audit Button - Only for Admin, QA, and Auditor */}
+        {role !== 'Viewer' && role !== 'Engineering' && (
           <button
             onClick={() => onTabChange('new-audit')}
             className="flex items-center space-x-1.5 bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white px-3.5 py-1.5 rounded-xl font-bold text-xs shadow-md shadow-indigo-500/20 transition active:scale-95 shrink-0"

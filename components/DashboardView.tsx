@@ -46,13 +46,14 @@ import {
 } from 'recharts';
 import { StorageEngine } from '../lib/storageEngine';
 import { SupabaseBackendClient } from '../lib/supabaseBackend';
-import { AuditHeader, AuditResult, ActionItem } from '../lib/types';
+import { AuditHeader, AuditResult, ActionItem, AuthUser } from '../lib/types';
 
 interface DashboardViewProps {
   onNavigate: (tab: string) => void;
+  currentUser?: AuthUser | null;
 }
 
-export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
+export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate, currentUser }) => {
   const [audits, setAudits] = useState<AuditHeader[]>([]);
   const [auditResults, setAuditResults] = useState<AuditResult[]>([]);
   const [actions, setActions] = useState<ActionItem[]>([]);
@@ -386,15 +387,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
           </div>
 
           {/* Quick Actions */}
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={() => onNavigate('new-audit')}
-              className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-2xl font-extrabold text-xs shadow-md shadow-indigo-500/20 transition flex items-center space-x-1.5"
-            >
-              <PlusCircle className="w-4 h-4" />
-              <span>+ New Audit</span>
-            </button>
-          </div>
+          {currentUser?.role !== 'Viewer' && currentUser?.role !== 'Engineering' && (
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => onNavigate('new-audit')}
+                className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-2xl font-extrabold text-xs shadow-md shadow-indigo-500/20 transition flex items-center space-x-1.5 cursor-pointer"
+              >
+                <PlusCircle className="w-4 h-4" />
+                <span>+ New Audit</span>
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Time Horizon & Start/End Date Range */}

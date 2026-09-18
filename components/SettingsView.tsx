@@ -839,60 +839,8 @@ export const SettingsView: React.FC = () => {
       )}
 
       {/* ─────────────────────────────────────────────────────────────────── */}
-      {/* 0. CLOUD DATABASE (SUPABASE) STATUS & SYNC PANEL */}
+      {/* 1. USER MANAGEMENT & EMAIL ROUTING TABLE */}
       {/* ─────────────────────────────────────────────────────────────────── */}
-      <div className="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-xl shadow-slate-300/40 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-100">
-          <div>
-            <h3 className="text-base font-extrabold text-slate-900 flex items-center space-x-2">
-              <Database className="w-5 h-5 text-indigo-600" />
-              <span>CLOUD DATABASE (SUPABASE) LIVE SYNC</span>
-            </h3>
-            <p className="text-xs text-slate-500 mt-0.5 font-semibold">
-              Connects all devices &amp; Incognito sessions via Server Proxy. Keep your database active to ensure real-time sharing.
-            </p>
-          </div>
-
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={handleTestSupabase}
-              disabled={supabaseTest?.testing}
-              className="flex items-center space-x-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs transition border border-slate-200 cursor-pointer disabled:opacity-50"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${supabaseTest?.testing ? 'animate-spin' : ''}`} />
-              <span>{supabaseTest?.testing ? 'Testing...' : 'Test Cloud Status'}</span>
-            </button>
-            <button
-              onClick={handleSyncAllToSupabase}
-              disabled={supabaseSyncing}
-              className="flex items-center space-x-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-extrabold text-xs shadow-md shadow-indigo-500/20 transition cursor-pointer disabled:opacity-50"
-            >
-              <HardDrive className={`w-3.5 h-3.5 ${supabaseSyncing ? 'animate-spin' : ''}`} />
-              <span>{supabaseSyncing ? 'Pushing Data...' : 'Push All Local Data to Cloud'}</span>
-            </button>
-          </div>
-        </div>
-
-        {supabaseTest && !supabaseTest.testing && (
-          <div className={`p-4 rounded-2xl text-xs font-bold flex items-start space-x-2.5 animate-fade-in ${
-            supabaseTest.message ? 'bg-emerald-50 text-emerald-900 border border-emerald-300' : 'bg-rose-50 text-rose-900 border border-rose-300'
-          }`}>
-            {supabaseTest.message ? <Check className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" /> : <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />}
-            <div className="space-y-1">
-              <div>{supabaseTest.message || `Cloud Error: ${supabaseTest.error}`}</div>
-              {supabaseTest.error && (
-                <p className="text-[11px] font-normal text-rose-700">
-                  Tip: If your Supabase free project was paused due to inactivity, log in to{' '}
-                  <a href="https://supabase.com/dashboard" target="_blank" rel="noreferrer" className="underline font-bold text-indigo-600 hover:text-indigo-800">
-                    supabase.com/dashboard
-                  </a>{' '}
-                  and click <strong>&quot;Restore Project&quot;</strong>. Then click &quot;Push All Local Data to Cloud&quot; above.
-                </p>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
       <div className="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-xl shadow-slate-300/40 space-y-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-100">
           <div>
@@ -1166,146 +1114,7 @@ export const SettingsView: React.FC = () => {
       </div>
 
       {/* ─────────────────────────────────────────────────────────────────── */}
-      {/* 2. SUPABASE CLOUD DATABASE & HIGH-SPEED STORAGE */}
-      {/* ─────────────────────────────────────────────────────────────────── */}
-      <div className="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-xl shadow-slate-300/40 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
-          <div>
-            <h3 className="text-base font-extrabold text-slate-900 flex items-center space-x-2">
-              <Database className="w-5 h-5 text-emerald-600" />
-              <span>SUPABASE POSTGRESQL &amp; DIRECT PHOTO STORAGE</span>
-            </h3>
-            <p className="text-xs text-slate-500 mt-0.5 font-semibold">
-              Ultra-fast relational database &amp; storage bucket for real-time audits, instant photo uploads, and zero-timeout sync.
-            </p>
-          </div>
-          <div className="flex items-center space-x-2">
-            <a
-              href="https://supabase.com/dashboard/project/nywznyvvqhiiktvoskkv/sql"
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center space-x-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition border border-slate-200"
-            >
-              <ExternalLink className="w-3.5 h-3.5" />
-              <span>Open Supabase SQL Editor</span>
-            </a>
-          </div>
-        </div>
-
-        <div className="space-y-3 text-xs">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200">
-              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-1">Connected Project URL</span>
-              <p className="font-mono font-bold text-slate-800 text-[11px] truncate">
-                https://nywznyvvqhiiktvoskkv.supabase.co
-              </p>
-            </div>
-
-            <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200">
-              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-1">Storage Bucket</span>
-              <p className="font-mono font-bold text-emerald-700 text-[11px]">
-                audit-photos (Public S3-Compatible Direct Upload)
-              </p>
-            </div>
-          </div>
-
-          {/* Action Row */}
-          <div className="flex flex-wrap items-center gap-2 pt-1">
-            <button
-              type="button"
-              onClick={handleTestSupabase}
-              disabled={supabaseTest?.testing}
-              className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-md shadow-emerald-600/20"
-            >
-              <Database className="w-3.5 h-3.5" />
-              <span>{supabaseTest?.testing ? 'Testing Supabase...' : 'Test Supabase Connection'}</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={handleSyncAllToSupabase}
-              disabled={supabaseSyncing}
-              className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-md shadow-indigo-600/20"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${supabaseSyncing ? 'animate-spin' : ''}`} />
-              <span>{supabaseSyncing ? 'Syncing to Supabase...' : 'Sync Master Data to Supabase'}</span>
-            </button>
-          </div>
-
-          {supabaseTest?.message && (
-            <div className="p-3 bg-emerald-50 border border-emerald-300 text-emerald-800 rounded-xl text-xs font-bold flex items-center space-x-2">
-              <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span>{supabaseTest.message}</span>
-            </div>
-          )}
-
-          {supabaseTest?.error && (
-            <div className="p-3 bg-amber-50 border border-amber-300 text-amber-900 rounded-xl text-xs font-semibold space-y-1">
-              <div className="flex items-center space-x-2 font-bold text-amber-800">
-                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-                <span>Supabase Setup Required</span>
-              </div>
-              <p className="text-[11px] text-amber-700">
-                {supabaseTest.error}
-              </p>
-              <p className="text-[11px] text-slate-600 pt-1">
-                👉 Open the file <code className="bg-white px-1.5 py-0.5 rounded border font-mono font-bold text-indigo-700">supabase_schema.sql</code>, copy its content into the Supabase SQL Editor and click <strong>RUN</strong>.
-              </p>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* ─────────────────────────────────────────────────────────────────── */}
-      {/* 3. GENERAL SYSTEM SETTINGS */}
-      {/* ─────────────────────────────────────────────────────────────────── */}
-      <form onSubmit={handleSave} className="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-xl shadow-slate-300/40 space-y-4">
-        <h3 className="text-xs font-extrabold text-indigo-600 uppercase tracking-wider flex items-center space-x-2">
-          <Settings className="w-4 h-4" />
-          <span>General System Configuration</span>
-        </h3>
-
-        <div className="space-y-3 text-xs">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="text-slate-700 font-bold block mb-1">Company / Organization Name</label>
-              <input
-                type="text"
-                value={settings.companyName}
-                onChange={(e) => setSettings({ ...settings, companyName: e.target.value })}
-                className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3 py-2 text-xs font-semibold focus:border-indigo-500 focus:outline-none"
-              />
-            </div>
-
-            <div>
-              <label className="text-slate-700 font-bold block mb-1">Default Audit Section</label>
-              <select
-                value={settings.defaultSection || 'GR'}
-                onChange={(e) => setSettings({ ...settings, defaultSection: e.target.value })}
-                className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3 py-2 text-xs font-semibold focus:border-indigo-500 focus:outline-none"
-              >
-                {SECTIONS.filter((s) => s.id !== 'ALL').map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </div>
-
-        <div className="pt-3 border-t border-slate-100 flex justify-end">
-          <button
-            type="submit"
-            className="bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white px-6 py-2.5 rounded-xl font-bold text-xs shadow-md shadow-indigo-500/20 transition"
-          >
-            Save Settings
-          </button>
-        </div>
-      </form>
-
-      {/* ─────────────────────────────────────────────────────────────────── */}
-      {/* FPR RESPONSIBILITY MATRIX */}
+      {/* 2. FPR RESPONSIBILITY MATRIX */}
       {/* ─────────────────────────────────────────────────────────────────── */}
       <div className="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-xl shadow-slate-300/40 space-y-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-slate-100">
@@ -1441,6 +1250,135 @@ export const SettingsView: React.FC = () => {
           </ul>
         </div>
       </div>
+
+      {/* ─────────────────────────────────────────────────────────────────── */}
+      {/* 3. CLOUD DATABASE (SUPABASE) LIVE SYNC */}
+      {/* ─────────────────────────────────────────────────────────────────── */}
+      <div className="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-xl shadow-slate-300/40 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-100">
+          <div>
+            <h3 className="text-base font-extrabold text-slate-900 flex items-center space-x-2">
+              <Database className="w-5 h-5 text-indigo-600" />
+              <span>CLOUD DATABASE (SUPABASE) LIVE SYNC</span>
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5 font-semibold">
+              Connects all devices &amp; Incognito sessions via Server Proxy. Keep your database active to ensure real-time sharing.
+            </p>
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={handleTestSupabase}
+              disabled={supabaseTest?.testing}
+              className="flex items-center space-x-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs transition border border-slate-200 cursor-pointer disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${supabaseTest?.testing ? 'animate-spin' : ''}`} />
+              <span>{supabaseTest?.testing ? 'Testing...' : 'Test Cloud Status'}</span>
+            </button>
+            <button
+              onClick={handleSyncAllToSupabase}
+              disabled={supabaseSyncing}
+              className="flex items-center space-x-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-extrabold text-xs shadow-md shadow-indigo-500/20 transition cursor-pointer disabled:opacity-50"
+            >
+              <HardDrive className={`w-3.5 h-3.5 ${supabaseSyncing ? 'animate-spin' : ''}`} />
+              <span>{supabaseSyncing ? 'Pushing Data...' : 'Push All Local Data to Cloud'}</span>
+            </button>
+            <a
+              href="https://supabase.com/dashboard/project/nywznyvvqhiiktvoskkv/sql"
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center space-x-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition border border-slate-200"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              <span>SQL Editor</span>
+            </a>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+          <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200">
+            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-1">Connected Project URL</span>
+            <p className="font-mono font-bold text-slate-800 text-[11px] truncate">
+              https://nywznyvvqhiiktvoskkv.supabase.co
+            </p>
+          </div>
+
+          <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200">
+            <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-1">Storage Bucket</span>
+            <p className="font-mono font-bold text-emerald-700 text-[11px]">
+              audit-photos (Public S3-Compatible Direct Upload)
+            </p>
+          </div>
+        </div>
+
+        {supabaseTest && !supabaseTest.testing && (
+          <div className={`p-4 rounded-2xl text-xs font-bold flex items-start space-x-2.5 animate-fade-in ${
+            supabaseTest.message ? 'bg-emerald-50 text-emerald-900 border border-emerald-300' : 'bg-rose-50 text-rose-900 border border-rose-300'
+          }`}>
+            {supabaseTest.message ? <Check className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" /> : <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />}
+            <div className="space-y-1">
+              <div>{supabaseTest.message || `Cloud Error: ${supabaseTest.error}`}</div>
+              {supabaseTest.error && (
+                <p className="text-[11px] font-normal text-rose-700">
+                  Tip: If your Supabase free project was paused due to inactivity, log in to{' '}
+                  <a href="https://supabase.com/dashboard" target="_blank" rel="noreferrer" className="underline font-bold text-indigo-600 hover:text-indigo-800">
+                    supabase.com/dashboard
+                  </a>{' '}
+                  and click <strong>&quot;Restore Project&quot;</strong>. Then click &quot;Push All Local Data to Cloud&quot; above.
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ─────────────────────────────────────────────────────────────────── */}
+      {/* 4. GENERAL SYSTEM SETTINGS */}
+      {/* ─────────────────────────────────────────────────────────────────── */}
+      <form onSubmit={handleSave} className="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-xl shadow-slate-300/40 space-y-4">
+        <h3 className="text-xs font-extrabold text-indigo-600 uppercase tracking-wider flex items-center space-x-2">
+          <Settings className="w-4 h-4" />
+          <span>General System Configuration</span>
+        </h3>
+
+        <div className="space-y-3 text-xs">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="text-slate-700 font-bold block mb-1">Company / Organization Name</label>
+              <input
+                type="text"
+                value={settings.companyName}
+                onChange={(e) => setSettings({ ...settings, companyName: e.target.value })}
+                className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3 py-2 text-xs font-semibold focus:border-indigo-500 focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="text-slate-700 font-bold block mb-1">Default Audit Section</label>
+              <select
+                value={settings.defaultSection || 'GR'}
+                onChange={(e) => setSettings({ ...settings, defaultSection: e.target.value })}
+                className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3 py-2 text-xs font-semibold focus:border-indigo-500 focus:outline-none"
+              >
+                {SECTIONS.filter((s) => s.id !== 'ALL').map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div className="pt-3 border-t border-slate-100 flex justify-end">
+          <button
+            type="submit"
+            className="bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white px-6 py-2.5 rounded-xl font-bold text-xs shadow-md shadow-indigo-500/20 transition"
+          >
+            Save Settings
+          </button>
+        </div>
+      </form>
 
       {/* FPR Add / Edit Modal */}
       {showFprForm && typeof window !== 'undefined' && createPortal(

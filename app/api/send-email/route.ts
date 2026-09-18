@@ -402,16 +402,36 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    const ADMIN_EMAIL = 'mehul.chikhaliya@borosil.com';
+
+    // Normalize TO recipients
+    const toRecipients = (Array.isArray(to) ? to : (to || '').split(','))
+      .map((s: string) => s.trim())
+      .filter(Boolean);
+
+    // Normalize CC recipients and ensure Admin is always in CC/TO
+    const ccRecipients = (Array.isArray(cc) ? cc : (cc || '').split(','))
+      .map((s: string) => s.trim())
+      .filter(Boolean);
+
+    const hasAdmin =
+      toRecipients.some((e: string) => e.toLowerCase() === ADMIN_EMAIL.toLowerCase()) ||
+      ccRecipients.some((e: string) => e.toLowerCase() === ADMIN_EMAIL.toLowerCase());
+
+    if (!hasAdmin) {
+      ccRecipients.push(ADMIN_EMAIL);
+    }
+
     const mailOptions: any = {
       from: fromAddress,
-      to: Array.isArray(to) ? to.join(', ') : to,
+      to: toRecipients.join(', '),
       subject: finalSubject,
       html: htmlContent,
       attachments: emailAttachments,
     };
 
-    if (cc) {
-      mailOptions.cc = Array.isArray(cc) ? cc.join(', ') : cc;
+    if (ccRecipients.length > 0) {
+      mailOptions.cc = ccRecipients.join(', ');
     }
 
     const info = await transporter.sendMail(mailOptions);

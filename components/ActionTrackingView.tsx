@@ -39,7 +39,9 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
 
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [priorityFilter, setPriorityFilter] = useState<string>('ALL');
-  const [departmentFilter, setDepartmentFilter] = useState<string>('ALL');
+  const [departmentFilter, setDepartmentFilter] = useState<string>(() =>
+    currentUser?.role === 'Engineering' && currentUser?.department ? currentUser.department : 'ALL'
+  );
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   // Edit / Closure Modal State
@@ -68,6 +70,7 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
   const canUserEditAction = (act: ActionItem): boolean => {
     if (!currentUser) return false;
     if (currentUser.role === 'Admin') return true;
+    if (currentUser.role === 'Viewer') return false;
 
     // Check department match
     if (
