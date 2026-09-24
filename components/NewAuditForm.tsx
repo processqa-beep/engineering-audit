@@ -199,6 +199,20 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
   }, [currentUser, initialDraft]);
 
   const [checkpointStates, setCheckpointStates] = useState<CheckpointState[]>([]);
+  // Session-level persistent evaluation map across all sub-sections/lines
+  const [evaluatedMap, setEvaluatedMap] = useState<Map<string, CheckpointState>>(() => {
+    const initialMap = new Map<string, CheckpointState>();
+    if (initialDraft?.states && Array.isArray(initialDraft.states)) {
+      initialDraft.states.forEach((st: CheckpointState) => {
+        if (st.checkpoint?.id) {
+          initialMap.set(st.checkpoint.id, st);
+        }
+        const key = `${st.checkpoint?.checkpointText || ''}:::${st.component?.name || ''}`;
+        initialMap.set(key, st);
+      });
+    }
+    return initialMap;
+  });
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [activePhotoUrl, setActivePhotoUrl] = useState<string | undefined>();
   const [lastSubmittedAudit, setLastSubmittedAudit] = useState<{
@@ -233,6 +247,7 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
 
   // Update Sub-Section selection
   useEffect(() => {
+    if (subSectionId === 'ALL') return;
     if (filteredSubSections.length > 0 && !filteredSubSections.some((ss) => ss.id === subSectionId)) {
       setSubSectionId(filteredSubSections[0].id);
     }
@@ -382,24 +397,28 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
     }
 
     const states: CheckpointState[] = matched.map((ck) => {
-      // Check if draft has a saved state for this checkpoint
-      const draftItem = initialDraft?.states?.find(
-        (s: any) =>
-          s.checkpoint?.id === ck.id ||
-          (s.checkpoint?.checkpointText === ck.checkpointText &&
-            s.component?.name === ck.componentName)
-      );
+      // Check in evaluatedMap first (tracks all user edits in session across sub-sections), fallback to initialDraft
+      const compKey = `${ck.checkpointText || ''}:::${ck.componentName || ''}`;
+      const savedItem =
+        evaluatedMap.get(ck.id) ||
+        evaluatedMap.get(compKey) ||
+        initialDraft?.states?.find(
+          (s: any) =>
+            s.checkpoint?.id === ck.id ||
+            (s.checkpoint?.checkpointText === ck.checkpointText &&
+              s.component?.name === ck.componentName)
+        );
 
       // Look up best default department from FPR matrix for this section/line, else 'Maintenance'
       const activeFprs = StorageEngine.getFprMatrix().filter((f) => f.active);
       const sectionFpr = activeFprs.find(
         (f) => (f.sectionId === targetSecId || f.sectionId === 'ALL') && (f.lineId === lineId || f.lineId === 'ALL')
       );
-      const defaultDept = draftItem?.assignedDept || (sectionFpr ? sectionFpr.department : 'Maintenance');
+      const defaultDept = savedItem?.assignedDept || (sectionFpr ? sectionFpr.department : 'Maintenance');
       const fprMatch = StorageEngine.lookupFpr(defaultDept, targetSecId, lineId);
       const employees = StorageEngine.getEmployees();
       const deptEmp = employees.find((e) => e.department === defaultDept && e.status === 'Approved' && e.active);
-      const defaultPerson = draftItem?.assignedTo || fprMatch?.fprName || deptEmp?.name || '';
+      const defaultPerson = savedItem?.assignedTo || fprMatch?.fprName || deptEmp?.name || '';
 
       return {
         checkpoint: ck,
@@ -413,18 +432,18 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
           impactOfFailure: ck.impactOfFailure,
           recommendedAction: ck.recommendedAction,
         },
-        status: draftItem?.status || ('' as any),
-        actualValue: draftItem?.actualValue || '',
-        observationNotes: draftItem?.observationNotes || '',
-        recommendedAction: draftItem?.recommendedAction || ck.recommendedAction || '',
+        status: savedItem?.status || ('' as any),
+        actualValue: savedItem?.actualValue || '',
+        observationNotes: savedItem?.observationNotes || '',
+        recommendedAction: savedItem?.recommendedAction || ck.recommendedAction || '',
         assignedDept: defaultDept,
         assignedTo: defaultPerson,
-        photoUrl: draftItem?.photoUrl || undefined,
+        photoUrl: savedItem?.photoUrl || undefined,
       };
     });
 
     setCheckpointStates(states);
-  }, [sectionId, subSectionId, lineId, allCheckpoints, sections, allLines, allFprMatrix]);
+  }, [sectionId, subSectionId, lineId, allCheckpoints, sections, allLines, allFprMatrix, evaluatedMap]);
 
   // Group Checkpoints by Component for Separate Rounded Cards
   const groupedComponentSections = useMemo(() => {
@@ -445,73 +464,77 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
     return Array.from(map.values());
   }, [checkpointStates]);
 
-  const handleActualValueChange = (index: number, val: string) => {
+  const updateCheckpointState = (
+    index: number,
+    updater: (prevItem: CheckpointState) => CheckpointState
+  ) => {
     setCheckpointStates((prev) => {
-      const updated = [...prev];
-      const item = { ...updated[index] };
-      item.actualValue = val;
+      if (!prev[index]) return prev;
+      const updatedItem = updater(prev[index]);
+      const nextList = [...prev];
+      nextList[index] = updatedItem;
 
-      const autoStatus = evaluateNumericStatus(item.checkpoint, val);
+      // Persist immediately in session evaluatedMap
+      setEvaluatedMap((prevMap) => {
+        const nextMap = new Map(prevMap);
+        if (updatedItem.checkpoint?.id) {
+          nextMap.set(updatedItem.checkpoint.id, updatedItem);
+        }
+        const compKey = `${updatedItem.checkpoint?.checkpointText || ''}:::${updatedItem.component?.name || ''}`;
+        nextMap.set(compKey, updatedItem);
+        return nextMap;
+      });
+
+      return nextList;
+    });
+  };
+
+  const handleActualValueChange = (index: number, val: string) => {
+    updateCheckpointState(index, (item) => {
+      const updated = { ...item, actualValue: val };
+      const autoStatus = evaluateNumericStatus(updated.checkpoint, val);
       if (autoStatus) {
-        item.status = autoStatus;
+        updated.status = autoStatus;
       } else if (!val.trim()) {
-        item.status = '' as any;
+        updated.status = '' as any;
       }
-      updated[index] = item;
       return updated;
     });
   };
 
   const handleStatusChange = (index: number, newStatus: StatusType) => {
-    setCheckpointStates((prev) => {
-      const updated = [...prev];
-      const item = { ...updated[index] };
-      item.status = newStatus;
-      // For text checkpoints, if actualValue is empty or was previous status, keep it in sync
-      if (!isNumericCheckpoint(item.checkpoint) || !item.actualValue) {
-        item.actualValue = newStatus;
+    updateCheckpointState(index, (item) => {
+      const updated = { ...item, status: newStatus };
+      if (!isNumericCheckpoint(updated.checkpoint) || !updated.actualValue) {
+        updated.actualValue = newStatus;
       }
-      updated[index] = item;
       return updated;
     });
   };
 
   const handleRemarksChange = (index: number, remarks: string) => {
-    setCheckpointStates((prev) => {
-      const updated = [...prev];
-      updated[index] = { ...updated[index], observationNotes: remarks };
-      return updated;
-    });
+    updateCheckpointState(index, (item) => ({ ...item, observationNotes: remarks }));
   };
 
   const handleRecommendedActionChange = (index: number, val: string) => {
-    setCheckpointStates((prev) => {
-      const updated = [...prev];
-      updated[index] = { ...updated[index], recommendedAction: val };
-      return updated;
-    });
+    updateCheckpointState(index, (item) => ({ ...item, recommendedAction: val }));
   };
 
   const handleAssignedDeptChange = (index: number, dept: string) => {
-    // When dept changes, auto-pick matching FPR Lead from matrix, fallback to employee
     const fprMatch = StorageEngine.lookupFpr(dept, sectionId, lineId);
     const employees = StorageEngine.getEmployees();
     const deptEmp = employees.find((e) => e.department === dept && e.status === 'Approved' && e.active);
     const defaultPerson = fprMatch?.fprName || deptEmp?.name || '';
 
-    setCheckpointStates((prev) => {
-      const updated = [...prev];
-      updated[index] = { ...updated[index], assignedDept: dept, assignedTo: defaultPerson };
-      return updated;
-    });
+    updateCheckpointState(index, (item) => ({
+      ...item,
+      assignedDept: dept,
+      assignedTo: defaultPerson,
+    }));
   };
 
   const handleAssignedToChange = (index: number, val: string) => {
-    setCheckpointStates((prev) => {
-      const updated = [...prev];
-      updated[index] = { ...updated[index], assignedTo: val };
-      return updated;
-    });
+    updateCheckpointState(index, (item) => ({ ...item, assignedTo: val }));
   };
 
   const handlePhotoUpload = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
@@ -542,18 +565,11 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         if (ctx) {
-          // Enable smooth scaling
           ctx.imageSmoothingEnabled = true;
           ctx.imageSmoothingQuality = 'medium';
           ctx.drawImage(img, 0, 0, width, height);
-
-          // Highly efficient compression (~25 KB - 40 KB)
           const compressedBase64 = canvas.toDataURL('image/jpeg', 0.45);
-          setCheckpointStates((prev) => {
-            const updated = [...prev];
-            updated[index] = { ...updated[index], photoUrl: compressedBase64 };
-            return updated;
-          });
+          updateCheckpointState(index, (item) => ({ ...item, photoUrl: compressedBase64 }));
         }
       };
       img.src = rawDataUrl;
@@ -636,17 +652,36 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
     reader.readAsDataURL(file);
   };
 
+  // Consolidate all evaluated checkpoints across ALL sub-sections and current view
+  const allEvaluatedList = useMemo(() => {
+    const map = new Map<string, CheckpointState>();
+
+    evaluatedMap.forEach((val, key) => {
+      if (val.status && val.status !== ('' as any)) {
+        const uniqueKey = val.checkpoint?.id || `${val.checkpoint?.checkpointText}:::${val.component?.name}`;
+        map.set(uniqueKey, val);
+      }
+    });
+
+    checkpointStates.forEach((cs) => {
+      if (cs.status && cs.status !== ('' as any)) {
+        const uniqueKey = cs.checkpoint?.id || `${cs.checkpoint?.checkpointText}:::${cs.component?.name}`;
+        map.set(uniqueKey, cs);
+      }
+    });
+
+    return Array.from(map.values());
+  }, [evaluatedMap, checkpointStates]);
+
   const summary = useMemo(() => {
-    // Only count checkpoints that have been evaluated / updated by the auditor
-    const evaluatedStates = checkpointStates.filter((s) => s.status && s.status !== ('' as any));
-    const total = evaluatedStates.length;
-    const okCount = evaluatedStates.filter((s) => s.status === 'OK').length;
-    const ngCount = evaluatedStates.filter((s) => s.status === 'NG').length;
-    const obsCount = evaluatedStates.filter((s) => s.status === 'Observation').length;
-    const naCount = evaluatedStates.filter((s) => s.status === 'N/A').length;
+    const total = allEvaluatedList.length;
+    const okCount = allEvaluatedList.filter((s) => s.status === 'OK').length;
+    const ngCount = allEvaluatedList.filter((s) => s.status === 'NG').length;
+    const obsCount = allEvaluatedList.filter((s) => s.status === 'Observation').length;
+    const naCount = allEvaluatedList.filter((s) => s.status === 'N/A').length;
 
     const compliance = total > 0 ? (okCount / total) * 100 : 100;
-    const hasCriticalNG = evaluatedStates.some((s) => s.status === 'NG' && s.checkpoint.isCritical);
+    const hasCriticalNG = allEvaluatedList.some((s) => s.status === 'NG' && s.checkpoint.isCritical);
 
     let overall: OverallStatusType = 'PASS';
     if (total === 0) {
@@ -668,7 +703,7 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
       hasCriticalNG,
       totalAvailable: checkpointStates.length,
     };
-  }, [checkpointStates]);
+  }, [allEvaluatedList, checkpointStates.length]);
 
   const handleSaveDraft = () => {
     if (!sectionId) {
@@ -679,22 +714,35 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
     const selectedSecObj = sections.find((s) => s.id === sectionId);
     const selectedSubSecObj = allSubSections.find((ss) => ss.id === subSectionId);
 
+    // Merge all evaluated states from across all sub-sections + current checkpointStates
+    const allStatesMap = new Map<string, CheckpointState>();
+    evaluatedMap.forEach((val, key) => {
+      const uniqueKey = val.checkpoint?.id || key;
+      allStatesMap.set(uniqueKey, val);
+    });
+    checkpointStates.forEach((cs) => {
+      const uniqueKey = cs.checkpoint?.id || `${cs.checkpoint?.checkpointText}:::${cs.component?.name}`;
+      allStatesMap.set(uniqueKey, cs);
+    });
+    const allCombinedStates = Array.from(allStatesMap.values());
+
+    const draftId = initialDraft?.header?.auditId || `DRAFT-${Date.now()}`;
     const draftHeader: Partial<AuditHeader> = {
-      auditId: `DRAFT-${Date.now()}`,
+      auditId: draftId,
       date: auditDate,
       time: auditTime,
       sectionId,
       sectionName: selectedSecObj?.name || sectionId,
       subSectionId,
-      subSectionName: selectedSubSecObj?.name || subSectionId,
+      subSectionName: subSectionId === 'ALL' ? 'All Sub-Sections' : (selectedSubSecObj?.name || subSectionId),
       lineId,
       equipmentId,
       auditorName: auditorName.trim() || 'Auditor (Draft)',
       isDraft: true,
     };
 
-    StorageEngine.saveDraft({ header: draftHeader, states: checkpointStates });
-    alert('Audit draft saved locally! You can resume this audit anytime from the Drafts tab.');
+    StorageEngine.saveDraft({ header: draftHeader, states: allCombinedStates });
+    alert(`Audit draft saved! ${allCombinedStates.length} checkpoints (${allEvaluatedList.length} evaluated) preserved across all sub-sections. You can resume anytime from the Drafts tab.`);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -708,8 +756,8 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
       return;
     }
 
-    // Only submit updated / evaluated components
-    const evaluatedStates = checkpointStates.filter((cs) => cs.status && cs.status !== ('' as any));
+    // Only submit updated / evaluated components from across ALL sub-sections
+    const evaluatedStates = allEvaluatedList;
     if (evaluatedStates.length === 0) {
       alert('Please evaluate at least one component / checkpoint before submitting.');
       return;
@@ -744,7 +792,7 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
       sectionId,
       sectionName: selectedSecObj?.name || sectionId,
       subSectionId,
-      subSectionName: selectedSubSecObj?.name || subSectionId || 'General',
+      subSectionName: subSectionId === 'ALL' ? 'All Sub-Sections' : (selectedSubSecObj?.name || subSectionId || 'General'),
       lineId,
       lineName: selectedLineObj?.name || lineId || 'Line 1',
       equipmentId,
@@ -771,7 +819,7 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
       checkpointId: cs.checkpoint.id,
       srNo: cs.checkpoint.srNo || idx + 1,
       sectionName: selectedSecObj?.name || sectionId,
-      subSectionName: selectedSubSecObj?.name || subSectionId,
+      subSectionName: (cs.checkpoint.subSectionName || selectedSubSecObj?.name || subSectionId),
       lineName: selectedLineObj?.name || lineId,
       equipmentName: selectedEquipObj?.name || equipmentId,
       componentName: cs.component.name || 'Component',
@@ -793,27 +841,22 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
       timestamp: now.toISOString(),
     }));
 
-    // Auto-create Actions in Action_Tracker for NG findings
-    // Look up FPR matrix to resolve email addresses for per-point notifications
-    const actions: ActionItem[] = checkpointStates
+    // Auto-create Actions in Action_Tracker for NG findings across ALL evaluated checkpoints
+    const actions: ActionItem[] = evaluatedStates
       .filter((cs) => cs.status === 'NG')
       .map((cs, idx) => {
-        // Lookup FPR matrix: department × section × line → fprEmail + hodEmail
         const fprEntry = StorageEngine.lookupFpr(cs.assignedDept, sectionId, lineId);
 
-        // Also check if assignedTo matches an FPR person in the matrix
         const fprByName = allFprList.find(
           (f) => f.active && f.fprName.toLowerCase().trim() === (cs.assignedTo || '').toLowerCase().trim()
         );
 
         const responsiblePerson = cs.assignedTo || fprByName?.fprName || fprEntry?.fprName || cs.assignedDept || 'Maintenance Lead';
 
-        // Also check employee registry for direct email match
         const assignedEmployee = allEmployeesList.find(
           (e) => e.name.toLowerCase().trim() === (cs.assignedTo || '').toLowerCase().trim() && e.active && e.status === 'Approved'
         );
 
-        // Fallback: HOD from employee registry
         const deptHOD = allEmployeesList.find(
           (e) => (e.role === 'QA' || e.role === 'Engineering' || e.role === 'Admin') && e.active && e.status === 'Approved'
         );
@@ -827,8 +870,8 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
           auditId,
           sectionId,
           sectionName: selectedSecObj?.name || sectionId,
-          subSectionId,
-          subSectionName: selectedSubSecObj?.name || subSectionId,
+          subSectionId: cs.checkpoint.subSectionId || subSectionId,
+          subSectionName: cs.checkpoint.subSectionName || selectedSubSecObj?.name || subSectionId,
           lineId,
           lineName: selectedLineObj?.name || lineId,
           equipmentId,
@@ -852,6 +895,11 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
 
     // ── STEP 1: Save locally FIRST — instant, never fails ────────────────────
     StorageEngine.saveAudit(header, results, actions);
+
+    // Delete resumed draft if exists
+    if (initialDraft?.header?.auditId) {
+      StorageEngine.deleteDraft(initialDraft.header.auditId);
+    }
 
     // ── STEP 2: Show success screen IMMEDIATELY (no waiting for network) ─────
     setSubmitting(false);
@@ -1133,6 +1181,7 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
                   onChange={(e) => setSubSectionId(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-300 text-slate-900 rounded-xl px-3 py-2 font-bold focus:border-indigo-500 focus:bg-white focus:outline-none transition shadow-xs"
                 >
+                  <option value="ALL">🏭 All Sub-Sections (Full View)</option>
                   {filteredSubSections.map((ss) => (
                     <option key={ss.id} value={ss.id}>
                       {ss.name}
