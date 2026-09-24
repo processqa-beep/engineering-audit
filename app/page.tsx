@@ -9,6 +9,7 @@ import { ActionTrackingView } from '../components/ActionTrackingView';
 import { AuditHistoryView } from '../components/AuditHistoryView';
 import { DraftsView } from '../components/DraftsView';
 import { SettingsView } from '../components/SettingsView';
+import { AboutView } from '../components/AboutView';
 import { AuditPointSetupView } from '../components/AuditPointSetupView';
 import { PlantStructurePanel } from '../components/PlantStructurePanel';
 import { LoginPage } from '../components/LoginPage';
@@ -24,6 +25,7 @@ import {
   CheckSquare,
   Save,
   FileSpreadsheet,
+  Info,
 } from 'lucide-react';
 
 
@@ -152,6 +154,7 @@ export default function Home() {
           {activeTab === 'settings' && (
             currentUser.role === 'Admin' ? <SettingsView /> : <DashboardView onNavigate={setActiveTab} currentUser={currentUser} />
           )}
+          {activeTab === 'about' && <AboutView />}
         </main>
       </div>
 
@@ -227,6 +230,16 @@ export default function Home() {
             <span>Settings</span>
           </button>
         )}
+
+        <button
+          onClick={() => setActiveTab('about')}
+          className={`flex flex-col items-center justify-center py-1 px-2 rounded-lg text-[10px] font-bold transition ${
+            activeTab === 'about' ? 'text-indigo-600' : 'hover:text-slate-900'
+          }`}
+        >
+          <Info className="w-5 h-5 mb-0.5 text-indigo-600" />
+          <span>About</span>
+        </button>
       </nav>
     </div>
   );

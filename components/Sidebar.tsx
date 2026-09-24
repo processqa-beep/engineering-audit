@@ -13,6 +13,7 @@ import {
   Save,
   FileSpreadsheet,
   Layers,
+  Info,
 } from 'lucide-react';
 
 import { UserRole } from '../lib/types';
@@ -91,25 +92,46 @@ export const Sidebar: React.FC<SidebarProps> = ({
         })}
       </div>
 
-      {/* Single Settings Gear Icon at Bottom - Only for Admin */}
-      {isAdmin && (
+      {/* Bottom Icons: Settings (Admin) & About (All) */}
+      <div className="space-y-2 flex flex-col items-center w-full">
+        {isAdmin && (
+          <div className="relative group flex items-center justify-center w-full px-2">
+            <button
+              onClick={() => onTabChange('settings')}
+              className={`w-11 h-11 rounded-2xl flex items-center justify-center transition ${
+                activeTab === 'settings'
+                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/30'
+                  : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100'
+              }`}
+            >
+              <Settings className="w-5 h-5" />
+            </button>
+            <div className="absolute left-16 z-50 px-3 py-1.5 bg-slate-900 text-white text-xs font-semibold rounded-xl shadow-xl whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity duration-200">
+              <span>System Settings</span>
+              <div className="absolute -left-1 top-1/2 -translate-y-1/2 border-y-4 border-y-transparent border-r-4 border-r-slate-900" />
+            </div>
+          </div>
+        )}
+
+        {/* About Portal Page */}
         <div className="relative group flex items-center justify-center w-full px-2">
           <button
-            onClick={() => onTabChange('settings')}
+            onClick={() => onTabChange('about')}
             className={`w-11 h-11 rounded-2xl flex items-center justify-center transition ${
-              activeTab === 'settings'
-                ? 'bg-indigo-600 text-white shadow-md'
-                : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100'
+              activeTab === 'about'
+                ? 'bg-gradient-to-br from-indigo-500 to-indigo-600 text-white shadow-md shadow-indigo-500/30 scale-105'
+                : 'text-slate-400 hover:text-indigo-600 hover:bg-indigo-50/80'
             }`}
           >
-            <Settings className="w-5 h-5" />
+            <Info className="w-5 h-5" />
           </button>
-          <div className="absolute left-16 z-50 px-3 py-1.5 bg-slate-900 text-white text-xs font-semibold rounded-xl shadow-xl whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity duration-200">
-            <span>System Settings</span>
+          <div className="absolute left-16 z-50 px-3 py-1.5 bg-slate-900 text-white text-xs font-semibold rounded-xl shadow-xl whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity duration-200 flex items-center space-x-1.5">
+            <span>About Portal &amp; Version</span>
+            <span className="px-1.5 py-0.2 bg-emerald-500 text-white text-[9px] font-bold rounded">v2.8.0</span>
             <div className="absolute -left-1 top-1/2 -translate-y-1/2 border-y-4 border-y-transparent border-r-4 border-r-slate-900" />
           </div>
         </div>
-      )}
+      </div>
     </aside>
   );
 };
