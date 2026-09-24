@@ -12,14 +12,16 @@ import {
   Layers,
   Send,
   BarChart3,
-  Trophy,
-  Palette,
   CheckCircle,
   Tag,
   Calendar,
-  ExternalLink,
   ShieldCheck,
   Zap,
+  FileSpreadsheet,
+  FileText,
+  Camera,
+  AlertTriangle,
+  GitBranch,
 } from 'lucide-react';
 
 export const AboutView: React.FC = () => {
@@ -34,13 +36,13 @@ export const AboutView: React.FC = () => {
           <div className="space-y-2">
             <div className="inline-flex items-center space-x-2 bg-white/10 backdrop-blur-md px-3 py-1 rounded-xl text-indigo-200 text-xs font-bold border border-white/10">
               <ShieldCheck className="w-3.5 h-3.5 text-indigo-400" />
-              <span>Borosil Renewables Ltd. • Process QA &amp; Engineering</span>
+              <span>Borosil Renewables Ltd. • Plant Engineering &amp; Process QA</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white flex items-center space-x-3">
-              <span>About QA Daily Task &amp; Operations Portal</span>
+              <span>Plant Engineering Audit &amp; Quality Management Portal</span>
             </h1>
             <p className="text-xs sm:text-sm text-indigo-200 max-w-2xl font-medium leading-relaxed">
-              The QA Daily Task &amp; Operations Portal is a specialized web application engineered for the Process Quality Assurance team to streamline daily task reporting, real-time activity tracking, automated Google Chat notifications, task assignment delegation, and executive impact analysis.
+              An enterprise-grade plant inspection, audit compliance, and deviation management platform engineered to standardize equipment evaluations, automate department-specific deviation routing (Instrumentation, Electrical, Maintenance, Utilities), and track RCA corrective closures across all plant production lines.
             </p>
           </div>
 
@@ -80,7 +82,7 @@ export const AboutView: React.FC = () => {
           </span>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
           {/* Next.js 16 + React 19 */}
           <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 hover:border-indigo-300 transition space-y-1 group">
             <div className="flex items-center space-x-2 text-slate-900 font-extrabold">
@@ -88,18 +90,18 @@ export const AboutView: React.FC = () => {
               <span>Next.js 16 + React 19</span>
             </div>
             <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
-              Turbopack engine with React Server Components, server actions &amp; client state hydration.
+              Powered by Turbopack engine, React Server Actions, and client-side reactive state hydration.
             </p>
           </div>
 
-          {/* Supabase Realtime */}
+          {/* Supabase Realtime & PostgreSQL */}
           <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 hover:border-emerald-300 transition space-y-1 group">
             <div className="flex items-center space-x-2 text-slate-900 font-extrabold">
               <Database className="w-4 h-4 text-emerald-600 group-hover:scale-110 transition" />
               <span>Supabase Realtime</span>
             </div>
             <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
-              Cloud PostgreSQL database with live data synchronization, auto reconnection &amp; S3 photo storage.
+              Cloud PostgreSQL live database sync, multi-user concurrency &amp; S3 photo bucket storage.
             </p>
           </div>
 
@@ -110,18 +112,18 @@ export const AboutView: React.FC = () => {
               <span>TypeScript + Tailwind CSS</span>
             </div>
             <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
-              End-to-end type safety, strict schema validation, responsive utility styling &amp; fast load times.
+              End-to-end type safety, strict checkpoint schema validation, and responsive mobile-ready UI.
             </p>
           </div>
 
-          {/* Automated Dispatch Engine */}
+          {/* Automated Point Dispatcher */}
           <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 hover:border-purple-300 transition space-y-1 group">
             <div className="flex items-center space-x-2 text-slate-900 font-extrabold">
               <Zap className="w-4 h-4 text-purple-600 group-hover:scale-110 transition" />
               <span>Automated Dispatch Engine</span>
             </div>
             <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
-              Department-filtered SMTP email notifications, FPR matrix routing &amp; Google Chat cards.
+              Department-filtered SMTP email dispatcher routing per-point deviations to Action Owners (TO) &amp; HODs (CC).
             </p>
           </div>
         </div>
@@ -132,77 +134,110 @@ export const AboutView: React.FC = () => {
         <div className="border-b border-slate-100 pb-3">
           <h2 className="text-base font-extrabold text-slate-900 flex items-center space-x-2">
             <Layers className="w-5 h-5 text-indigo-600" />
-            <span>Key Feature Highlights &amp; Capabilities</span>
+            <span>Core System Modules &amp; Capabilities</span>
           </h2>
           <p className="text-xs text-slate-500 mt-0.5 font-semibold">
-            Purpose-built tools designed to maximize quality control precision, audit compliance, and team accountability.
+            Standardized engineering tools designed to maximize plant uptime, equipment reliability, and audit transparency.
           </p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
-          {/* 1. Daily Task Reporting */}
+          {/* 1. Cascading Section & Line Inspection */}
           <div className="p-5 rounded-2xl bg-slate-50/80 border border-slate-200 hover:border-indigo-300 transition space-y-2 group">
             <div className="w-9 h-9 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold">
               <CheckCircle className="w-5 h-5" />
             </div>
-            <h3 className="font-extrabold text-sm text-slate-900 group-hover:text-indigo-900">Daily Task Reporting</h3>
+            <h3 className="font-extrabold text-sm text-slate-900 group-hover:text-indigo-900">Multi-Section &amp; Sub-Section Audit</h3>
             <p className="text-slate-600 font-medium leading-relaxed">
-              Fast task submissions with custom work types &amp; manual date selection.
+              Inspection hierarchy for Sections (Grinding, Robot, Washing, Tempering, Cutting, Utilities), Sub-Sections, and Lines with evaluation memory across sub-sections.
             </p>
           </div>
 
-          {/* 2. Google Chat Webhooks */}
+          {/* 2. Numeric Parameter Boundary Checking */}
           <div className="p-5 rounded-2xl bg-slate-50/80 border border-slate-200 hover:border-indigo-300 transition space-y-2 group">
             <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
-              <Send className="w-5 h-5" />
+              <Zap className="w-5 h-5" />
             </div>
-            <h3 className="font-extrabold text-sm text-slate-900 group-hover:text-indigo-900">Google Chat Webhooks</h3>
+            <h3 className="font-extrabold text-sm text-slate-900 group-hover:text-indigo-900">Smart Numeric Evaluation</h3>
             <p className="text-slate-600 font-medium leading-relaxed">
-              Formatted card summaries posted directly to Gmail/Google Chat groups.
+              Automated status evaluation based on standard parameters, minimum/maximum thresholds, and engineering unit checks with OK/NG/Observation determination.
             </p>
           </div>
 
-          {/* 3. Task Assignment System */}
+          {/* 3. Department-Specific Deviation Routing */}
           <div className="p-5 rounded-2xl bg-slate-50/80 border border-slate-200 hover:border-indigo-300 transition space-y-2 group">
             <div className="w-9 h-9 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-bold">
-              <User className="w-5 h-5" />
+              <Send className="w-5 h-5" />
             </div>
-            <h3 className="font-extrabold text-sm text-slate-900 group-hover:text-indigo-900">Task Assignment System</h3>
+            <h3 className="font-extrabold text-sm text-slate-900 group-hover:text-indigo-900">Department Point Dispatching</h3>
             <p className="text-slate-600 font-medium leading-relaxed">
-              Assign, prioritize &amp; track tasks across team members with real-time sync.
+              NG findings are isolated and dispatched strictly to the assigned department (Instrumentation, Electrical, Maintenance, Utilities) with action emails.
             </p>
           </div>
 
-          {/* 4. Process Impact Review */}
+          {/* 4. FPR Responsibility Matrix */}
           <div className="p-5 rounded-2xl bg-slate-50/80 border border-slate-200 hover:border-indigo-300 transition space-y-2 group">
             <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center font-bold">
-              <BarChart3 className="w-5 h-5" />
+              <GitBranch className="w-5 h-5" />
             </div>
-            <h3 className="font-extrabold text-sm text-slate-900 group-hover:text-indigo-900">Process Impact Review</h3>
+            <h3 className="font-extrabold text-sm text-slate-900 group-hover:text-indigo-900">FPR Responsibility Matrix</h3>
             <p className="text-slate-600 font-medium leading-relaxed">
-              Executive dashboard with KPI metrics &amp; 5 interactive visual charts.
+              Configurable Department × Section × Line matrix mapping deviations to designated FPR Action Owners (TO) and Section Supervisors (CC).
             </p>
           </div>
 
-          {/* 5. QA Analytics & Trophy Board */}
-          <div className="p-5 rounded-2xl bg-slate-50/80 border border-slate-200 hover:border-indigo-300 transition space-y-2 group">
-            <div className="w-9 h-9 rounded-xl bg-rose-100 text-rose-700 flex items-center justify-center font-bold">
-              <Trophy className="w-5 h-5" />
-            </div>
-            <h3 className="font-extrabold text-sm text-slate-900 group-hover:text-indigo-900">QA Analytics &amp; Trophy Board</h3>
-            <p className="text-slate-600 font-medium leading-relaxed">
-              Member-wise productivity metrics, completion rates &amp; gold/silver trophies.
-            </p>
-          </div>
-
-          {/* 6. Glassmorphism Design */}
+          {/* 5. Standard SOP Photo Registry */}
           <div className="p-5 rounded-2xl bg-slate-50/80 border border-slate-200 hover:border-indigo-300 transition space-y-2 group">
             <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-bold">
-              <Palette className="w-5 h-5" />
+              <Camera className="w-5 h-5" />
             </div>
-            <h3 className="font-extrabold text-sm text-slate-900 group-hover:text-indigo-900">Glassmorphism Design</h3>
+            <h3 className="font-extrabold text-sm text-slate-900 group-hover:text-indigo-900">Standard SOP Photo Master</h3>
             <p className="text-slate-600 font-medium leading-relaxed">
-              Modern responsive UI with Inter font, dark mode &amp; ambient background glow.
+              Admin-curated standard component SOP reference photos permanently stored in cloud storage for standard vs. actual visual comparisons.
+            </p>
+          </div>
+
+          {/* 6. RCA Action Tracking & Closure */}
+          <div className="p-5 rounded-2xl bg-slate-50/80 border border-slate-200 hover:border-indigo-300 transition space-y-2 group">
+            <div className="w-9 h-9 rounded-xl bg-rose-100 text-rose-700 flex items-center justify-center font-bold">
+              <AlertTriangle className="w-5 h-5" />
+            </div>
+            <h3 className="font-extrabold text-sm text-slate-900 group-hover:text-indigo-900">RCA Action Tracking &amp; Closure</h3>
+            <p className="text-slate-600 font-medium leading-relaxed">
+              Full deviation lifecycle tracking with Root Cause Analysis (RCA), corrective action plans, target dates, closure remarks, and after-repair photo uploads.
+            </p>
+          </div>
+
+          {/* 7. Executive Compliance Dashboard */}
+          <div className="p-5 rounded-2xl bg-slate-50/80 border border-slate-200 hover:border-indigo-300 transition space-y-2 group">
+            <div className="w-9 h-9 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold">
+              <BarChart3 className="w-5 h-5" />
+            </div>
+            <h3 className="font-extrabold text-sm text-slate-900 group-hover:text-indigo-900">Executive Compliance Dashboard</h3>
+            <p className="text-slate-600 font-medium leading-relaxed">
+              Real-time plant compliance rates, critical NG alerts, department-wise deviation distribution, and interactive inspection trend charts.
+            </p>
+          </div>
+
+          {/* 8. Offline Drafts & Instant Reports */}
+          <div className="p-5 rounded-2xl bg-slate-50/80 border border-slate-200 hover:border-indigo-300 transition space-y-2 group">
+            <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
+              <FileText className="w-5 h-5" />
+            </div>
+            <h3 className="font-extrabold text-sm text-slate-900 group-hover:text-indigo-900">PDF &amp; Excel Report Generator</h3>
+            <p className="text-slate-600 font-medium leading-relaxed">
+              One-click official PDF audit report generation with photos, metrics, and compliance summary alongside multi-sheet formatted Excel data exports.
+            </p>
+          </div>
+
+          {/* 9. Excel Point Setup & Plant Hierarchy */}
+          <div className="p-5 rounded-2xl bg-slate-50/80 border border-slate-200 hover:border-indigo-300 transition space-y-2 group">
+            <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center font-bold">
+              <FileSpreadsheet className="w-5 h-5" />
+            </div>
+            <h3 className="font-extrabold text-sm text-slate-900 group-hover:text-indigo-900">Audit Point Master Setup</h3>
+            <p className="text-slate-600 font-medium leading-relaxed">
+              Bulk checkpoint Excel upload, inline spec editing, multi-select line applicability, and flexible plant structure configuration.
             </p>
           </div>
         </div>
@@ -240,25 +275,25 @@ export const AboutView: React.FC = () => {
                 </span>
               </div>
               <span className="text-[10px] font-extrabold bg-emerald-500 text-white px-2.5 py-0.5 rounded-full uppercase tracking-wider self-start sm:self-auto">
-                Latest Release
+                Current Production Release
               </span>
             </div>
 
             <ul className="space-y-1.5 text-xs text-slate-700 font-medium list-disc list-inside">
               <li>
-                <strong>Multi-Sub-Section State Memory:</strong> Full audit checkpoint evaluation caching across sub-sections with zero data loss.
+                <strong>Multi-Sub-Section State Memory:</strong> Full audit checkpoint evaluation caching across all sub-sections with zero data loss.
               </li>
               <li>
-                <strong>Departmental Point Dispatch:</strong> Per-checkpoint email routing sending specific NG findings directly to responsible departments.
+                <strong>Departmental Point Routing:</strong> Per-checkpoint email routing sending specific NG findings directly to responsible departments (Instrumentation, Electrical, Maintenance, Utilities).
               </li>
               <li>
-                <strong>Cloud &amp; Offline Sync:</strong> Automatic Supabase live database sync with local browser caching.
+                <strong>Supabase Live Cloud Synchronization:</strong> Real-time PostgreSQL database sync with local browser caching and server proxy failover.
               </li>
               <li>
-                <strong>Standard SOP Photo Registry:</strong> Permanent component standard reference photo management for Admin users.
+                <strong>Permanent SOP Photo Master:</strong> Standard component reference photo upload &amp; persistence in Supabase S3 storage.
               </li>
               <li>
-                <strong>Enhanced Action Item Tracking:</strong> Streamlined RCA submission and centered modal dialogues.
+                <strong>Enhanced Action Item Tracking:</strong> Centered RCA modal dialogues with streamlined Root Cause Analysis and closure proof photo uploads.
               </li>
             </ul>
           </div>
@@ -276,9 +311,27 @@ export const AboutView: React.FC = () => {
             </div>
 
             <ul className="space-y-1 text-xs text-slate-600 font-medium list-disc list-inside">
-              <li>FPR Responsibility Matrix mapping department, section, and line to action owners.</li>
+              <li>FPR Responsibility Matrix mapping department, section, and line to designated action owners.</li>
               <li>Excel upload for bulk audit checkpoints and plant hierarchy setup.</li>
-              <li>Role-based access permissions for Admin, QA, Engineering, and Auditors.</li>
+              <li>Role-based access permissions for Admin, Engineering, QA, Auditor, and Viewer.</li>
+            </ul>
+          </div>
+
+          {/* Release v2.0.0 */}
+          <div className="border border-slate-200 bg-slate-50/50 rounded-2xl p-5 space-y-3">
+            <div className="flex items-center space-x-2.5">
+              <span className="font-mono text-xs font-black bg-slate-200 text-slate-800 px-2.5 py-0.5 rounded-lg">
+                v2.0.0
+              </span>
+              <span className="text-xs font-semibold text-slate-500 flex items-center space-x-1">
+                <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                <span>July 2026</span>
+              </span>
+            </div>
+
+            <ul className="space-y-1 text-xs text-slate-600 font-medium list-disc list-inside">
+              <li>Initial launch of Borosil Plant Engineering Audit System.</li>
+              <li>Audit checklist recording, compliance score calculation, and PDF/Excel reports.</li>
             </ul>
           </div>
         </div>
