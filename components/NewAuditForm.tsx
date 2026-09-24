@@ -987,51 +987,6 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto pb-16 animate-fade-in font-sans">
-      {/* Top Banner */}
-      <div className="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-xl shadow-slate-300/40 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-extrabold text-slate-900 flex items-center space-x-2">
-            <ClipboardCheck className="w-5 h-5 text-indigo-600" />
-            <span>PLANT ENGINEERING AUDIT SYSTEM</span>
-          </h2>
-          <p className="text-xs text-slate-500 mt-1 font-semibold">
-            Borosil Plant Engineering Audit &amp; Quality Management System.
-          </p>
-        </div>
-
-        <div className="flex items-center space-x-2 shrink-0">
-          <button
-            onClick={syncCheckpointsFromCloud}
-            disabled={syncingCloud}
-            className="flex items-center space-x-1.5 px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-2xl text-xs font-extrabold transition border border-indigo-200"
-            title="Sync all audit checkpoints from Supabase / Google Sheets"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 text-indigo-600 ${syncingCloud ? 'animate-spin' : ''}`} />
-            <span>{syncingCloud ? 'Syncing...' : 'Sync Checkpoints'}</span>
-          </button>
-
-          {sectionId && (
-            <>
-              <button
-                onClick={handleSaveDraft}
-                className="flex items-center space-x-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl text-xs font-extrabold transition border border-slate-200"
-              >
-                <Save className="w-3.5 h-3.5 text-indigo-600" />
-                <span>Save Draft</span>
-              </button>
-
-              <button
-                onClick={() => setSectionId('')}
-                className="flex items-center space-x-1.5 px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-2xl text-xs font-extrabold transition border border-indigo-200/80"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                <span>Change Section</span>
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-
       {/* STEP 1: SECTION SELECTION PROMPT */}
       {!sectionId ? (
         <div className="bg-white p-8 rounded-3xl border border-slate-200/90 shadow-xl shadow-slate-300/40 space-y-6 text-center animate-fade-in">

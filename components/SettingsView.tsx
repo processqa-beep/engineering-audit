@@ -1332,54 +1332,6 @@ export const SettingsView: React.FC = () => {
         )}
       </div>
 
-      {/* ─────────────────────────────────────────────────────────────────── */}
-      {/* 4. GENERAL SYSTEM SETTINGS */}
-      {/* ─────────────────────────────────────────────────────────────────── */}
-      <form onSubmit={handleSave} className="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-xl shadow-slate-300/40 space-y-4">
-        <h3 className="text-xs font-extrabold text-indigo-600 uppercase tracking-wider flex items-center space-x-2">
-          <Settings className="w-4 h-4" />
-          <span>General System Configuration</span>
-        </h3>
-
-        <div className="space-y-3 text-xs">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="text-slate-700 font-bold block mb-1">Company / Organization Name</label>
-              <input
-                type="text"
-                value={settings.companyName}
-                onChange={(e) => setSettings({ ...settings, companyName: e.target.value })}
-                className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3 py-2 text-xs font-semibold focus:border-indigo-500 focus:outline-none"
-              />
-            </div>
-
-            <div>
-              <label className="text-slate-700 font-bold block mb-1">Default Audit Section</label>
-              <select
-                value={settings.defaultSection || 'GR'}
-                onChange={(e) => setSettings({ ...settings, defaultSection: e.target.value })}
-                className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3 py-2 text-xs font-semibold focus:border-indigo-500 focus:outline-none"
-              >
-                {SECTIONS.filter((s) => s.id !== 'ALL').map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </div>
-
-        <div className="pt-3 border-t border-slate-100 flex justify-end">
-          <button
-            type="submit"
-            className="bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white px-6 py-2.5 rounded-xl font-bold text-xs shadow-md shadow-indigo-500/20 transition"
-          >
-            Save Settings
-          </button>
-        </div>
-      </form>
-
       {/* FPR Add / Edit Modal */}
       {showFprForm && typeof window !== 'undefined' && createPortal(
         <FprModal
