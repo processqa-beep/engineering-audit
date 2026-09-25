@@ -9,6 +9,90 @@ const supabase = createClient(supabaseUrl, supabaseKey, {
   auth: { persistSession: false },
 });
 
+// ── PLANT STRUCTURE HELPERS ────────────────────────────────────────────────
+async function getPlantStructureFromSupabase(checkpointsData?: any[]) {
+  // 1. Try fetching from plant_structure table (JSON storage)
+  try {
+    const { data: psData, error: psErr } = await supabase.from('plant_structure').select('*').limit(1);
+    if (!psErr && psData && psData.length > 0 && psData[0].data) {
+      const parsed = typeof psData[0].data === 'string' ? JSON.parse(psData[0].data) : psData[0].data;
+      if (parsed && (parsed.sections || parsed.lines)) {
+        return parsed;
+      }
+    }
+  } catch (_) {}
+
+  // 2. Try fetching from individual tables (sections, sub_sections, lines, equipment)
+  try {
+    const [secRes, subRes, lineRes, eqRes] = await Promise.allSettled([
+      supabase.from('sections').select('*').eq('active', true),
+      supabase.from('sub_sections').select('*').eq('active', true),
+      supabase.from('lines').select('*').eq('active', true),
+      supabase.from('equipment').select('*').eq('active', true),
+    ]);
+
+    const s = secRes.status === 'fulfilled' && secRes.value.data ? secRes.value.data : [];
+    const ss = subRes.status === 'fulfilled' && subRes.value.data ? subRes.value.data : [];
+    const l = lineRes.status === 'fulfilled' && lineRes.value.data ? lineRes.value.data : [];
+    const eq = eqRes.status === 'fulfilled' && eqRes.value.data ? eqRes.value.data : [];
+
+    if (s.length > 0 || l.length > 0) {
+      return {
+        sections: s.map((x: any) => ({ id: x.id, name: x.name, description: x.description || '', active: x.active !== false })),
+        subSections: ss.map((x: any) => ({ id: x.id, name: x.name, sectionId: x.section_id || x.sectionId, description: x.description || '', active: x.active !== false })),
+        lines: l.map((x: any) => ({ id: x.id, name: x.name, sectionId: x.section_id || x.sectionId, subSectionId: x.sub_section_id || x.subSectionId, description: x.description || '', active: x.active !== false })),
+        equipment: eq.map((x: any) => ({ id: x.id, name: x.name, sectionId: x.section_id || x.sectionId, lineId: x.line_id || x.lineId, active: x.active !== false })),
+      };
+    }
+  } catch (_) {}
+
+  // 3. Fallback: extract distinct hierarchy from checkpoints data
+  const ckList = checkpointsData || [];
+  if (ckList.length > 0) {
+    const secMap = new Map<string, any>();
+    const subMap = new Map<string, any>();
+    const lineMap = new Map<string, any>();
+    const eqMap = new Map<string, any>();
+
+    ckList.forEach((c: any) => {
+      const secId = c.section_id || c.sectionId;
+      const secName = c.section_name || c.sectionName || secId;
+      if (secId && !secMap.has(secId)) {
+        secMap.set(secId, { id: secId, name: secName, description: '', active: true });
+      }
+
+      const subId = c.sub_section_id || c.subSectionId;
+      const subName = c.sub_section_name || c.subSectionName || subId;
+      if (subId && secId && !subMap.has(subId)) {
+        subMap.set(subId, { id: subId, name: subName, sectionId: secId, description: '', active: true });
+      }
+
+      const lId = c.line_id || c.lineId;
+      const lName = c.line_name || c.lineName || lId;
+      if (lId && secId && lId.toUpperCase() !== 'ALL' && !lineMap.has(lId)) {
+        lineMap.set(lId, { id: lId, name: lName, sectionId: secId, subSectionId: subId, description: '', active: true });
+      }
+
+      const eqId = c.equipment_id || c.equipmentId;
+      const eqName = c.equipment_name || c.equipmentName || eqId;
+      if (eqId && secId && !eqMap.has(eqId)) {
+        eqMap.set(eqId, { id: eqId, name: eqName, sectionId: secId, lineId: lId, active: true });
+      }
+    });
+
+    if (secMap.size > 0 || lineMap.size > 0) {
+      return {
+        sections: Array.from(secMap.values()),
+        subSections: Array.from(subMap.values()),
+        lines: Array.from(lineMap.values()),
+        equipment: Array.from(eqMap.values()),
+      };
+    }
+  }
+
+  return null;
+}
+
 // ── GET HANDLER (Queries) ───────────────────────────────────────────────────
 export async function GET(req: NextRequest) {
   try {
@@ -24,7 +108,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ success: true, message: 'Connected to Supabase via Server Proxy ✓' });
     }
 
-    // 2. FULL SYNC (Checkpoints, Employees, FPR Matrix, Audits, Results, Actions)
+    // 2. FULL SYNC (Checkpoints, Employees, FPR Matrix, Audits, Results, Actions, Plant Structure)
     if (action === 'syncAll') {
       const [ckRes, empRes, fprRes, audRes, resRes, actRes] = await Promise.allSettled([
         supabase.from('checkpoints').select('*').eq('active', true).order('sr_no', { ascending: true }),
@@ -42,6 +126,8 @@ export async function GET(req: NextRequest) {
       const auditResults = resRes.status === 'fulfilled' && resRes.value.data ? resRes.value.data : [];
       const actions = actRes.status === 'fulfilled' && actRes.value.data ? actRes.value.data : [];
 
+      const plantStructure = await getPlantStructureFromSupabase(checkpoints);
+
       return NextResponse.json({
         success: true,
         data: {
@@ -51,8 +137,16 @@ export async function GET(req: NextRequest) {
           audits,
           auditResults,
           actions,
+          plantStructure,
         },
       });
+    }
+
+    // 2.5 FETCH PLANT STRUCTURE
+    if (action === 'fetchPlantStructure') {
+      const { data: ckData } = await supabase.from('checkpoints').select('*').eq('active', true);
+      const plantStructure = await getPlantStructureFromSupabase(ckData || []);
+      return NextResponse.json({ success: true, data: plantStructure });
     }
 
     // 3. FETCH CHECKPOINTS
@@ -430,11 +524,80 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true });
     }
 
-    if (action === 'REJECT_USER') {
-      const { id } = payload;
-      const { error } = await supabase.from('employees').delete().eq('id', id);
-      if (error) throw error;
-      return NextResponse.json({ success: true });
+    // 8. SAVE PLANT STRUCTURE
+    if (action === 'SAVE_PLANT_STRUCTURE') {
+      const { sections, subSections, lines, equipment } = payload;
+      const now = new Date().toISOString();
+
+      // 1. Try saving JSON structure to plant_structure table
+      try {
+        await supabase.from('plant_structure').upsert({
+          id: 'current',
+          data: { sections, subSections, lines, equipment },
+          updated_at: now,
+        });
+      } catch (err) {
+        console.warn('[Supabase save plant_structure json notice]:', err);
+      }
+
+      // 2. Try saving to individual tables if available
+      try {
+        if (sections && sections.length > 0) {
+          const rows = sections.map((s: any) => ({
+            id: s.id,
+            name: s.name,
+            description: s.description || '',
+            active: s.active !== false,
+            updated_at: now,
+          }));
+          await supabase.from('sections').upsert(rows);
+        }
+      } catch (_) {}
+
+      try {
+        if (subSections && subSections.length > 0) {
+          const rows = subSections.map((ss: any) => ({
+            id: ss.id,
+            name: ss.name,
+            section_id: ss.sectionId || ss.section_id,
+            description: ss.description || '',
+            active: ss.active !== false,
+            updated_at: now,
+          }));
+          await supabase.from('sub_sections').upsert(rows);
+        }
+      } catch (_) {}
+
+      try {
+        if (lines && lines.length > 0) {
+          const rows = lines.map((l: any) => ({
+            id: l.id,
+            name: l.name,
+            section_id: l.sectionId || l.section_id,
+            sub_section_id: l.subSectionId || l.sub_section_id,
+            description: l.description || '',
+            active: l.active !== false,
+            updated_at: now,
+          }));
+          await supabase.from('lines').upsert(rows);
+        }
+      } catch (_) {}
+
+      try {
+        if (equipment && equipment.length > 0) {
+          const rows = equipment.map((e: any) => ({
+            id: e.id,
+            name: e.name,
+            section_id: e.sectionId || e.section_id,
+            line_id: e.lineId || e.line_id,
+            active: e.active !== false,
+            updated_at: now,
+          }));
+          await supabase.from('equipment').upsert(rows);
+        }
+      } catch (_) {}
+
+      return NextResponse.json({ success: true, message: 'Plant structure saved to cloud database' });
     }
 
     return NextResponse.json({ success: false, message: 'Invalid action' }, { status: 400 });

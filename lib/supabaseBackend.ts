@@ -485,7 +485,14 @@ export class SupabaseBackendClient {
         throw new Error(json.message || 'Sync failed');
       }
 
-      const { checkpoints, employees, fprMatrix, audits, auditResults, actions } = json.data;
+      const { checkpoints, employees, fprMatrix, audits, auditResults, actions, plantStructure } = json.data;
+
+      if (plantStructure) {
+        if (plantStructure.sections && plantStructure.sections.length > 0) StorageEngine.saveSections(plantStructure.sections);
+        if (plantStructure.subSections && plantStructure.subSections.length > 0) StorageEngine.saveSubSections(plantStructure.subSections);
+        if (plantStructure.lines && plantStructure.lines.length > 0) StorageEngine.saveLines(plantStructure.lines);
+        if (plantStructure.equipment && plantStructure.equipment.length > 0) StorageEngine.saveEquipment(plantStructure.equipment);
+      }
 
       if (checkpoints && checkpoints.length > 0) {
         const mappedCk: Checkpoint[] = checkpoints.map((d: any) => ({
@@ -659,6 +666,68 @@ export class SupabaseBackendClient {
     } catch (err: any) {
       console.warn('[Server Proxy Global Sync Notice]:', err);
       return { success: false, message: err?.message || 'Sync notice' };
+    }
+  }
+
+  // ── 9. PLANT STRUCTURE VIA SERVER PROXY ────────────────────────────────────
+  public static async fetchPlantStructure(): Promise<{
+    sections: Section[];
+    subSections: SubSection[];
+    lines: Line[];
+    equipment: Equipment[];
+  }> {
+    try {
+      const res = await fetch('/api/db?action=fetchPlantStructure');
+      const json = await res.json();
+      if (res.ok && json.success && json.data) {
+        const { sections, subSections, lines, equipment } = json.data;
+        if (sections && sections.length > 0) StorageEngine.saveSections(sections);
+        if (subSections && subSections.length > 0) StorageEngine.saveSubSections(subSections);
+        if (lines && lines.length > 0) StorageEngine.saveLines(lines);
+        if (equipment && equipment.length > 0) StorageEngine.saveEquipment(equipment);
+        return {
+          sections: sections || StorageEngine.getSections(),
+          subSections: subSections || StorageEngine.getSubSections(),
+          lines: lines || StorageEngine.getLines(),
+          equipment: equipment || StorageEngine.getEquipment(),
+        };
+      }
+    } catch (err) {
+      console.warn('[Server Proxy Fetch Plant Structure Notice]:', err);
+    }
+    return {
+      sections: StorageEngine.getSections(),
+      subSections: StorageEngine.getSubSections(),
+      lines: StorageEngine.getLines(),
+      equipment: StorageEngine.getEquipment(),
+    };
+  }
+
+  public static async savePlantStructure(structure: {
+    sections: Section[];
+    subSections: SubSection[];
+    lines: Line[];
+    equipment: Equipment[];
+  }): Promise<boolean> {
+    StorageEngine.saveSections(structure.sections);
+    StorageEngine.saveSubSections(structure.subSections);
+    StorageEngine.saveLines(structure.lines);
+    StorageEngine.saveEquipment(structure.equipment);
+
+    try {
+      const res = await fetch('/api/db', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'SAVE_PLANT_STRUCTURE',
+          payload: structure,
+        }),
+      });
+      const json = await res.json();
+      return Boolean(json.success);
+    } catch (err) {
+      console.warn('[Server Proxy Save Plant Structure Notice]:', err);
+      return false;
     }
   }
 }

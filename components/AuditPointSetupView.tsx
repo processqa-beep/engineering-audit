@@ -542,9 +542,9 @@ interface AuditPointSetupViewProps {
 
 export const AuditPointSetupView: React.FC<AuditPointSetupViewProps> = ({ isAdmin = false }) => {
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>(StorageEngine.getCheckpoints());
-  const [sections]    = useState(StorageEngine.getSections());
-  const [subSections] = useState(StorageEngine.getSubSections());
-  const [lines]       = useState(StorageEngine.getLines());
+  const [sections, setSections]       = useState(StorageEngine.getSections());
+  const [subSections, setSubSections] = useState(StorageEngine.getSubSections());
+  const [lines, setLines]             = useState(StorageEngine.getLines());
 
   // Search / Filter
   const [search, setSearch]             = useState('');
@@ -568,18 +568,29 @@ export const AuditPointSetupView: React.FC<AuditPointSetupViewProps> = ({ isAdmi
   const [dumpingCloud, setDumpingCloud] = useState(false);
   const [dumpProgress, setDumpProgress] = useState<string | null>(null);
 
-  const reload = () => setCheckpoints(StorageEngine.getCheckpoints());
+  const reload = () => {
+    setCheckpoints(StorageEngine.getCheckpoints());
+    setSections(StorageEngine.getSections());
+    setSubSections(StorageEngine.getSubSections());
+    setLines(StorageEngine.getLines());
+  };
 
   const handleSyncFromCloud = async () => {
     setSyncingCloud(true);
     try {
-      const data = await SupabaseBackendClient.fetchCheckpoints();
+      const [data, plant] = await Promise.all([
+        SupabaseBackendClient.fetchCheckpoints(),
+        SupabaseBackendClient.fetchPlantStructure(),
+      ]);
       if (data && data.length > 0) {
         setCheckpoints(data);
-        alert(`✓ Successfully synced ${data.length} checkpoints from Supabase Database!`);
-      } else {
-        alert('No checkpoints returned from Supabase database.');
       }
+      if (plant) {
+        if (plant.sections && plant.sections.length > 0) setSections(plant.sections);
+        if (plant.subSections && plant.subSections.length > 0) setSubSections(plant.subSections);
+        if (plant.lines && plant.lines.length > 0) setLines(plant.lines);
+      }
+      alert(`✓ Successfully synced ${data?.length || 0} checkpoints and plant structure from Supabase Database!`);
     } catch (err: any) {
       alert(`Cloud sync notice: ${err?.message || err}`);
     } finally {
@@ -625,9 +636,17 @@ export const AuditPointSetupView: React.FC<AuditPointSetupViewProps> = ({ isAdmi
   }, []);
 
   useEffect(() => {
-    SupabaseBackendClient.fetchCheckpoints()
-      .then((data) => {
+    Promise.all([
+      SupabaseBackendClient.fetchCheckpoints(),
+      SupabaseBackendClient.fetchPlantStructure(),
+    ])
+      .then(([data, plant]) => {
         if (data && data.length > 0) setCheckpoints(data);
+        if (plant) {
+          if (plant.sections && plant.sections.length > 0) setSections(plant.sections);
+          if (plant.subSections && plant.subSections.length > 0) setSubSections(plant.subSections);
+          if (plant.lines && plant.lines.length > 0) setLines(plant.lines);
+        }
       })
       .catch(() => {});
   }, []);

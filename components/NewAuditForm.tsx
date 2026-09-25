@@ -145,15 +145,16 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
     setAllEmployees(StorageEngine.getEmployees());
   }, []);
 
-  // Auto-sync master checkpoints & FPR Matrix from Supabase on load
+  // Auto-sync master checkpoints & FPR Matrix & Plant Structure from Supabase on load
   const syncCheckpointsFromCloud = useCallback(async () => {
     setSyncingCloud(true);
     try {
       if (SupabaseBackendClient.isConfigured()) {
-        const [cloudCheckpoints, cloudFpr, cloudEmp] = await Promise.all([
+        const [cloudCheckpoints, cloudFpr, cloudEmp, cloudPlant] = await Promise.all([
           SupabaseBackendClient.fetchCheckpoints(),
           SupabaseBackendClient.fetchFprMatrix(),
           SupabaseBackendClient.fetchEmployees(),
+          SupabaseBackendClient.fetchPlantStructure(),
         ]);
         if (cloudCheckpoints && cloudCheckpoints.length > 0) {
           setAllCheckpoints(cloudCheckpoints);
@@ -163,6 +164,12 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
         }
         if (cloudEmp && cloudEmp.length > 0) {
           setAllEmployees(cloudEmp);
+        }
+        if (cloudPlant) {
+          if (cloudPlant.sections && cloudPlant.sections.length > 0) setSections(cloudPlant.sections);
+          if (cloudPlant.subSections && cloudPlant.subSections.length > 0) setAllSubSections(cloudPlant.subSections);
+          if (cloudPlant.lines && cloudPlant.lines.length > 0) setAllLines(cloudPlant.lines);
+          if (cloudPlant.equipment && cloudPlant.equipment.length > 0) setAllEquipment(cloudPlant.equipment);
         }
       }
     } catch (err) {

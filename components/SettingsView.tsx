@@ -546,17 +546,29 @@ export const SettingsView: React.FC = () => {
       const allCheckpoints = StorageEngine.getCheckpoints();
       const allEmployees = StorageEngine.getEmployees();
       const allFpr = StorageEngine.getFprMatrix();
+      const plantStructure = {
+        sections: StorageEngine.getSections(),
+        subSections: StorageEngine.getSubSections(),
+        lines: StorageEngine.getLines(),
+        equipment: StorageEngine.getEquipment(),
+      };
 
-      if (allCheckpoints.length === 0 && allFpr.length === 0 && allEmployees.length === 0) {
-        alert('Notice: No checkpoints, FPR entries, or users found in local storage to push.');
+      if (
+        allCheckpoints.length === 0 &&
+        allFpr.length === 0 &&
+        allEmployees.length === 0 &&
+        plantStructure.sections.length === 0
+      ) {
+        alert('Notice: No checkpoints, FPR entries, plant structure, or users found in local storage to push.');
         return;
       }
 
       if (allCheckpoints.length > 0) await SupabaseBackendClient.saveCheckpoints(allCheckpoints);
       if (allEmployees.length > 0) await SupabaseBackendClient.saveEmployees(allEmployees);
       if (allFpr.length > 0) await SupabaseBackendClient.saveFprMatrix(allFpr);
+      if (plantStructure.sections.length > 0) await SupabaseBackendClient.savePlantStructure(plantStructure);
 
-      const msg = `✓ Successfully saved to Supabase: ${allCheckpoints.length} checkpoints, ${allFpr.length} FPR assignments, ${allEmployees.length} users!`;
+      const msg = `✓ Successfully saved to Supabase: ${allCheckpoints.length} checkpoints, ${plantStructure.sections.length} sections (${plantStructure.lines.length} lines), ${allFpr.length} FPR assignments, ${allEmployees.length} users!`;
       setSavedMessage(msg);
       alert(msg);
       setTimeout(() => setSavedMessage(''), 5000);
@@ -583,6 +595,7 @@ export const SettingsView: React.FC = () => {
         if (data && data.length > 0) setEmployees(data);
       })
       .catch(() => {});
+    SupabaseBackendClient.fetchPlantStructure().catch(() => {});
   }, []);
 
   const handleSaveFprEntry = (entry: Partial<FprEntry>) => {

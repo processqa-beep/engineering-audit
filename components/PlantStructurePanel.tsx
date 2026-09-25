@@ -1,14 +1,48 @@
-'use client';
-
-import React, { useState } from 'react';
-import { Plus, Trash2, Layers, Wrench, ChevronRight } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Plus, Trash2, Layers, Wrench, ChevronRight, RefreshCw, CheckCircle, Database } from 'lucide-react';
 import { StorageEngine } from '../lib/storageEngine';
+import { SupabaseBackendClient } from '../lib/supabaseBackend';
 import { Section, SubSection, Line } from '../lib/types';
 
 export const PlantStructurePanel: React.FC = () => {
-  const [sections,    setSections]    = useState<Section[]>(StorageEngine.getSections());
-  const [subSections, setSubSections] = useState<SubSection[]>(StorageEngine.getSubSections());
-  const [lines,       setLines]       = useState<Line[]>(StorageEngine.getLines());
+  const [sections,    setSections]    = useState<Section[]>(() => StorageEngine.getSections());
+  const [subSections, setSubSections] = useState<SubSection[]>(() => StorageEngine.getSubSections());
+  const [lines,       setLines]       = useState<Line[]>(() => StorageEngine.getLines());
+  const [isSyncing,   setIsSyncing]   = useState<boolean>(false);
+  const [syncStatus,  setSyncStatus]  = useState<string>('');
+
+  // Fetch latest plant structure from Supabase on mount
+  const syncFromCloud = useCallback(async () => {
+    setIsSyncing(true);
+    try {
+      const data = await SupabaseBackendClient.fetchPlantStructure();
+      if (data) {
+        if (data.sections && data.sections.length > 0) setSections(data.sections);
+        if (data.subSections && data.subSections.length > 0) setSubSections(data.subSections);
+        if (data.lines && data.lines.length > 0) setLines(data.lines);
+        setSyncStatus('Synced with Cloud ✓');
+      }
+    } catch (err) {
+      console.warn('[PlantStructure Cloud sync notice]:', err);
+    } finally {
+      setIsSyncing(false);
+      setTimeout(() => setSyncStatus(''), 4000);
+    }
+  }, []);
+
+  useEffect(() => {
+    syncFromCloud();
+  }, [syncFromCloud]);
+
+  const persistToCloud = (updatedSecs: Section[], updatedSubs: SubSection[], updatedLines: Line[]) => {
+    const equip = StorageEngine.getEquipment();
+    SupabaseBackendClient.savePlantStructure({
+      sections: updatedSecs,
+      subSections: updatedSubs,
+      lines: updatedLines,
+      equipment: equip,
+    }).catch((err) => console.warn('[Plant Structure cloud save notice]:', err));
+  };
 
   // Add Section
   const [newSecName, setNewSecName] = useState('');
@@ -30,6 +64,7 @@ export const PlantStructurePanel: React.FC = () => {
     const updated = [...sections, sec];
     StorageEngine.saveSections(updated);
     setSections(updated);
+    persistToCloud(updated, subSections, lines);
     setNewSecName(''); setNewSecDesc('');
   };
 
@@ -40,6 +75,7 @@ export const PlantStructurePanel: React.FC = () => {
     const updated = [...subSections, ss];
     StorageEngine.saveSubSections(updated);
     setSubSections(updated);
+    persistToCloud(sections, updated, lines);
     setNewSubName('');
   };
 
@@ -57,6 +93,7 @@ export const PlantStructurePanel: React.FC = () => {
     const updated = [...lines, line];
     StorageEngine.saveLines(updated);
     setLines(updated);
+    persistToCloud(sections, subSections, updated);
     setNewLineName('');
   };
 
@@ -65,6 +102,7 @@ export const PlantStructurePanel: React.FC = () => {
     const updated = sections.filter((s) => s.id !== id);
     StorageEngine.saveSections(updated);
     setSections(updated);
+    persistToCloud(updated, subSections, lines);
   };
 
   const removeSubSection = (id: string) => {
@@ -72,6 +110,7 @@ export const PlantStructurePanel: React.FC = () => {
     const updated = subSections.filter((ss) => ss.id !== id);
     StorageEngine.saveSubSections(updated);
     setSubSections(updated);
+    persistToCloud(sections, updated, lines);
   };
 
   const removeLine = (id: string) => {
@@ -79,6 +118,7 @@ export const PlantStructurePanel: React.FC = () => {
     const updated = lines.filter((l) => l.id !== id);
     StorageEngine.saveLines(updated);
     setLines(updated);
+    persistToCloud(sections, subSections, updated);
   };
 
   return (
