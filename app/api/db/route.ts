@@ -439,6 +439,66 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, count: rows.length });
     }
 
+    // 2B. UPDATE SINGLE CHECKPOINT
+    if (action === 'UPDATE_CHECKPOINT') {
+      const c = payload;
+      const row = {
+        id: c.id,
+        sr_no: c.srNo,
+        section_id: c.sectionId,
+        section_name: c.sectionName,
+        sub_section_id: c.subSectionId,
+        sub_section_name: c.subSectionName,
+        line_id: c.lineId,
+        line_name: c.lineName,
+        equipment_id: c.equipmentId,
+        equipment_name: c.equipmentName,
+        component_id: c.componentId,
+        component_name: c.componentName,
+        component_reference_photo_url: c.componentReferencePhotoUrl,
+        function_of_component: c.functionOfComponent,
+        what_impact_if_this_part_gets_fail: c.whatImpactIfThisPartGetsFail,
+        function_of_part: c.functionOfPart,
+        part_failure_type: c.partFailureType,
+        impact_of_failure: c.impactOfFailure,
+        recommended_action: c.recommendedAction,
+        checkpoint_text: c.checkpointText,
+        standard_parameter: c.standardParameter,
+        parameter_type: c.parameterType,
+        minimum: c.minimum,
+        maximum: c.maximum,
+        unit: c.unit,
+        applicable_lines: c.applicableLines,
+        criticality: c.criticality,
+        is_critical: c.isCritical || c.criticality === 'Critical',
+        active: c.active !== false,
+        updated_at: new Date().toISOString(),
+      };
+      const { error } = await supabase.from('checkpoints').upsert(row);
+      if (error) throw error;
+      return NextResponse.json({ success: true, message: 'Checkpoint updated in Supabase' });
+    }
+
+    // 2C. DELETE SINGLE CHECKPOINT
+    if (action === 'DELETE_CHECKPOINT') {
+      const { id } = payload;
+      if (id) {
+        const { error } = await supabase.from('checkpoints').delete().eq('id', id);
+        if (error) throw error;
+      }
+      return NextResponse.json({ success: true, message: 'Checkpoint permanently deleted from Supabase' });
+    }
+
+    // 2D. BATCH DELETE CHECKPOINTS
+    if (action === 'BATCH_DELETE_CHECKPOINTS') {
+      const { ids } = payload;
+      if (ids && Array.isArray(ids) && ids.length > 0) {
+        const { error } = await supabase.from('checkpoints').delete().in('id', ids);
+        if (error) throw error;
+      }
+      return NextResponse.json({ success: true, message: `${ids?.length || 0} checkpoints permanently deleted from Supabase` });
+    }
+
     // 3. SAVE FPR MATRIX
     if (action === 'SAVE_FPR_MATRIX') {
       const matrix = payload;

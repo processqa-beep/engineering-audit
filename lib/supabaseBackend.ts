@@ -143,6 +143,57 @@ export class SupabaseBackendClient {
     }
   }
 
+  public static async updateCheckpoint(checkpoint: Checkpoint): Promise<boolean> {
+    try {
+      const res = await fetch('/api/db', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'UPDATE_CHECKPOINT',
+          payload: checkpoint,
+        }),
+      });
+      const json = await res.json();
+      return Boolean(json.success);
+    } catch {
+      return false;
+    }
+  }
+
+  public static async deleteCheckpoint(id: string): Promise<boolean> {
+    try {
+      const res = await fetch('/api/db', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'DELETE_CHECKPOINT',
+          payload: { id },
+        }),
+      });
+      const json = await res.json();
+      return Boolean(json.success);
+    } catch {
+      return false;
+    }
+  }
+
+  public static async batchDeleteCheckpoints(ids: string[]): Promise<boolean> {
+    try {
+      const res = await fetch('/api/db', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'BATCH_DELETE_CHECKPOINTS',
+          payload: { ids },
+        }),
+      });
+      const json = await res.json();
+      return Boolean(json.success);
+    } catch {
+      return false;
+    }
+  }
+
   // ── 4. EMPLOYEES VIA SERVER PROXY ──────────────────────────────────────────
   public static async fetchEmployees(): Promise<Employee[]> {
     try {

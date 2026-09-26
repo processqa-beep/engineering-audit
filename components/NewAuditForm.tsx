@@ -1179,22 +1179,25 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
               </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 text-xs">
-              {/* 1. Auditor Name (Auto-filled from Logged In User) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
+              {/* 1. Line Selection (First) */}
               <div>
-                <label className="text-slate-700 font-bold block mb-1">
-                  Auditor Name
-                </label>
-                <div className="flex items-center space-x-2 bg-indigo-50/70 border border-indigo-200 text-slate-900 rounded-xl px-3 py-2 font-bold shadow-xs">
-                  <User className="w-4 h-4 text-indigo-600 shrink-0" />
-                  <span className="truncate">{auditorName || currentUser?.name || 'Auditor'}</span>
-                  <span className="text-[10px] text-indigo-600 font-black ml-auto shrink-0 bg-white px-2 py-0.5 rounded-md border border-indigo-100 shadow-xs">
-                    ✓ Logged In
-                  </span>
-                </div>
+                <label className="text-slate-700 font-bold block mb-1">Line / Area</label>
+                <select
+                  value={lineId}
+                  onChange={(e) => setLineId(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-300 text-slate-900 rounded-xl px-3 py-2 font-bold focus:border-indigo-500 focus:bg-white focus:outline-none transition shadow-xs"
+                >
+                  {filteredLines.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.name}
+                    </option>
+                  ))}
+                  {filteredLines.length === 0 && <option value="TL-4">TL-4 (Line 4)</option>}
+                </select>
               </div>
 
-              {/* 2. Sub-Section */}
+              {/* 2. Sub-Section (Second) */}
               <div>
                 <label className="text-slate-700 font-bold block mb-1">Sub-Section</label>
                 <select
@@ -1212,41 +1215,21 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
                 </select>
               </div>
 
-              {/* 3. Line Selection */}
+              {/* 3. Auditor Name (Auto-filled from Logged In User) */}
               <div>
-                <label className="text-slate-700 font-bold block mb-1">Line / Area</label>
-                <select
-                  value={lineId}
-                  onChange={(e) => setLineId(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 text-slate-900 rounded-xl px-3 py-2 font-bold focus:border-indigo-500 focus:bg-white focus:outline-none transition shadow-xs"
-                >
-                  {filteredLines.map((l) => (
-                    <option key={l.id} value={l.id}>
-                      {l.name}
-                    </option>
-                  ))}
-                  {filteredLines.length === 0 && <option value="TL-4">TL-4 (Line 4)</option>}
-                </select>
+                <label className="text-slate-700 font-bold block mb-1">
+                  Auditor Name
+                </label>
+                <div className="flex items-center space-x-2 bg-indigo-50/70 border border-indigo-200 text-slate-900 rounded-xl px-3 py-2 font-bold shadow-xs">
+                  <User className="w-4 h-4 text-indigo-600 shrink-0" />
+                  <span className="truncate">{auditorName || currentUser?.name || 'Auditor'}</span>
+                  <span className="text-[10px] text-indigo-600 font-black ml-auto shrink-0 bg-white px-2 py-0.5 rounded-md border border-indigo-100 shadow-xs">
+                    ✓ Logged In
+                  </span>
+                </div>
               </div>
 
-              {/* 4. Equipment */}
-              <div>
-                <label className="text-slate-700 font-bold block mb-1">Equipment Unit</label>
-                <select
-                  value={equipmentId}
-                  onChange={(e) => setEquipmentId(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 text-slate-900 rounded-xl px-3 py-2 font-bold focus:border-indigo-500 focus:bg-white focus:outline-none transition shadow-xs"
-                >
-                  {filteredEquipment.map((eq) => (
-                    <option key={eq.id} value={eq.id}>
-                      {eq.name}
-                    </option>
-                  ))}
-                  {filteredEquipment.length === 0 && <option value="EQ-01">Benteler Double Edger Machine</option>}
-                </select>
-              </div>
-
-              {/* 5. Date */}
+              {/* 4. Date */}
               <div>
                 <label className="text-slate-700 font-bold block mb-1">Audit Date</label>
                 <input

@@ -685,9 +685,10 @@ export const AuditPointSetupView: React.FC<AuditPointSetupViewProps> = ({ isAdmi
       const selectedSub = subSections.find((ss) => ss.id === form.subSectionId);
       const selectedLine = lines.find((l) => l.id === form.lineId);
 
+      let updatedItem: Checkpoint | null = null;
       const updated = current.map((c) => {
         if (c.id === editingCheckpoint.id) {
-          return {
+          updatedItem = {
             ...c,
             ...form,
             id: c.id,
@@ -698,6 +699,7 @@ export const AuditPointSetupView: React.FC<AuditPointSetupViewProps> = ({ isAdmi
             isCritical: (form.criticality || '').toLowerCase() === 'critical',
             updatedAt: now,
           } as Checkpoint;
+          return updatedItem;
         }
         return c;
       });
@@ -706,11 +708,14 @@ export const AuditPointSetupView: React.FC<AuditPointSetupViewProps> = ({ isAdmi
       setCheckpoints(updated);
       setEditingCheckpoint(null);
 
-      try {
-        await SupabaseBackendClient.saveCheckpoints(updated);
-      } catch (err) {
-        console.warn('Update checkpoint sync notice:', err);
+      if (updatedItem) {
+        SupabaseBackendClient.updateCheckpoint(updatedItem).catch((err) =>
+          console.warn('Update checkpoint sync notice:', err)
+        );
       }
+      SupabaseBackendClient.saveCheckpoints(updated).catch((err) =>
+        console.warn('Update checkpoint sync notice:', err)
+      );
     } else {
       const selectedSec = sections.find((s) => s.id === form.sectionId);
       const selectedSub = subSections.find((ss) => ss.id === form.subSectionId);
@@ -756,11 +761,10 @@ export const AuditPointSetupView: React.FC<AuditPointSetupViewProps> = ({ isAdmi
       setShowManualAdd(false);
 
       // Auto-save to Supabase
-      try {
-        await SupabaseBackendClient.saveCheckpoints(updatedAll);
-      } catch (dumpErr) {
-        console.warn('Auto-save to Supabase notice:', dumpErr);
-      }
+      SupabaseBackendClient.updateCheckpoint(newCk).catch(() => {});
+      SupabaseBackendClient.saveCheckpoints(updatedAll).catch((dumpErr) =>
+        console.warn('Auto-save to Supabase notice:', dumpErr)
+      );
     }
   };
 
@@ -773,12 +777,14 @@ export const AuditPointSetupView: React.FC<AuditPointSetupViewProps> = ({ isAdmi
       StorageEngine.activateCheckpoint(ck.id);
     }
     const updated = StorageEngine.getCheckpoints();
+    const updatedCk = updated.find((c) => c.id === ck.id);
     setCheckpoints(updated);
-    try {
-      await SupabaseBackendClient.saveCheckpoints(updated);
-    } catch (err) {
-      console.warn('Active toggle sync notice:', err);
+    if (updatedCk) {
+      SupabaseBackendClient.updateCheckpoint(updatedCk).catch(() => {});
     }
+    SupabaseBackendClient.saveCheckpoints(updated).catch((err) =>
+      console.warn('Active toggle sync notice:', err)
+    );
   };
 
   // ── Delete Single Checkpoint ──────────────────────────────────────────────
@@ -793,19 +799,22 @@ export const AuditPointSetupView: React.FC<AuditPointSetupViewProps> = ({ isAdmi
       next.delete(ck.id);
       return next;
     });
-    try {
-      await SupabaseBackendClient.saveCheckpoints(updated);
-    } catch (err) {
-      console.warn('Delete checkpoint sync notice:', err);
-    }
+    // Permanently remove from Supabase database
+    SupabaseBackendClient.deleteCheckpoint(ck.id).catch((err) =>
+      console.warn('Delete checkpoint sync notice:', err)
+    );
+    SupabaseBackendClient.saveCheckpoints(updated).catch((err) =>
+      console.warn('Delete checkpoint sync notice:', err)
+    );
   };
 
   // ── Batch Delete Checkpoints ──────────────────────────────────────────────
   const handleBatchDelete = async () => {
     if (selectedIds.size === 0) return;
+    const idsToDelete = Array.from(selectedIds);
     if (
       !confirm(
-        `Are you sure you want to permanently delete ${selectedIds.size} selected checkpoint(s)? This action cannot be undone.`
+        `Are you sure you want to permanently delete ${idsToDelete.length} selected checkpoint(s)? This action cannot be undone.`
       )
     ) {
       return;
@@ -817,9 +826,11 @@ export const AuditPointSetupView: React.FC<AuditPointSetupViewProps> = ({ isAdmi
     setCheckpoints(updated);
     setSelectedIds(new Set());
 
+    // Permanently delete batch in Supabase
     try {
+      await SupabaseBackendClient.batchDeleteCheckpoints(idsToDelete);
       await SupabaseBackendClient.saveCheckpoints(updated);
-      alert(`✓ Successfully deleted ${selectedIds.size} checkpoints.`);
+      alert(`✓ Successfully deleted ${idsToDelete.length} checkpoint(s) permanently.`);
     } catch (err) {
       console.warn('Batch delete sync notice:', err);
     }
