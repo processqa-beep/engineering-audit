@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import {
   ClipboardCheck,
@@ -206,6 +206,9 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
   }, [currentUser, initialDraft]);
 
   const [checkpointStates, setCheckpointStates] = useState<CheckpointState[]>([]);
+  // Synchronous ref for instant per-checkpoint persistence across sub-section switches
+  const evaluatedMapRef = useRef<Map<string, CheckpointState>>(new Map());
+
   // Session-level persistent evaluation map across all sub-sections/lines
   const [evaluatedMap, setEvaluatedMap] = useState<Map<string, CheckpointState>>(() => {
     const initialMap = new Map<string, CheckpointState>();
@@ -213,13 +216,27 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
       initialDraft.states.forEach((st: CheckpointState) => {
         if (st.checkpoint?.id) {
           initialMap.set(st.checkpoint.id, st);
+          evaluatedMapRef.current.set(st.checkpoint.id, st);
         }
         const key = `${st.checkpoint?.checkpointText || ''}:::${st.component?.name || ''}`;
         initialMap.set(key, st);
+        evaluatedMapRef.current.set(key, st);
       });
     }
     return initialMap;
   });
+
+  useEffect(() => {
+    if (initialDraft?.states && Array.isArray(initialDraft.states)) {
+      initialDraft.states.forEach((st: CheckpointState) => {
+        if (st.checkpoint?.id) {
+          evaluatedMapRef.current.set(st.checkpoint.id, st);
+        }
+        const key = `${st.checkpoint?.checkpointText || ''}:::${st.component?.name || ''}`;
+        evaluatedMapRef.current.set(key, st);
+      });
+    }
+  }, [initialDraft]);
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [activePhotoUrl, setActivePhotoUrl] = useState<string | undefined>();
   const [lastSubmittedAudit, setLastSubmittedAudit] = useState<{
@@ -404,9 +421,11 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
     }
 
     const states: CheckpointState[] = matched.map((ck) => {
-      // Check in evaluatedMap first (tracks all user edits in session across sub-sections), fallback to initialDraft
+      // Check in evaluatedMapRef / evaluatedMap first (tracks all user edits in session across sub-sections), fallback to initialDraft
       const compKey = `${ck.checkpointText || ''}:::${ck.componentName || ''}`;
       const savedItem =
+        evaluatedMapRef.current.get(ck.id) ||
+        evaluatedMapRef.current.get(compKey) ||
         evaluatedMap.get(ck.id) ||
         evaluatedMap.get(compKey) ||
         initialDraft?.states?.find(
@@ -416,16 +435,9 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
               s.component?.name === ck.componentName)
         );
 
-      // Look up best default department from FPR matrix for this section/line, else 'Maintenance'
-      const activeFprs = StorageEngine.getFprMatrix().filter((f) => f.active);
-      const sectionFpr = activeFprs.find(
-        (f) => (f.sectionId === targetSecId || f.sectionId === 'ALL') && (f.lineId === lineId || f.lineId === 'ALL')
-      );
-      const defaultDept = savedItem?.assignedDept || (sectionFpr ? sectionFpr.department : 'Maintenance');
-      const fprMatch = StorageEngine.lookupFpr(defaultDept, targetSecId, lineId);
-      const employees = StorageEngine.getEmployees();
-      const deptEmp = employees.find((e) => e.department === defaultDept && e.status === 'Approved' && e.active);
-      const defaultPerson = savedItem?.assignedTo || fprMatch?.fprName || deptEmp?.name || '';
+      // Unselect FPR/Dept by default - do NOT force any department pre-selection
+      const defaultDept = savedItem?.assignedDept !== undefined ? savedItem.assignedDept : '';
+      const defaultPerson = savedItem?.assignedTo !== undefined ? savedItem.assignedTo : '';
 
       return {
         checkpoint: ck,
@@ -450,7 +462,7 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
     });
 
     setCheckpointStates(states);
-  }, [sectionId, subSectionId, lineId, allCheckpoints, sections, allLines, allFprMatrix, evaluatedMap]);
+  }, [sectionId, subSectionId, lineId, allCheckpoints, sections, allLines]);
 
   // Group Checkpoints by Component for Separate Rounded Cards
   const groupedComponentSections = useMemo(() => {
@@ -481,13 +493,19 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
       const nextList = [...prev];
       nextList[index] = updatedItem;
 
-      // Persist immediately in session evaluatedMap
+      // Persist immediately in synchronous ref
+      if (updatedItem.checkpoint?.id) {
+        evaluatedMapRef.current.set(updatedItem.checkpoint.id, updatedItem);
+      }
+      const compKey = `${updatedItem.checkpoint?.checkpointText || ''}:::${updatedItem.component?.name || ''}`;
+      evaluatedMapRef.current.set(compKey, updatedItem);
+
+      // Persist in session evaluatedMap state
       setEvaluatedMap((prevMap) => {
         const nextMap = new Map(prevMap);
         if (updatedItem.checkpoint?.id) {
           nextMap.set(updatedItem.checkpoint.id, updatedItem);
         }
-        const compKey = `${updatedItem.checkpoint?.checkpointText || ''}:::${updatedItem.component?.name || ''}`;
         nextMap.set(compKey, updatedItem);
         return nextMap;
       });
@@ -528,10 +546,15 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
   };
 
   const handleAssignedDeptChange = (index: number, dept: string) => {
-    const fprMatch = StorageEngine.lookupFpr(dept, sectionId, lineId);
-    const employees = StorageEngine.getEmployees();
-    const deptEmp = employees.find((e) => e.department === dept && e.status === 'Approved' && e.active);
-    const defaultPerson = fprMatch?.fprName || deptEmp?.name || '';
+    let defaultPerson = '';
+    if (dept) {
+      const fprMatch = StorageEngine.lookupFpr(dept, sectionId, lineId);
+      const employees = StorageEngine.getEmployees();
+      const deptEmp = employees.find(
+        (e) => (e.department || '').toLowerCase().trim() === dept.toLowerCase().trim() && e.status === 'Approved' && e.active
+      );
+      defaultPerson = fprMatch?.fprName || deptEmp?.name || '';
+    }
 
     updateCheckpointState(index, (item) => ({
       ...item,
@@ -852,23 +875,38 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
     const actions: ActionItem[] = evaluatedStates
       .filter((cs) => cs.status === 'NG')
       .map((cs, idx) => {
-        const fprEntry = StorageEngine.lookupFpr(cs.assignedDept, sectionId, lineId);
+        const targetDept = cs.assignedDept?.trim() || '';
+        const fprEntry = targetDept ? StorageEngine.lookupFpr(targetDept, sectionId, lineId) : null;
 
         const fprByName = allFprList.find(
           (f) => f.active && f.fprName.toLowerCase().trim() === (cs.assignedTo || '').toLowerCase().trim()
         );
 
-        const responsiblePerson = cs.assignedTo || fprByName?.fprName || fprEntry?.fprName || cs.assignedDept || 'Maintenance Lead';
-
         const assignedEmployee = allEmployeesList.find(
           (e) => e.name.toLowerCase().trim() === (cs.assignedTo || '').toLowerCase().trim() && e.active && e.status === 'Approved'
         );
 
+        const responsiblePerson =
+          cs.assignedTo ||
+          fprByName?.fprName ||
+          fprEntry?.fprName ||
+          assignedEmployee?.name ||
+          (targetDept ? `${targetDept} Team` : 'Action Owner');
+
+        const assignedEmail =
+          fprByName?.fprEmail ||
+          assignedEmployee?.email ||
+          fprEntry?.fprEmail ||
+          '';
+
         const deptHOD = allEmployeesList.find(
-          (e) => (e.role === 'QA' || e.role === 'Engineering' || e.role === 'Admin') && e.active && e.status === 'Approved'
+          (e) =>
+            ((targetDept && (e.department || '').toLowerCase().trim() === targetDept.toLowerCase().trim()) ||
+              e.role === 'Admin') &&
+            e.active &&
+            e.status === 'Approved'
         );
 
-        const assignedEmail = fprByName?.fprEmail || assignedEmployee?.email || fprEntry?.fprEmail || '';
         const ccPerson = fprByName?.hodName || fprEntry?.hodName || deptHOD?.name || 'Process QA Admin';
         const ccEmail = fprByName?.hodEmail || fprEntry?.hodEmail || deptHOD?.email || 'mehul.chikhaliya@borosil.com';
 
@@ -888,7 +926,7 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
           observation: cs.observationNotes || `NG finding observed on ${cs.component.name}`,
           recommendedAction: cs.recommendedAction || cs.component.recommendedAction || 'Inspect & repair component',
           responsiblePerson,
-          responsibleDepartment: cs.assignedDept,
+          responsibleDepartment: targetDept || 'General',
           assignedEmail,
           auditorEmail: auditorEmail || undefined,
           ccPerson,
@@ -927,7 +965,7 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
         // Update sync badge silently if the modal is still open
         setLastSubmittedAudit((prev) => prev ? { ...prev, syncResult } : prev);
 
-        // Dispatch department-specific email notifications from process.qa@borosil.com
+        // Dispatch strictly department-specific email notifications
         if (actions.length > 0) {
           const deptActionMap = new Map<string, ActionItem[]>();
           actions.forEach((act) => {
@@ -938,38 +976,59 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
             deptActionMap.get(dept)!.push(act);
           });
 
-          // Send an email to each assigned department with ONLY their specific points
+          // Send an email to EACH assigned department containing ONLY their specific points
           for (const [dept, deptActions] of deptActionMap.entries()) {
-            const deptToList = Array.from(new Set(deptActions.map((a) => a.assignedEmail).filter(Boolean)));
-            const deptCcList = Array.from(
+            const deptToList: string[] = Array.from(
+              new Set(
+                deptActions
+                  .map((a) => a.assignedEmail)
+                  .filter(Boolean)
+                  .flatMap((c) => (c || '').split(',').map((x) => x.trim().toLowerCase()).filter(Boolean))
+              )
+            );
+
+            // If no email was found on the action, fallback to looking up the FPR for this department
+            if (deptToList.length === 0 && dept && dept !== 'General') {
+              const fallbackFpr = StorageEngine.lookupFpr(dept, sectionId, lineId);
+              if (fallbackFpr?.fprEmail) {
+                fallbackFpr.fprEmail.split(',').forEach((em) => {
+                  const cleaned = em.trim().toLowerCase();
+                  if (cleaned && !deptToList.includes(cleaned)) deptToList.push(cleaned);
+                });
+              }
+            }
+
+            const deptCcList: string[] = Array.from(
               new Set([
                 ...deptActions
                   .map((a) => a.ccEmail)
                   .filter(Boolean)
-                  .flatMap((c) => (c || '').split(',').map((x) => x.trim()).filter(Boolean)),
-                ...(auditorEmail ? [auditorEmail.trim()] : []),
+                  .flatMap((c) => (c || '').split(',').map((x) => x.trim().toLowerCase()).filter(Boolean)),
+                ...(auditorEmail ? [auditorEmail.trim().toLowerCase()] : []),
               ])
             );
 
+            // Match ONLY results that correspond directly to this department's action checkpoints
+            const deptActionCheckpointTexts = new Set(
+              deptActions.map((a) => (a.checkpointText || '').trim().toLowerCase())
+            );
             const deptResults = results.filter((r) =>
-              deptActions.some((a) => a.checkpointText === r.checkpointText || a.componentName === r.componentName)
+              deptActionCheckpointTexts.has((r.checkpointText || '').trim().toLowerCase())
             );
 
-            if (deptToList.length > 0 || deptCcList.length > 0) {
-              fetch('/api/send-email', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  to: deptToList,
-                  cc: deptCcList,
-                  auditorEmail: auditorEmail || undefined,
-                  department: dept,
-                  header,
-                  results: deptResults.length > 0 ? deptResults : undefined,
-                  actions: deptActions,
-                }),
-              }).catch((mailErr) => console.warn(`[Background email dispatch notice for ${dept}]:`, mailErr));
-            }
+            fetch('/api/send-email', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                to: deptToList.length > 0 ? deptToList : ['mehul.chikhaliya@borosil.com'],
+                cc: deptCcList,
+                auditorEmail: auditorEmail || undefined,
+                department: dept,
+                header,
+                results: deptResults.length > 0 ? deptResults : undefined,
+                actions: deptActions,
+              }),
+            }).catch((mailErr) => console.warn(`[Background email dispatch notice for ${dept}]:`, mailErr));
           }
         }
       } catch (err: any) {
@@ -1464,25 +1523,31 @@ export const NewAuditForm: React.FC<NewAuditFormProps> = ({ onSuccess, onCancel,
                                   </select>
 
                                   {/* Auto-resolved FPR Lead & HOD CC from Matrix */}
-                                  {fprMatch ? (
-                                    <div
-                                      className="bg-emerald-50/90 border border-emerald-200 text-emerald-900 rounded-lg p-1.5 text-[10px] space-y-0.5 shadow-xs"
-                                      title={`FPR: ${fprMatch.fprName} (${fprMatch.fprEmail})\nHOD CC: ${fprMatch.hodName} (${fprMatch.hodEmail})`}
-                                    >
-                                      <div className="flex items-center space-x-1 font-bold">
-                                        <User className="w-3 h-3 text-emerald-600 shrink-0" />
-                                        <span className="truncate">FPR: <strong>{fprMatch.fprName}</strong></span>
-                                      </div>
-                                      {fprMatch.hodName && (
-                                        <div className="flex items-center space-x-1 text-[9px] text-emerald-700 font-semibold truncate">
-                                          <span className="text-emerald-500 font-bold shrink-0">CC:</span>
-                                          <span className="truncate">{fprMatch.hodName}</span>
+                                  {state.assignedDept ? (
+                                    fprMatch ? (
+                                      <div
+                                        className="bg-emerald-50/90 border border-emerald-200 text-emerald-900 rounded-lg p-1.5 text-[10px] space-y-0.5 shadow-xs"
+                                        title={`FPR: ${fprMatch.fprName} (${fprMatch.fprEmail})\nHOD CC: ${fprMatch.hodName} (${fprMatch.hodEmail})`}
+                                      >
+                                        <div className="flex items-center space-x-1 font-bold">
+                                          <User className="w-3 h-3 text-emerald-600 shrink-0" />
+                                          <span className="truncate">FPR: <strong>{fprMatch.fprName}</strong></span>
                                         </div>
-                                      )}
-                                    </div>
+                                        {fprMatch.hodName && (
+                                          <div className="flex items-center space-x-1 text-[9px] text-emerald-700 font-semibold truncate">
+                                            <span className="text-emerald-500 font-bold shrink-0">CC:</span>
+                                            <span className="truncate">{fprMatch.hodName}</span>
+                                          </div>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-lg px-2 py-1 text-[9px] font-semibold flex items-center space-x-1">
+                                        <span>FPR: {state.assignedDept} Lead</span>
+                                      </div>
+                                    )
                                   ) : (
-                                    <div className="bg-slate-50 border border-slate-200 text-slate-500 rounded-lg px-2 py-1 text-[9px] font-semibold flex items-center space-x-1">
-                                      <span>FPR: {state.assignedDept || 'Department'} Lead</span>
+                                    <div className="text-[9px] text-slate-400 italic px-1">
+                                      Unassigned (Select Dept)
                                     </div>
                                   )}
                                 </div>

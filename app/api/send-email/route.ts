@@ -205,25 +205,30 @@ export async function POST(req: NextRequest) {
         </html>
       `;
     } else if (!htmlContent && header) {
-      // Find NG results or map actions
-      const ngResults = (results || []).filter((r: any) => r.status === 'NG' || r.status === 'Observation');
-      const itemsToDisplay = (ngResults.length > 0 ? ngResults : (actions || []));
+      // When actions array is provided (department-specific routing), display ONLY those actions!
+      const itemsToDisplay = (actions && actions.length > 0)
+        ? actions
+        : ((results || []).filter((r: any) => r.status === 'NG' || r.status === 'Observation'));
 
       const deviationRows = itemsToDisplay.map((item: any, idx: number) => {
-        // Find matching action if item is from results
-        const matchingAction = (actions || []).find((a: any) => a.checkpointText === item.checkpointText || a.componentName === item.componentName) || item;
+        // Find matching audit result for extra context if needed
+        const matchingResult = (results || []).find(
+          (r: any) =>
+            (r.checkpointText && item.checkpointText && r.checkpointText.trim() === item.checkpointText.trim()) ||
+            (r.checkpointId && item.checkpointId && r.checkpointId === item.checkpointId)
+        ) || {};
 
         const sr = idx + 1;
-        const component = item.componentName || matchingAction.componentName || '-';
-        const checkpoint = item.checkpointText || matchingAction.checkpointText || '-';
-        const stdParam = item.standardParameter || '-';
-        const actualVal = item.actualValue || item.observation || matchingAction.observation || '-';
-        const recAction = item.recommendedAction || matchingAction.recommendedAction || 'Inspect and rectify deviation';
-        const remarks = item.observationNotes || item.observation || matchingAction.observation || '-';
-        const impact = item.whatImpactIfThisPartGetsFail || item.impactOfFailure || matchingAction.whatImpactIfThisPartGetsFail || 'Operational wear / equipment stoppage risk';
+        const component = item.componentName || item.comp || matchingResult.componentName || '-';
+        const checkpoint = item.checkpointText || item.ck || matchingResult.checkpointText || '-';
+        const stdParam = item.standardParameter || matchingResult.standardParameter || '-';
+        const actualVal = item.observation || item.actualValue || item.obs || matchingResult.actualValue || 'NG';
+        const recAction = item.recommendedAction || item.act || matchingResult.recommendedAction || 'Inspect and rectify deviation';
+        const remarks = item.observation || item.observationNotes || matchingResult.observationNotes || '-';
+        const impact = item.whatImpactIfThisPartGetsFail || item.impactOfFailure || matchingResult.whatImpactIfThisPartGetsFail || matchingResult.impactOfFailure || 'Operational wear / equipment stoppage risk';
 
         let photoHtml = '<span style="color: #94a3b8; font-size: 11px;">-</span>';
-        const pUrl = item.photoUrl || matchingAction.photoUrl;
+        const pUrl = item.photoUrl || matchingResult.photoUrl;
         if (pUrl) {
           if (pUrl.startsWith('data:image')) {
             const cid = `photo_sr_${sr}`;
@@ -404,15 +409,32 @@ export async function POST(req: NextRequest) {
 
     const ADMIN_EMAIL = 'mehul.chikhaliya@borosil.com';
 
-    // Normalize TO recipients
-    const toRecipients = (Array.isArray(to) ? to : (to || '').split(','))
-      .map((s: string) => s.trim())
-      .filter(Boolean);
+    // Normalize TO recipients (properly splitting comma-separated items and trimming)
+    const rawTo = Array.isArray(to) ? to : (to ? [to] : []);
+    const toRecipients: string[] = Array.from(
+      new Set(
+        rawTo
+          .flatMap((s: any) => (typeof s === 'string' ? s.split(',') : []))
+          .map((s: string) => s.trim().toLowerCase())
+          .filter(Boolean)
+      )
+    );
 
-    // Normalize CC recipients and ensure Admin is always in CC/TO
-    const ccRecipients = (Array.isArray(cc) ? cc : (cc || '').split(','))
-      .map((s: string) => s.trim())
-      .filter(Boolean);
+    // If TO is empty, route to ADMIN_EMAIL
+    if (toRecipients.length === 0) {
+      toRecipients.push(ADMIN_EMAIL);
+    }
+
+    // Normalize CC recipients
+    const rawCc = Array.isArray(cc) ? cc : (cc ? [cc] : []);
+    const ccRecipients: string[] = Array.from(
+      new Set(
+        rawCc
+          .flatMap((s: any) => (typeof s === 'string' ? s.split(',') : []))
+          .map((s: string) => s.trim().toLowerCase())
+          .filter((s: string) => Boolean(s) && !toRecipients.includes(s))
+      )
+    );
 
     const hasAdmin =
       toRecipients.some((e: string) => e.toLowerCase() === ADMIN_EMAIL.toLowerCase()) ||
@@ -423,11 +445,11 @@ export async function POST(req: NextRequest) {
     }
 
     // Automatically CC the logged in Auditor who submitted the audit
-    const auditorMail = (body.auditorEmail || header?.auditorEmail || '').trim();
+    const auditorMail = (body.auditorEmail || header?.auditorEmail || '').trim().toLowerCase();
     if (auditorMail) {
       const hasAuditor =
-        toRecipients.some((e: string) => e.toLowerCase() === auditorMail.toLowerCase()) ||
-        ccRecipients.some((e: string) => e.toLowerCase() === auditorMail.toLowerCase());
+        toRecipients.some((e: string) => e.toLowerCase() === auditorMail) ||
+        ccRecipients.some((e: string) => e.toLowerCase() === auditorMail);
       if (!hasAuditor) {
         ccRecipients.push(auditorMail);
       }

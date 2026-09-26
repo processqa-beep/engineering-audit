@@ -534,22 +534,57 @@ export class StorageEngine {
 
   /**
    * Look up the best FPR entry for a given department + section + line.
-   * Priority: exact dept+section+line > dept+section+ALL > dept+ALL+ALL
+   * Priority: exact dept+section+line > dept+section+ALL > dept+ALL+line > dept+ALL+ALL > first dept match
    */
   public static lookupFpr(
     department: string,
     sectionId: string,
     lineId: string
   ): FprEntry | null {
-    const matrix = this.getFprMatrix().filter((e) => e.active && e.department === department);
-    // Exact match
-    let match = matrix.find(
-      (e) => e.sectionId === sectionId && e.lineId === lineId
+    if (!department) return null;
+    const cleanDept = department.trim().toLowerCase();
+    const cleanSec = (sectionId || '').trim().toLowerCase();
+    const cleanLine = (lineId || '').trim().toLowerCase();
+
+    const matrix = this.getFprMatrix().filter(
+      (e) => e.active !== false && e.department && e.department.trim().toLowerCase() === cleanDept
     );
-    // Section + ANY line
-    if (!match) match = matrix.find((e) => e.sectionId === sectionId && e.lineId === 'ALL');
-    // Any section + any line
-    if (!match) match = matrix.find((e) => e.sectionId === 'ALL' && e.lineId === 'ALL');
+    if (matrix.length === 0) return null;
+
+    // 1. Exact match (section & line)
+    let match = matrix.find(
+      (e) =>
+        (e.sectionId || '').trim().toLowerCase() === cleanSec &&
+        (e.lineId || '').trim().toLowerCase() === cleanLine
+    );
+    // 2. Section match + ALL line
+    if (!match) {
+      match = matrix.find(
+        (e) =>
+          (e.sectionId || '').trim().toLowerCase() === cleanSec &&
+          ((e.lineId || '').trim().toUpperCase() === 'ALL' || !e.lineId)
+      );
+    }
+    // 3. ALL section + Line match
+    if (!match) {
+      match = matrix.find(
+        (e) =>
+          ((e.sectionId || '').trim().toUpperCase() === 'ALL' || !e.sectionId) &&
+          (e.lineId || '').trim().toLowerCase() === cleanLine
+      );
+    }
+    // 4. Any section + any line (Global department FPR)
+    if (!match) {
+      match = matrix.find(
+        (e) =>
+          ((e.sectionId || '').trim().toUpperCase() === 'ALL' || !e.sectionId) &&
+          ((e.lineId || '').trim().toUpperCase() === 'ALL' || !e.lineId)
+      );
+    }
+    // 5. Fallback: first active entry in this department
+    if (!match) {
+      match = matrix[0];
+    }
     return match || null;
   }
 }

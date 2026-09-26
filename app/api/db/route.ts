@@ -172,12 +172,41 @@ export async function GET(req: NextRequest) {
 
     // 5. FETCH FPR MATRIX
     if (action === 'fetchFprMatrix') {
-      const { data, error } = await supabase
-        .from('fpr_matrix')
-        .select('*')
-        .eq('active', true);
-      if (error) throw error;
-      return NextResponse.json({ success: true, data });
+      try {
+        const { data, error } = await supabase
+          .from('fpr_matrix')
+          .select('*')
+          .eq('active', true);
+        if (!error && data && data.length > 0) {
+          return NextResponse.json({ success: true, data });
+        }
+      } catch (e) {}
+
+      // Fallback from JSON backup in plant_structure
+      try {
+        const { data } = await supabase
+          .from('plant_structure')
+          .select('data')
+          .eq('id', 'fpr_matrix_backup')
+          .maybeSingle();
+        if (data?.data && Array.isArray(data.data) && data.data.length > 0) {
+          const mapped = data.data.map((f: any) => ({
+            id: f.id,
+            department: f.department,
+            section_id: f.sectionId || f.section_id,
+            line_id: f.lineId || f.line_id,
+            fpr_name: f.fprName || f.fpr_name,
+            fpr_email: f.fprEmail || f.fpr_email,
+            hod_name: f.hodName || f.hod_name,
+            hod_email: f.hodEmail || f.hod_email,
+            active: f.active !== false,
+            updated_at: f.updatedAt || f.updated_at,
+          }));
+          return NextResponse.json({ success: true, data: mapped });
+        }
+      } catch (e) {}
+
+      return NextResponse.json({ success: true, data: [] });
     }
 
     // 6. FETCH AUDITS
@@ -426,8 +455,23 @@ export async function POST(req: NextRequest) {
         updated_at: new Date().toISOString(),
       }));
 
-      const { error } = await supabase.from('fpr_matrix').upsert(rows);
-      if (error) throw error;
+      try {
+        await supabase.from('fpr_matrix').upsert(rows);
+      } catch (err) {
+        console.warn('[Supabase fpr_matrix table save notice]:', err);
+      }
+
+      // JSON backup in plant_structure
+      try {
+        await supabase.from('plant_structure').upsert({
+          id: 'fpr_matrix_backup',
+          data: matrix,
+          updated_at: new Date().toISOString(),
+        });
+      } catch (err) {
+        console.warn('[Supabase fpr_matrix backup notice]:', err);
+      }
+
       return NextResponse.json({ success: true, count: rows.length });
     }
 
