@@ -754,62 +754,65 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
                   </div>
 
                   {/* ── Photo Evidence Box (Finding / Before & Closure / After) ── */}
-                  {(act.photoUrl || act.closurePhotoUrl) && (
-                    <div className="bg-slate-50/90 p-3 rounded-2xl border border-slate-200 flex flex-wrap items-center gap-3">
+                  <div className="bg-slate-50/90 p-3 rounded-2xl border border-slate-200 flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex flex-wrap items-center gap-3">
                       <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider block shrink-0 flex items-center space-x-1">
                         <Camera className="w-3.5 h-3.5 text-slate-400" />
                         <span>Evidence Photos:</span>
                       </span>
 
-                      <div className="flex flex-wrap items-center gap-2.5">
-                        {act.photoUrl && (
-                          <button
-                            type="button"
-                            onClick={() => setActivePhotoModal(act.photoUrl || null)}
-                            className="flex items-center space-x-2 bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-2xs hover:border-indigo-400 hover:bg-indigo-50/30 cursor-pointer transition text-left group"
-                          >
-                            <img
-                              src={act.photoUrl}
-                              alt="Finding photo"
-                              className="w-8 h-8 object-cover rounded-lg border border-slate-200 group-hover:scale-105 transition"
-                            />
-                            <div>
-                              <span className="text-[10px] font-black text-rose-700 block uppercase">
-                                Finding (Before Photo)
-                              </span>
-                              <span className="text-[9px] text-slate-400 font-semibold flex items-center space-x-0.5">
-                                <span>Click to enlarge</span>
-                                <ExternalLink className="w-2.5 h-2.5 text-slate-400" />
-                              </span>
-                            </div>
-                          </button>
-                        )}
+                      {act.photoUrl ? (
+                        <button
+                          type="button"
+                          onClick={() => setActivePhotoModal(act.photoUrl || null)}
+                          className="flex items-center space-x-2 bg-white px-3 py-1.5 rounded-xl border border-rose-200 shadow-2xs hover:border-rose-400 hover:bg-rose-50/30 cursor-pointer transition text-left group"
+                        >
+                          <img
+                            src={act.photoUrl}
+                            alt="Finding photo"
+                            className="w-8 h-8 object-cover rounded-lg border border-rose-200 group-hover:scale-105 transition"
+                          />
+                          <div>
+                            <span className="text-[10px] font-black text-rose-700 block uppercase">
+                              Finding (Before Photo)
+                            </span>
+                            <span className="text-[9px] text-slate-400 font-semibold flex items-center space-x-0.5">
+                              <span>Click to enlarge</span>
+                              <ExternalLink className="w-2.5 h-2.5 text-slate-400" />
+                            </span>
+                          </div>
+                        </button>
+                      ) : (
+                        <span className="text-[10px] font-bold text-slate-400 bg-white px-2.5 py-1 rounded-lg border border-slate-200 inline-flex items-center space-x-1">
+                          <Camera className="w-3 h-3 text-slate-300" />
+                          <span>No initial finding photo attached during audit</span>
+                        </span>
+                      )}
 
-                        {act.closurePhotoUrl && (
-                          <button
-                            type="button"
-                            onClick={() => setActivePhotoModal(act.closurePhotoUrl || null)}
-                            className="flex items-center space-x-2 bg-white px-3 py-1.5 rounded-xl border border-emerald-200 shadow-2xs hover:border-emerald-400 hover:bg-emerald-50/30 cursor-pointer transition text-left group"
-                          >
-                            <img
-                              src={act.closurePhotoUrl}
-                              alt="Closure evidence"
-                              className="w-8 h-8 object-cover rounded-lg border border-emerald-300 group-hover:scale-105 transition"
-                            />
-                            <div>
-                              <span className="text-[10px] font-black text-emerald-700 block uppercase">
-                                Resolved (After Photo)
-                              </span>
-                              <span className="text-[9px] text-slate-400 font-semibold flex items-center space-x-0.5">
-                                <span>Click to enlarge</span>
-                                <ExternalLink className="w-2.5 h-2.5 text-slate-400" />
-                              </span>
-                            </div>
-                          </button>
-                        )}
-                      </div>
+                      {act.closurePhotoUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setActivePhotoModal(act.closurePhotoUrl || null)}
+                          className="flex items-center space-x-2 bg-white px-3 py-1.5 rounded-xl border border-emerald-200 shadow-2xs hover:border-emerald-400 hover:bg-emerald-50/30 cursor-pointer transition text-left group"
+                        >
+                          <img
+                            src={act.closurePhotoUrl}
+                            alt="Closure evidence"
+                            className="w-8 h-8 object-cover rounded-lg border border-emerald-300 group-hover:scale-105 transition"
+                          />
+                          <div>
+                            <span className="text-[10px] font-black text-emerald-700 block uppercase">
+                              Resolved (After Photo)
+                            </span>
+                            <span className="text-[9px] text-slate-400 font-semibold flex items-center space-x-0.5">
+                              <span>Click to enlarge</span>
+                              <ExternalLink className="w-2.5 h-2.5 text-slate-400" />
+                            </span>
+                          </div>
+                        </button>
+                      )}
                     </div>
-                  )}
+                  </div>
 
                   {/* ── CAPA & Root Cause Analysis (RCA) Section ── */}
                   {(act.status === 'Closed' || activeSubTab === 'Closed' || Boolean(act.rootCause) || Boolean(act.correctiveAction) || Boolean(act.preventiveAction) || Boolean(act.closureRemark) || Boolean(act.targetClosureDate)) && (
