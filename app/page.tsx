@@ -84,7 +84,14 @@ export default function Home() {
   }
 
   if (!currentUser) {
-    return <LoginPage onLoginSuccess={(user) => setCurrentUser(user)} />;
+    return (
+      <LoginPage
+        onLoginSuccess={(user) => {
+          setCurrentUser(user);
+          setActiveTab('dashboard');
+        }}
+      />
+    );
   }
 
   const isAuditorOrAdmin = currentUser.role === 'Admin' || currentUser.role === 'QA' || currentUser.role === 'Auditor';

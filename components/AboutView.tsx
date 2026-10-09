@@ -257,21 +257,21 @@ export const AboutView: React.FC = () => {
           </div>
 
           <span className="px-3 py-1 bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl text-xs font-black">
-            Latest: v2.8.0
+            Latest: v3.0.0
           </span>
         </div>
 
         <div className="space-y-4">
-          {/* Release v2.8.0 */}
+          {/* Release v3.0.0 */}
           <div className="border border-indigo-200 bg-indigo-50/30 rounded-2xl p-5 space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div className="flex items-center space-x-2.5">
                 <span className="font-mono text-sm font-black bg-indigo-600 text-white px-3 py-1 rounded-xl shadow-xs">
-                  v2.8.0
+                  v3.0.0
                 </span>
                 <span className="text-xs font-bold text-slate-600 flex items-center space-x-1">
                   <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                  <span>September 1, 2026</span>
+                  <span>October 9, 2026</span>
                 </span>
               </div>
               <span className="text-[10px] font-extrabold bg-emerald-500 text-white px-2.5 py-0.5 rounded-full uppercase tracking-wider self-start sm:self-auto">
@@ -281,20 +281,39 @@ export const AboutView: React.FC = () => {
 
             <ul className="space-y-1.5 text-xs text-slate-700 font-medium list-disc list-inside">
               <li>
-                <strong>Multi-Sub-Section State Memory:</strong> Full audit checkpoint evaluation caching across all sub-sections with zero data loss.
+                <strong>Executive Dashboard Primary Landing:</strong> Default landing tab set to Executive Dashboard on initial load and login for instant KPI tracking.
               </li>
               <li>
-                <strong>Departmental Point Routing:</strong> Per-checkpoint email routing sending specific NG findings directly to responsible departments (Instrumentation, Electrical, Maintenance, Utilities).
+                <strong>Complete RCA &amp; CAPA Tracking:</strong> Standardized deviation closure workflow capturing Target Closure Date (TCD), Root Cause Analysis (RCA), Corrective Action Taken, Preventive Action (CAPA), and Maintenance Remarks / SAP Order without automated placeholder text.
               </li>
               <li>
-                <strong>Supabase Live Cloud Synchronization:</strong> Real-time PostgreSQL database sync with local browser caching and server proxy failover.
+                <strong>Per-Checkpoint Evidence Photos:</strong> In-card high-resolution Finding (Before Photo) and Resolved (After Photo) previews with full-screen zoom modal and strict checkpoint-level photo matching.
               </li>
               <li>
-                <strong>Permanent SOP Photo Master:</strong> Standard component reference photo upload &amp; persistence in Supabase S3 storage.
+                <strong>Enhanced Action Closure Email Notifications:</strong> Comprehensive closure emails displaying Auditor Name, Audit ID, clean professional formatting (emojis removed), and dynamic before/after photo comparison.
               </li>
               <li>
-                <strong>Enhanced Action Item Tracking:</strong> Centered RCA modal dialogues with streamlined Root Cause Analysis and closure proof photo uploads.
+                <strong>Universal Multi-Device Cloud Syncing:</strong> Fully synchronized Supabase Cloud Database and Storage integration ensuring instant, seamless updates across all laptops, phones, and devices.
               </li>
+            </ul>
+          </div>
+
+          {/* Release v2.8.0 */}
+          <div className="border border-slate-200 bg-slate-50/50 rounded-2xl p-5 space-y-3">
+            <div className="flex items-center space-x-2.5">
+              <span className="font-mono text-xs font-black bg-slate-200 text-slate-800 px-2.5 py-0.5 rounded-lg">
+                v2.8.0
+              </span>
+              <span className="text-xs font-semibold text-slate-500 flex items-center space-x-1">
+                <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                <span>September 2026</span>
+              </span>
+            </div>
+
+            <ul className="space-y-1 text-xs text-slate-600 font-medium list-disc list-inside">
+              <li>Multi-sub-section state memory across audit evaluations with zero data loss.</li>
+              <li>Departmental point routing sending specific NG findings to Instrumentation, Electrical, Maintenance, and Utilities.</li>
+              <li>Permanent standard SOP photo master upload and cloud storage persistence.</li>
             </ul>
           </div>
 
