@@ -434,7 +434,28 @@ export class StorageEngine {
 
   // ── ACTIONS ───────────────────────────────────────────────────────────────
   public static getActions(): ActionItem[] {
-    return getItem(STORAGE_KEYS.ACTIONS, initialActions);
+    const rawActions: ActionItem[] = getItem(STORAGE_KEYS.ACTIONS, initialActions);
+    return rawActions.map((act) => {
+      if (act.closureRemark && act.closureRemark.includes('<!--CAPA_DATA:') && act.closureRemark.includes('-->')) {
+        try {
+          const match = act.closureRemark.match(/<!--CAPA_DATA:(.*?)-->/);
+          if (match && match[1]) {
+            const meta = JSON.parse(match[1]);
+            const cleanText = act.closureRemark.replace(/<!--CAPA_DATA:.*?-->/, '').trim();
+            return {
+              ...act,
+              closureRemark: cleanText || meta.rmk || '',
+              rootCause: act.rootCause || meta.rc || undefined,
+              correctiveAction: act.correctiveAction || meta.ca || undefined,
+              preventiveAction: act.preventiveAction || meta.pa || undefined,
+              targetClosureDate: act.targetClosureDate || meta.tcd || undefined,
+              closedBy: act.closedBy || meta.cb || undefined,
+            };
+          }
+        } catch (_) {}
+      }
+      return act;
+    });
   }
 
   public static updateActionStatus(actionId: string, status: any, closureRemark?: string, closurePhotoUrl?: string): void {

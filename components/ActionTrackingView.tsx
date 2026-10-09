@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import {
   AlertTriangle,
@@ -23,6 +23,15 @@ import {
   Building,
   Target,
   FileCheck2,
+  ChevronLeft,
+  ChevronRight,
+  ChevronDown,
+  Activity,
+  Zap,
+  Info,
+  Sliders,
+  CheckCircle,
+  HelpCircle,
 } from 'lucide-react';
 import { StorageEngine } from '../lib/storageEngine';
 import { SupabaseBackendClient } from '../lib/supabaseBackend';
@@ -33,17 +42,95 @@ interface ActionTrackingViewProps {
   currentUser?: AuthUser | null;
 }
 
-export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNavigate, currentUser }) => {
-  const sections = StorageEngine.getSections();
-  const lines = StorageEngine.getLines();
-  const [actions, setActions] = useState<ActionItem[]>(() => StorageEngine.getActions());
+// ── SANITIZER & BACKFILLER HELPER ─────────────────────────────────────────────
+function cleanAndEnrichAction(
+  act: ActionItem,
+  auditResults: any[],
+  checkpoints: any[]
+): ActionItem {
+  const cleaned: ActionItem = { ...act };
 
-  const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  // 1. Clean up closureRemark and extract CAPA metadata
+  if (
+    cleaned.closureRemark &&
+    cleaned.closureRemark.includes('<!--CAPA_DATA:') &&
+    cleaned.closureRemark.includes('-->')
+  ) {
+    try {
+      const match = cleaned.closureRemark.match(/<!--CAPA_DATA:(.*?)-->/);
+      if (match && match[1]) {
+        const meta = JSON.parse(match[1]);
+        const cleanText = cleaned.closureRemark.replace(/<!--CAPA_DATA:.*?-->/, '').trim();
+        cleaned.closureRemark = cleanText || meta.rmk || '';
+        cleaned.rootCause = cleaned.rootCause || meta.rc || undefined;
+        cleaned.correctiveAction = cleaned.correctiveAction || meta.ca || undefined;
+        cleaned.preventiveAction = cleaned.preventiveAction || meta.pa || undefined;
+        cleaned.targetClosureDate = cleaned.targetClosureDate || meta.tcd || undefined;
+        cleaned.closedBy = cleaned.closedBy || meta.cb || undefined;
+      }
+    } catch (_) {}
+  }
+
+  // 2. Backfill spec, actual value, and potential impact if missing
+  if (!cleaned.standardParameter || !cleaned.actualValue || !cleaned.potentialImpact) {
+    const matchedRes = auditResults.find(
+      (r) =>
+        (r.auditId === cleaned.auditId && r.checkpointText === cleaned.checkpointText) ||
+        (r.auditId === cleaned.auditId && r.componentName === cleaned.componentName)
+    );
+    const matchedCk = checkpoints.find(
+      (c) =>
+        c.checkpointText === cleaned.checkpointText ||
+        (c.componentName === cleaned.componentName && c.checkpointText === cleaned.checkpointText) ||
+        c.componentName === cleaned.componentName
+    );
+
+    if (!cleaned.standardParameter || cleaned.standardParameter === '-') {
+      cleaned.standardParameter =
+        matchedRes?.standardParameter ||
+        matchedCk?.standardParameter ||
+        (matchedCk?.minimum !== undefined && matchedCk?.maximum !== undefined
+          ? `${matchedCk.minimum} – ${matchedCk.maximum} ${matchedCk.unit || ''}`.trim()
+          : '-');
+    }
+
+    if (!cleaned.actualValue || cleaned.actualValue === '-') {
+      cleaned.actualValue = matchedRes?.actualValue || 'NG Finding';
+    }
+
+    if (!cleaned.potentialImpact || cleaned.potentialImpact === '-') {
+      cleaned.potentialImpact =
+        matchedRes?.whatImpactIfThisPartGetsFail ||
+        matchedRes?.impactOfFailure ||
+        matchedCk?.whatImpactIfThisPartGetsFail ||
+        matchedCk?.impactOfFailure ||
+        'Potential equipment downtime or quality variation';
+    }
+
+    if (!cleaned.photoUrl && matchedRes?.photoUrl) {
+      cleaned.photoUrl = matchedRes.photoUrl;
+    }
+  }
+
+  return cleaned;
+}
+
+export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNavigate, currentUser }) => {
+  const [actions, setActions] = useState<ActionItem[]>(() => StorageEngine.getActions());
+  const [auditResults, setAuditResults] = useState<any[]>(() => StorageEngine.getAuditResults());
+  const [checkpoints, setCheckpoints] = useState<any[]>(() => StorageEngine.getCheckpoints());
+
+  // Filter States
+  const [activeSubTab, setActiveSubTab] = useState<'ALL' | 'Open' | 'In Progress' | 'Overdue' | 'Closed'>('ALL');
   const [priorityFilter, setPriorityFilter] = useState<string>('ALL');
   const [departmentFilter, setDepartmentFilter] = useState<string>(() =>
     currentUser?.role === 'Engineering' && currentUser?.department ? currentUser.department : 'ALL'
   );
   const [searchQuery, setSearchQuery] = useState<string>('');
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(10);
 
   // Edit / Closure Modal State
   const [editingAction, setEditingAction] = useState<ActionItem | null>(null);
@@ -57,17 +144,28 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
   const [activePhotoModal, setActivePhotoModal] = useState<string | null>(null);
   const [saving, setSaving] = useState<boolean>(false);
 
-  React.useEffect(() => {
+  // Initial Sync from Supabase Cloud
+  useEffect(() => {
     if (SupabaseBackendClient.isConfigured()) {
-      SupabaseBackendClient.fetchActions()
-        .then((cloudActions) => {
-          if (cloudActions && cloudActions.length > 0) setActions(cloudActions);
-        })
-        .catch((err) => console.warn('Action cloud fetch notice:', err));
+      Promise.allSettled([
+        SupabaseBackendClient.fetchActions(),
+        SupabaseBackendClient.fetchAuditResults(),
+        SupabaseBackendClient.fetchCheckpoints(),
+      ]).then(([actRes, resRes, ckRes]) => {
+        if (actRes.status === 'fulfilled' && actRes.value && actRes.value.length > 0) {
+          setActions(actRes.value);
+        }
+        if (resRes.status === 'fulfilled' && resRes.value && resRes.value.length > 0) {
+          setAuditResults(resRes.value);
+        }
+        if (ckRes.status === 'fulfilled' && ckRes.value && ckRes.value.length > 0) {
+          setCheckpoints(ckRes.value);
+        }
+      });
     }
   }, []);
 
-  // Lock body scroll when popup/modal is open so page behind doesn't scroll
+  // Lock body scroll when popup/modal is open
   useEffect(() => {
     if (editingAction || activePhotoModal) {
       document.body.style.overflow = 'hidden';
@@ -79,7 +177,12 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
     };
   }, [editingAction, activePhotoModal]);
 
-  // Check if current user is allowed to edit this specific action item
+  // Clean and Enrich Actions
+  const enrichedActions = useMemo(() => {
+    return actions.map((act) => cleanAndEnrichAction(act, auditResults, checkpoints));
+  }, [actions, auditResults, checkpoints]);
+
+  // Check user edit permissions
   const canUserEditAction = (act: ActionItem): boolean => {
     if (!currentUser) return false;
     if (currentUser.role === 'Admin') return true;
@@ -115,26 +218,52 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
     return false;
   };
 
-  const departmentsList = Array.from(
-    new Set(actions.map((a) => a.responsibleDepartment).filter(Boolean))
-  ) as string[];
+  const departmentsList = useMemo(() => {
+    return Array.from(new Set(enrichedActions.map((a) => a.responsibleDepartment).filter(Boolean))) as string[];
+  }, [enrichedActions]);
 
-  const filteredActions = actions.filter((act) => {
-    if (statusFilter !== 'ALL' && act.status !== statusFilter) return false;
-    if (priorityFilter !== 'ALL' && act.priority !== priorityFilter) return false;
-    if (departmentFilter !== 'ALL' && act.responsibleDepartment !== departmentFilter) return false;
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      const matchComp = act.componentName.toLowerCase().includes(q);
-      const matchCheck = act.checkpointText.toLowerCase().includes(q);
-      const matchAud = act.auditId.toLowerCase().includes(q);
-      const matchId = act.actionId.toLowerCase().includes(q);
-      const matchResp = (act.responsiblePerson || '').toLowerCase().includes(q);
-      const matchDept = (act.responsibleDepartment || '').toLowerCase().includes(q);
-      if (!matchComp && !matchCheck && !matchAud && !matchId && !matchResp && !matchDept) return false;
-    }
-    return true;
-  });
+  // Filtered Actions
+  const filteredActions = useMemo(() => {
+    return enrichedActions.filter((act) => {
+      if (activeSubTab !== 'ALL' && act.status !== activeSubTab) return false;
+      if (priorityFilter !== 'ALL' && act.priority !== priorityFilter) return false;
+      if (departmentFilter !== 'ALL' && act.responsibleDepartment !== departmentFilter) return false;
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchComp = (act.componentName || '').toLowerCase().includes(q);
+        const matchCheck = (act.checkpointText || '').toLowerCase().includes(q);
+        const matchAud = (act.auditId || '').toLowerCase().includes(q);
+        const matchId = (act.actionId || '').toLowerCase().includes(q);
+        const matchResp = (act.responsiblePerson || '').toLowerCase().includes(q);
+        const matchDept = (act.responsibleDepartment || '').toLowerCase().includes(q);
+        const matchObs = (act.observation || '').toLowerCase().includes(q);
+        const matchRec = (act.recommendedAction || '').toLowerCase().includes(q);
+        if (!matchComp && !matchCheck && !matchAud && !matchId && !matchResp && !matchDept && !matchObs && !matchRec) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [enrichedActions, activeSubTab, priorityFilter, departmentFilter, searchQuery]);
+
+  // Reset pagination on filter change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeSubTab, priorityFilter, departmentFilter, searchQuery, pageSize]);
+
+  // Counts for Sub-Tabs
+  const totalCount = enrichedActions.length;
+  const openCount = enrichedActions.filter((a) => a.status === 'Open').length;
+  const inProgressCount = enrichedActions.filter((a) => a.status === 'In Progress').length;
+  const closedCount = enrichedActions.filter((a) => a.status === 'Closed').length;
+  const overdueCount = enrichedActions.filter((a) => a.status === 'Overdue').length;
+
+  // Pagination Slice
+  const totalPages = Math.ceil(filteredActions.length / pageSize) || 1;
+  const paginatedActions = useMemo(() => {
+    const startIdx = (currentPage - 1) * pageSize;
+    return filteredActions.slice(startIdx, startIdx + pageSize);
+  }, [filteredActions, currentPage, pageSize]);
 
   const handleOpenStatusModal = (act: ActionItem) => {
     setEditingAction(act);
@@ -203,7 +332,7 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
     StorageEngine.updateActionDetailed(editingAction.actionId, updates);
     setActions(StorageEngine.getActions());
 
-    // If status is Closed, send Action Closure Notification email
+    // If status is Closed, dispatch email notification
     if (newStatus === 'Closed') {
       const closedActionItem: ActionItem = {
         ...editingAction,
@@ -248,14 +377,9 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
     }
   };
 
-  const openCount = actions.filter((a) => a.status === 'Open').length;
-  const inProgressCount = actions.filter((a) => a.status === 'In Progress').length;
-  const closedCount = actions.filter((a) => a.status === 'Closed').length;
-  const overdueCount = actions.filter((a) => a.status === 'Overdue').length;
-
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-16 animate-fade-in font-sans">
-      {/* Top Banner */}
+      {/* ── TOP BANNER ────────────────────────────────────────────────────── */}
       <div className="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-xl shadow-slate-300/40 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-extrabold text-slate-900 flex items-center space-x-2">
@@ -263,35 +387,147 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
             <span>ACTION ITEMS &amp; DEVIATION CLOSURE TRACKER</span>
           </h2>
           <p className="text-xs text-slate-500 mt-1 font-semibold">
-            Track Root Cause Analysis (RCA), Corrective &amp; Preventive Actions (CAPA), TCD, and After Evidence Photos.
+            Track Deviation Observations, Standard Parameters, Measured Values, Potential Impacts, RCA, and CAPA Resolutions.
           </p>
         </div>
 
-        {/* Filter Controls */}
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Status Filter */}
-          <div className="flex items-center space-x-1 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 text-xs">
-            <Filter className="w-3.5 h-3.5 text-slate-400" />
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="bg-transparent text-slate-800 focus:outline-none font-bold cursor-pointer"
-            >
-              <option value="ALL">All Status ({actions.length})</option>
-              <option value="Open">Open ({openCount})</option>
-              <option value="In Progress">In Progress ({inProgressCount})</option>
-              <option value="Overdue">Overdue ({overdueCount})</option>
-              <option value="Closed">Closed ({closedCount})</option>
-            </select>
-          </div>
+        {/* Global Search Box */}
+        <div className="relative min-w-[260px]">
+          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+          <input
+            type="text"
+            placeholder="Search component, checkpoint, FPR..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-800 font-semibold focus:outline-none focus:border-indigo-500 transition shadow-xs"
+          />
+        </div>
+      </div>
 
+      {/* ── SUB-TABS & KPI STATUS BAR ────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+        <button
+          type="button"
+          onClick={() => setActiveSubTab('ALL')}
+          className={`p-3.5 rounded-2xl border text-left transition flex items-center justify-between shadow-xs cursor-pointer ${
+            activeSubTab === 'ALL'
+              ? 'bg-indigo-600 border-indigo-700 text-white ring-2 ring-indigo-400/30'
+              : 'bg-white border-slate-200/90 hover:bg-slate-50 text-slate-700'
+          }`}
+        >
+          <div>
+            <span className={`text-[10px] font-extrabold uppercase tracking-wider block ${activeSubTab === 'ALL' ? 'text-indigo-100' : 'text-slate-400'}`}>
+              All Actions
+            </span>
+            <div className={`text-xl font-black mt-0.5 ${activeSubTab === 'ALL' ? 'text-white' : 'text-slate-900'}`}>
+              {totalCount}
+            </div>
+          </div>
+          <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${activeSubTab === 'ALL' ? 'bg-indigo-500 text-white' : 'bg-slate-100 text-slate-500'}`}>
+            <Layers className="w-4 h-4" />
+          </div>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveSubTab('Open')}
+          className={`p-3.5 rounded-2xl border text-left transition flex items-center justify-between shadow-xs cursor-pointer ${
+            activeSubTab === 'Open'
+              ? 'bg-rose-600 border-rose-700 text-white ring-2 ring-rose-400/30'
+              : 'bg-white border-slate-200/90 hover:bg-rose-50/50 text-slate-700'
+          }`}
+        >
+          <div>
+            <span className={`text-[10px] font-extrabold uppercase tracking-wider block ${activeSubTab === 'Open' ? 'text-rose-100' : 'text-slate-400'}`}>
+              Open / Pending
+            </span>
+            <div className={`text-xl font-black mt-0.5 ${activeSubTab === 'Open' ? 'text-white' : 'text-rose-600'}`}>
+              {openCount}
+            </div>
+          </div>
+          <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${activeSubTab === 'Open' ? 'bg-rose-500 text-white' : 'bg-rose-50 text-rose-600'}`}>
+            <AlertTriangle className="w-4 h-4" />
+          </div>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveSubTab('In Progress')}
+          className={`p-3.5 rounded-2xl border text-left transition flex items-center justify-between shadow-xs cursor-pointer ${
+            activeSubTab === 'In Progress'
+              ? 'bg-amber-500 border-amber-600 text-white ring-2 ring-amber-400/30'
+              : 'bg-white border-slate-200/90 hover:bg-amber-50/50 text-slate-700'
+          }`}
+        >
+          <div>
+            <span className={`text-[10px] font-extrabold uppercase tracking-wider block ${activeSubTab === 'In Progress' ? 'text-amber-100' : 'text-slate-400'}`}>
+              In Progress
+            </span>
+            <div className={`text-xl font-black mt-0.5 ${activeSubTab === 'In Progress' ? 'text-white' : 'text-amber-600'}`}>
+              {inProgressCount}
+            </div>
+          </div>
+          <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${activeSubTab === 'In Progress' ? 'bg-amber-400 text-white' : 'bg-amber-50 text-amber-600'}`}>
+            <Clock className="w-4 h-4" />
+          </div>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveSubTab('Overdue')}
+          className={`p-3.5 rounded-2xl border text-left transition flex items-center justify-between shadow-xs cursor-pointer ${
+            activeSubTab === 'Overdue'
+              ? 'bg-red-700 border-red-800 text-white ring-2 ring-red-400/30'
+              : 'bg-white border-slate-200/90 hover:bg-red-50/50 text-slate-700'
+          }`}
+        >
+          <div>
+            <span className={`text-[10px] font-extrabold uppercase tracking-wider block ${activeSubTab === 'Overdue' ? 'text-red-100' : 'text-slate-400'}`}>
+              Overdue
+            </span>
+            <div className={`text-xl font-black mt-0.5 ${activeSubTab === 'Overdue' ? 'text-white' : 'text-red-700'}`}>
+              {overdueCount}
+            </div>
+          </div>
+          <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${activeSubTab === 'Overdue' ? 'bg-red-600 text-white' : 'bg-red-100 text-red-700'}`}>
+            <Clock className="w-4 h-4" />
+          </div>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveSubTab('Closed')}
+          className={`p-3.5 rounded-2xl border text-left transition flex items-center justify-between shadow-xs cursor-pointer ${
+            activeSubTab === 'Closed'
+              ? 'bg-emerald-600 border-emerald-700 text-white ring-2 ring-emerald-400/30'
+              : 'bg-white border-slate-200/90 hover:bg-emerald-50/50 text-slate-700'
+          }`}
+        >
+          <div>
+            <span className={`text-[10px] font-extrabold uppercase tracking-wider block ${activeSubTab === 'Closed' ? 'text-emerald-100' : 'text-slate-400'}`}>
+              Closed / Done
+            </span>
+            <div className={`text-xl font-black mt-0.5 ${activeSubTab === 'Closed' ? 'text-white' : 'text-emerald-600'}`}>
+              {closedCount}
+            </div>
+          </div>
+          <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${activeSubTab === 'Closed' ? 'bg-emerald-500 text-white' : 'bg-emerald-50 text-emerald-600'}`}>
+            <CheckCircle2 className="w-4 h-4" />
+          </div>
+        </button>
+      </div>
+
+      {/* ── SECONDARY FILTERS & PAGINATION CONTROLS ──────────────────────────── */}
+      <div className="bg-white px-5 py-3.5 rounded-2xl border border-slate-200/90 shadow-sm flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div className="flex flex-wrap items-center gap-3">
           {/* Department Filter */}
-          <div className="flex items-center space-x-1 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 text-xs">
+          <div className="flex items-center space-x-1.5 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
             <Building className="w-3.5 h-3.5 text-slate-400" />
+            <span className="text-slate-500 font-bold">Dept:</span>
             <select
               value={departmentFilter}
               onChange={(e) => setDepartmentFilter(e.target.value)}
-              className="bg-transparent text-slate-800 focus:outline-none font-bold cursor-pointer"
+              className="bg-transparent text-slate-800 font-bold focus:outline-none cursor-pointer"
             >
               <option value="ALL">All Departments</option>
               {departmentsList.map((d) => (
@@ -301,213 +537,134 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
           </div>
 
           {/* Priority Filter */}
-          <div className="flex items-center space-x-1 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 text-xs">
+          <div className="flex items-center space-x-1.5 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
+            <Sliders className="w-3.5 h-3.5 text-slate-400" />
+            <span className="text-slate-500 font-bold">Priority:</span>
             <select
               value={priorityFilter}
               onChange={(e) => setPriorityFilter(e.target.value)}
-              className="bg-transparent text-slate-800 focus:outline-none font-bold cursor-pointer"
+              className="bg-transparent text-slate-800 font-bold focus:outline-none cursor-pointer"
             >
               <option value="ALL">All Priorities</option>
-              <option value="Critical">Critical Only</option>
-              <option value="High">High Priority</option>
-              <option value="Medium">Medium Priority</option>
+              <option value="Critical">Critical</option>
+              <option value="High">High</option>
+              <option value="Medium">Medium</option>
             </select>
           </div>
 
-          {/* Search Box */}
-          <div className="relative">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
-            <input
-              type="text"
-              placeholder="Search component, FPR..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="bg-slate-50 border border-slate-200 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-800 font-semibold focus:outline-none focus:border-indigo-500"
-            />
+          {/* Page Size Selector */}
+          <div className="flex items-center space-x-1.5 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
+            <span className="text-slate-500 font-bold">Per Page:</span>
+            <select
+              value={pageSize}
+              onChange={(e) => setPageSize(Number(e.target.value))}
+              className="bg-transparent text-slate-800 font-bold focus:outline-none cursor-pointer"
+            >
+              <option value={10}>10 items</option>
+              <option value={25}>25 items</option>
+              <option value={50}>50 items</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Pagination Summary & Buttons */}
+        <div className="flex items-center space-x-3 ml-auto">
+          <span className="text-slate-500 font-bold text-[11px]">
+            Showing <strong className="text-slate-800">{filteredActions.length > 0 ? (currentPage - 1) * pageSize + 1 : 0}–{Math.min(currentPage * pageSize, filteredActions.length)}</strong> of <strong className="text-slate-800">{filteredActions.length}</strong>
+          </span>
+
+          <div className="flex items-center space-x-1">
+            <button
+              type="button"
+              disabled={currentPage <= 1}
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-35 disabled:cursor-not-allowed text-slate-600 transition"
+              title="Previous Page"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+
+            <span className="px-2.5 py-1 bg-slate-100 text-slate-800 rounded-lg font-bold text-xs">
+              {currentPage} / {totalPages}
+            </span>
+
+            <button
+              type="button"
+              disabled={currentPage >= totalPages}
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-35 disabled:cursor-not-allowed text-slate-600 transition"
+              title="Next Page"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
           </div>
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-sm flex items-center justify-between">
-          <div>
-            <span className="text-[11px] text-slate-500 font-bold uppercase tracking-wider">Open Actions</span>
-            <div className="text-2xl font-black text-rose-600 mt-0.5">{openCount}</div>
-          </div>
-          <div className="w-10 h-10 rounded-xl bg-rose-50 flex items-center justify-center text-rose-600">
-            <AlertTriangle className="w-5 h-5" />
-          </div>
-        </div>
-
-        <div className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-sm flex items-center justify-between">
-          <div>
-            <span className="text-[11px] text-slate-500 font-bold uppercase tracking-wider">In Progress</span>
-            <div className="text-2xl font-black text-amber-600 mt-0.5">{inProgressCount}</div>
-          </div>
-          <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center text-amber-600">
-            <Clock className="w-5 h-5" />
-          </div>
-        </div>
-
-        <div className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-sm flex items-center justify-between">
-          <div>
-            <span className="text-[11px] text-slate-500 font-bold uppercase tracking-wider">Overdue</span>
-            <div className="text-2xl font-black text-red-700 mt-0.5">{overdueCount}</div>
-          </div>
-          <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center text-red-700">
-            <Clock className="w-5 h-5" />
-          </div>
-        </div>
-
-        <div className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-sm flex items-center justify-between">
-          <div>
-            <span className="text-[11px] text-slate-500 font-bold uppercase tracking-wider">Closed / Done</span>
-            <div className="text-2xl font-black text-emerald-600 mt-0.5">{closedCount}</div>
-          </div>
-          <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600">
-            <CheckCircle2 className="w-5 h-5" />
-          </div>
-        </div>
-      </div>
-
-      {/* Action Items Cards */}
-      <div className="grid grid-cols-1 gap-4">
-        {filteredActions.length === 0 ? (
+      {/* ── ACTION ITEMS LIST CARDS ──────────────────────────────────────────── */}
+      <div className="space-y-4">
+        {paginatedActions.length === 0 ? (
           <div className="bg-white p-12 rounded-3xl border border-slate-200 text-center space-y-3 shadow-sm">
             <CheckCircle2 className="w-12 h-12 text-emerald-600 mx-auto" />
             <h3 className="text-base font-extrabold text-slate-900">No Action Items Found</h3>
-            <p className="text-xs text-slate-500 font-semibold">All equipment checkpoints are in compliance or match your filter criteria.</p>
+            <p className="text-xs text-slate-500 font-semibold">
+              No deviation actions match your selected tab &amp; filter criteria.
+            </p>
           </div>
         ) : (
-          filteredActions.map((act, idx) => {
+          paginatedActions.map((act, idx) => {
             const hasPermission = canUserEditAction(act);
 
             return (
               <div
                 key={`${act.actionId}-${act.auditId}-${idx}`}
-                className={`p-6 rounded-3xl border transition shadow-md ${
+                className={`p-5 md:p-6 rounded-3xl border transition shadow-md ${
                   act.status === 'Closed'
-                    ? 'bg-slate-50/80 border-slate-200 opacity-85'
+                    ? 'bg-slate-50/90 border-slate-200 opacity-90'
                     : act.status === 'Overdue'
-                    ? 'bg-rose-50/60 border-rose-300'
+                    ? 'bg-rose-50/50 border-rose-300'
                     : 'bg-white border-slate-200/90'
                 }`}
               >
-                <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-5">
-                  <div className="space-y-2.5 flex-1">
-                    {/* Header Chips */}
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-mono text-xs font-black text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded-lg border border-indigo-200">
-                        {act.actionId}
+                {/* ── Card Header Row ─────────────────────────────────────────── */}
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-slate-100 pb-3.5 mb-3.5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-mono text-xs font-black text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded-lg border border-indigo-200">
+                      {act.actionId}
+                    </span>
+                    <span className="text-xs text-slate-400 font-semibold">
+                      • Audit #{act.auditId}
+                    </span>
+                    <span
+                      className={`px-2.5 py-0.5 text-[10px] font-black rounded-lg ${
+                        act.priority === 'Critical'
+                          ? 'bg-rose-100 text-rose-800 border border-rose-300'
+                          : act.priority === 'High'
+                          ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                          : 'bg-blue-100 text-blue-800 border border-blue-300'
+                      }`}
+                    >
+                      {act.priority} Priority
+                    </span>
+
+                    {act.responsibleDepartment && (
+                      <span className="bg-slate-100 text-slate-700 border border-slate-200 text-[10px] font-bold px-2.5 py-0.5 rounded-lg flex items-center space-x-1">
+                        <Building className="w-3 h-3 text-slate-400" />
+                        <span>{act.responsibleDepartment}</span>
                       </span>
-                      <span className="text-xs text-slate-400 font-semibold">• Audit: {act.auditId}</span>
-                      <span
-                        className={`px-2.5 py-0.5 text-[10px] font-black rounded-lg ${
-                          act.priority === 'Critical'
-                            ? 'bg-rose-100 text-rose-800 border border-rose-300'
-                            : act.priority === 'High'
-                            ? 'bg-amber-100 text-amber-800 border border-amber-300'
-                            : 'bg-blue-100 text-blue-800 border border-blue-300'
-                        }`}
-                      >
-                        {act.priority} Priority
-                      </span>
-
-                      {act.responsibleDepartment && (
-                        <span className="bg-slate-100 text-slate-700 border border-slate-200 text-[10px] font-bold px-2 py-0.5 rounded-lg flex items-center space-x-1">
-                          <Building className="w-3 h-3 text-slate-400" />
-                          <span>{act.responsibleDepartment}</span>
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Component Title */}
-                    <h3 className="text-base font-extrabold text-slate-900">
-                      {act.componentName}
-                    </h3>
-
-                    {/* Deviation & Checkpoint Box */}
-                    <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 text-xs space-y-1.5">
-                      <p className="font-semibold text-slate-800">
-                        <span className="font-bold text-slate-500">Checkpoint: </span>
-                        {act.checkpointText}
-                      </p>
-                      <p className="font-semibold text-rose-700">
-                        <span className="font-bold text-slate-500">Observation: </span>
-                        {act.observation}
-                      </p>
-                      <p className="font-semibold text-emerald-800 pt-0.5">
-                        <span className="font-bold text-slate-500">Recommended Action: </span>
-                        {act.recommendedAction}
-                      </p>
-                    </div>
-
-                    {/* CAPA & RCA details if logged */}
-                    {(act.rootCause || act.correctiveAction || act.preventiveAction || act.closureRemark) && (
-                      <div className="bg-indigo-50/50 p-3.5 rounded-2xl border border-indigo-100 text-xs space-y-1">
-                        <span className="text-[10px] font-black text-indigo-900 uppercase tracking-wider block mb-1">
-                          🛠️ CAPA &amp; Root Cause Analysis (RCA):
-                        </span>
-                        {act.rootCause && (
-                          <p className="text-slate-800">
-                            <strong className="text-slate-600">Root Cause: </strong>
-                            {act.rootCause}
-                          </p>
-                        )}
-                        {act.correctiveAction && (
-                          <p className="text-slate-800">
-                            <strong className="text-slate-600">Corrective Action: </strong>
-                            {act.correctiveAction}
-                          </p>
-                        )}
-                        {act.preventiveAction && (
-                          <p className="text-slate-800">
-                            <strong className="text-slate-600">Preventive Action: </strong>
-                            {act.preventiveAction}
-                          </p>
-                        )}
-                        {act.closureRemark && (
-                          <p className="text-slate-800">
-                            <strong className="text-slate-600">Closure Remarks: </strong>
-                            {act.closureRemark}
-                          </p>
-                        )}
-                      </div>
                     )}
 
-                    {/* Meta Bar */}
-                    <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500 pt-1">
-                      <span className="flex items-center space-x-1">
-                        <User className="w-3.5 h-3.5 text-slate-400" />
-                        <span>FPR Lead: <strong className="text-slate-700">{act.responsiblePerson}</strong></span>
+                    {(act.lineName || act.sectionName) && (
+                      <span className="bg-slate-50 text-slate-600 border border-slate-200 text-[10px] font-bold px-2 py-0.5 rounded-lg">
+                        📍 {act.lineName || act.sectionName}
                       </span>
-
-                      <span className="flex items-center space-x-1">
-                        <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                        <span>Target: <strong className="text-slate-700">{act.targetDate}</strong></span>
-                      </span>
-
-                      {act.targetClosureDate && (
-                        <span className="flex items-center space-x-1 text-indigo-700 font-bold bg-indigo-50 px-2 py-0.5 rounded-md">
-                          <Target className="w-3.5 h-3.5 text-indigo-600" />
-                          <span>TCD: {act.targetClosureDate}</span>
-                        </span>
-                      )}
-
-                      {act.closedDate && (
-                        <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-md">
-                          ✓ Closed on: {act.closedDate} {act.closedBy ? `by ${act.closedBy}` : ''}
-                        </span>
-                      )}
-                    </div>
+                    )}
                   </div>
 
-                  {/* Right Side: Photos & Action Button */}
-                  <div className="flex flex-col items-end gap-3 shrink-0">
+                  <div className="flex items-center space-x-2 shrink-0">
                     {/* Status Pill */}
                     <span
-                      className={`px-3.5 py-1 text-xs font-black rounded-xl shadow-xs ${
+                      className={`px-3 py-1 text-xs font-black rounded-xl shadow-xs ${
                         act.status === 'Closed'
                           ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                           : act.status === 'In Progress'
@@ -519,51 +676,203 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
                     >
                       {act.status}
                     </span>
+                  </div>
+                </div>
 
-                    {/* Before & After Photos */}
-                    <div className="flex items-center space-x-2">
-                      {act.photoUrl && (
-                        <div className="text-center">
-                          <img
-                            src={act.photoUrl}
-                            alt="Finding"
-                            onClick={() => setActivePhotoModal(act.photoUrl || null)}
-                            className="w-12 h-12 object-cover rounded-xl border border-slate-300 cursor-pointer shadow-xs hover:scale-105 transition"
-                            title="Click to view Finding / Before Photo"
-                          />
-                          <span className="text-[9px] text-slate-500 font-bold block mt-0.5">Finding</span>
-                        </div>
+                {/* ── Component & Checkpoint Details Grid ────────────────────── */}
+                <div className="space-y-3 text-xs">
+                  {/* Title */}
+                  <div className="flex items-center space-x-2">
+                    <h3 className="text-base font-black text-slate-900">
+                      {act.componentName}
+                    </h3>
+                  </div>
+
+                  {/* Complete Specification & Finding Matrix */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 bg-slate-50/80 p-3.5 rounded-2xl border border-slate-200">
+                    {/* Checkpoint */}
+                    <div className="space-y-0.5">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                        Audit Checkpoint
+                      </span>
+                      <p className="font-bold text-slate-900">{act.checkpointText || '-'}</p>
+                    </div>
+
+                    {/* Standard Parameter / Spec */}
+                    <div className="space-y-0.5">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                        Standard Parameter / Spec
+                      </span>
+                      <p className="font-extrabold text-indigo-700 bg-indigo-50/60 px-2 py-0.5 rounded-md border border-indigo-100 inline-block">
+                        {act.standardParameter || '-'}
+                      </p>
+                    </div>
+
+                    {/* Actual Value Measured */}
+                    <div className="space-y-0.5">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                        Actual Value Measured
+                      </span>
+                      <p className="font-extrabold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200 inline-block">
+                        {act.actualValue || 'NG Finding'}
+                      </p>
+                    </div>
+
+                    {/* Observation / Deviation Finding */}
+                    <div className="space-y-0.5 md:col-span-2">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-rose-500 block">
+                        Observation / Finding Remarks
+                      </span>
+                      <p className="font-bold text-rose-800 bg-rose-50/50 p-2 rounded-xl border border-rose-100">
+                        ⚠️ {act.observation || '-'}
+                      </p>
+                    </div>
+
+                    {/* Potential Impact */}
+                    <div className="space-y-0.5">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 block">
+                        Potential Impact / Failure Risk
+                      </span>
+                      <p className="font-bold text-amber-900 bg-amber-50/60 p-2 rounded-xl border border-amber-100">
+                        ⚡ {act.potentialImpact || 'Equipment downtime or quality deviation'}
+                      </p>
+                    </div>
+
+                    {/* Recommended Action */}
+                    <div className="space-y-0.5 md:col-span-2 lg:col-span-3">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 block">
+                        Recommended Action
+                      </span>
+                      <p className="font-bold text-emerald-900 bg-emerald-50/70 p-2 rounded-xl border border-emerald-100">
+                        💡 {act.recommendedAction || 'Inspect and service component'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* ── CAPA & Root Cause Analysis (RCA) Section (Clean Display) ── */}
+                  {(act.rootCause || act.correctiveAction || act.preventiveAction || act.closureRemark) && (
+                    <div className="bg-indigo-50/50 p-4 rounded-2xl border border-indigo-100 space-y-2">
+                      <span className="text-[11px] font-black text-indigo-900 uppercase tracking-wider flex items-center space-x-1.5">
+                        <Wrench className="w-3.5 h-3.5 text-indigo-600" />
+                        <span>CAPA &amp; Root Cause Analysis (RCA)</span>
+                      </span>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+                        {act.rootCause && (
+                          <div className="bg-white p-2.5 rounded-xl border border-indigo-100">
+                            <strong className="text-slate-500 font-bold block text-[10px] uppercase">
+                              🎯 Root Cause (Why failure occurred):
+                            </strong>
+                            <p className="text-slate-900 font-semibold mt-0.5">{act.rootCause}</p>
+                          </div>
+                        )}
+
+                        {act.correctiveAction && (
+                          <div className="bg-white p-2.5 rounded-xl border border-indigo-100">
+                            <strong className="text-slate-500 font-bold block text-[10px] uppercase">
+                              🔧 Corrective Action Taken:
+                            </strong>
+                            <p className="text-slate-900 font-semibold mt-0.5">{act.correctiveAction}</p>
+                          </div>
+                        )}
+
+                        {act.preventiveAction && (
+                          <div className="bg-white p-2.5 rounded-xl border border-indigo-100">
+                            <strong className="text-slate-500 font-bold block text-[10px] uppercase">
+                              🛡️ Preventive Action (To stop recurrence):
+                            </strong>
+                            <p className="text-slate-900 font-semibold mt-0.5">{act.preventiveAction}</p>
+                          </div>
+                        )}
+
+                        {act.closureRemark && (
+                          <div className="bg-white p-2.5 rounded-xl border border-indigo-100">
+                            <strong className="text-slate-500 font-bold block text-[10px] uppercase">
+                              📝 Closure Remarks / Notes:
+                            </strong>
+                            <p className="text-slate-900 font-semibold mt-0.5">{act.closureRemark}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Footer Bar: FPR, Dates, Evidence Photos & Update Button ── */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-slate-100">
+                    <div className="flex flex-wrap items-center gap-3 text-slate-500 text-[11px] font-semibold">
+                      <span className="flex items-center space-x-1">
+                        <User className="w-3.5 h-3.5 text-slate-400" />
+                        <span>FPR Lead: <strong className="text-slate-800">{act.responsiblePerson}</strong></span>
+                      </span>
+
+                      <span className="flex items-center space-x-1">
+                        <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                        <span>Target: <strong className="text-slate-800">{act.targetDate}</strong></span>
+                      </span>
+
+                      {act.targetClosureDate && (
+                        <span className="text-indigo-700 font-bold bg-indigo-50 px-2 py-0.5 rounded-md flex items-center space-x-1">
+                          <Target className="w-3.5 h-3.5 text-indigo-600" />
+                          <span>TCD: {act.targetClosureDate}</span>
+                        </span>
                       )}
 
-                      {act.closurePhotoUrl && (
-                        <div className="text-center">
-                          <img
-                            src={act.closurePhotoUrl}
-                            alt="Closure"
-                            onClick={() => setActivePhotoModal(act.closurePhotoUrl || null)}
-                            className="w-12 h-12 object-cover rounded-xl border border-emerald-300 ring-2 ring-emerald-400/40 cursor-pointer shadow-xs hover:scale-105 transition"
-                            title="Click to view After / Closure Evidence Photo"
-                          />
-                          <span className="text-[9px] text-emerald-700 font-bold block mt-0.5">After Fix</span>
-                        </div>
+                      {act.closedDate && (
+                        <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-md">
+                          ✓ Closed on: {act.closedDate} {act.closedBy ? `by ${act.closedBy}` : ''}
+                        </span>
                       )}
                     </div>
 
-                    {/* Department-Protected Action Button */}
-                    {hasPermission ? (
-                      <button
-                        onClick={() => handleOpenStatusModal(act)}
-                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-extrabold transition shadow-md shadow-indigo-500/20 flex items-center space-x-1.5"
-                      >
-                        <Wrench className="w-3.5 h-3.5" />
-                        <span>Update RCA / Close</span>
-                      </button>
-                    ) : (
-                      <div className="px-3 py-1.5 bg-slate-100 text-slate-500 rounded-xl text-[11px] font-bold border border-slate-200 flex items-center space-x-1.5" title="Only the assigned department lead or Admin can edit this action">
-                        <Lock className="w-3 h-3 text-slate-400" />
-                        <span>{act.responsibleDepartment || 'Assigned Dept'} Only</span>
+                    <div className="flex items-center space-x-3 shrink-0 self-end sm:self-center">
+                      {/* Before & After Photo Thumbnails */}
+                      <div className="flex items-center space-x-2">
+                        {act.photoUrl && (
+                          <div className="text-center">
+                            <img
+                              src={act.photoUrl}
+                              alt="Finding"
+                              onClick={() => setActivePhotoModal(act.photoUrl || null)}
+                              className="w-10 h-10 object-cover rounded-xl border border-slate-300 cursor-pointer shadow-xs hover:scale-105 transition"
+                              title="Click to zoom Finding / Before Photo"
+                            />
+                            <span className="text-[8px] text-slate-400 font-bold block">Finding</span>
+                          </div>
+                        )}
+
+                        {act.closurePhotoUrl && (
+                          <div className="text-center">
+                            <img
+                              src={act.closurePhotoUrl}
+                              alt="Closure"
+                              onClick={() => setActivePhotoModal(act.closurePhotoUrl || null)}
+                              className="w-10 h-10 object-cover rounded-xl border border-emerald-300 ring-2 ring-emerald-400/40 cursor-pointer shadow-xs hover:scale-105 transition"
+                              title="Click to zoom After / Closure Evidence Photo"
+                            />
+                            <span className="text-[8px] text-emerald-700 font-bold block">After Fix</span>
+                          </div>
+                        )}
                       </div>
-                    )}
+
+                      {/* Department-Protected Action Button */}
+                      {hasPermission ? (
+                        <button
+                          onClick={() => handleOpenStatusModal(act)}
+                          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-extrabold transition shadow-md shadow-indigo-500/20 flex items-center space-x-1.5 cursor-pointer"
+                        >
+                          <Wrench className="w-3.5 h-3.5" />
+                          <span>Update RCA / Close</span>
+                        </button>
+                      ) : (
+                        <div
+                          className="px-3 py-1.5 bg-slate-100 text-slate-500 rounded-xl text-[11px] font-bold border border-slate-200 flex items-center space-x-1.5"
+                          title="Only the assigned department lead or Admin can edit this action"
+                        >
+                          <Lock className="w-3 h-3 text-slate-400" />
+                          <span>{act.responsibleDepartment || 'Assigned Dept'} Only</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -572,13 +881,82 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
         )}
       </div>
 
-      {/* Full-Screen Photo Modal */}
+      {/* ── BOTTOM PAGINATION BAR ───────────────────────────────────────────── */}
+      {filteredActions.length > pageSize && (
+        <div className="bg-white px-5 py-3.5 rounded-2xl border border-slate-200/90 shadow-sm flex items-center justify-between text-xs">
+          <span className="text-slate-500 font-bold text-[11px]">
+            Page <strong className="text-slate-800">{currentPage}</strong> of <strong className="text-slate-800">{totalPages}</strong> ({filteredActions.length} total items)
+          </span>
+
+          <div className="flex items-center space-x-1">
+            <button
+              type="button"
+              disabled={currentPage <= 1}
+              onClick={() => setCurrentPage(1)}
+              className="px-2.5 py-1 rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-35 disabled:cursor-not-allowed text-slate-600 font-bold transition"
+            >
+              First
+            </button>
+
+            <button
+              type="button"
+              disabled={currentPage <= 1}
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-35 disabled:cursor-not-allowed text-slate-600 transition"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+
+            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+              let pageNum = i + 1;
+              if (totalPages > 5 && currentPage > 3) {
+                pageNum = currentPage - 3 + i;
+                if (pageNum > totalPages) pageNum = totalPages - (4 - i);
+              }
+              return (
+                <button
+                  key={pageNum}
+                  type="button"
+                  onClick={() => setCurrentPage(pageNum)}
+                  className={`w-7 h-7 rounded-lg font-bold text-xs transition ${
+                    currentPage === pageNum
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'border border-slate-200 hover:bg-slate-50 text-slate-700'
+                  }`}
+                >
+                  {pageNum}
+                </button>
+              );
+            })}
+
+            <button
+              type="button"
+              disabled={currentPage >= totalPages}
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-35 disabled:cursor-not-allowed text-slate-600 transition"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+
+            <button
+              type="button"
+              disabled={currentPage >= totalPages}
+              onClick={() => setCurrentPage(totalPages)}
+              className="px-2.5 py-1 rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-35 disabled:cursor-not-allowed text-slate-600 font-bold transition"
+            >
+              Last
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── FULL-SCREEN PHOTO ZOOM MODAL ─────────────────────────────────────── */}
       {activePhotoModal && typeof window !== 'undefined' && createPortal(
         <div
-          className="fixed inset-0 z-[9999] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 overflow-hidden"
+          className="fixed inset-0 z-[9999] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 overflow-hidden animate-fade-in"
           onClick={() => setActivePhotoModal(null)}
         >
-          <div className="relative max-w-3xl max-h-[90vh] p-2 bg-white rounded-2xl shadow-2xl animate-fade-in" onClick={(e) => e.stopPropagation()}>
+          <div className="relative max-w-3xl max-h-[90vh] p-2 bg-white rounded-2xl shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <img src={activePhotoModal} alt="Enlarged finding / evidence" className="max-w-full max-h-[82vh] object-contain rounded-xl" />
             <button
               onClick={() => setActivePhotoModal(null)}
@@ -591,9 +969,7 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
         document.body
       )}
 
-      {/* ─────────────────────────────────────────────────────────────────── */}
-      {/* UPDATE / CLOSURE / RCA MODAL (CENTERED POPUP, ZERO PAGE SCROLL) */}
-      {/* ─────────────────────────────────────────────────────────────────── */}
+      {/* ── UPDATE / CLOSURE / RCA MODAL (CENTERED POPUP) ────────────────────── */}
       {editingAction && typeof window !== 'undefined' && createPortal(
         <div className="fixed inset-0 z-[9999] bg-slate-950/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-hidden animate-fade-in">
           <div className="bg-white rounded-3xl max-w-xl w-full max-h-[88vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
@@ -625,15 +1001,21 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
             {/* Scrollable Modal Body */}
             <div className="p-6 overflow-y-auto space-y-4 text-xs flex-1">
               {/* Deviation Details Summary */}
-              <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 space-y-1">
-                <div className="font-bold text-slate-700">
+              <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-1.5">
+                <div className="font-bold text-slate-800">
                   <span className="text-slate-400 font-semibold">Checkpoint: </span>
                   {editingAction.checkpointText}
                 </div>
                 <div className="font-bold text-rose-700">
-                  <span className="text-slate-400 font-semibold">Finding: </span>
+                  <span className="text-slate-400 font-semibold">Finding / Observation: </span>
                   {editingAction.observation}
                 </div>
+                {editingAction.standardParameter && (
+                  <div className="font-bold text-indigo-800">
+                    <span className="text-slate-400 font-semibold">Standard Spec: </span>
+                    {editingAction.standardParameter}
+                  </div>
+                )}
               </div>
 
               {/* Status & TCD in 2 Columns */}
@@ -643,7 +1025,7 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
                   <select
                     value={newStatus}
                     onChange={(e) => setNewStatus(e.target.value as any)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-indigo-500 shadow-xs"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-indigo-500 shadow-xs cursor-pointer"
                   >
                     <option value="Open">Open</option>
                     <option value="In Progress">In Progress</option>

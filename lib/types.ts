@@ -265,6 +265,9 @@ export interface ActionItem {
   equipmentName?: string;
   componentName: string;
   checkpointText: string;
+  standardParameter?: string;
+  actualValue?: string;
+  potentialImpact?: string;
   observation: string;
   recommendedAction: string;
   responsiblePerson: string;
