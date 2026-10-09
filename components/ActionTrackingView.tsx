@@ -754,50 +754,71 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
                     </div>
                   </div>
 
-                  {/* ── CAPA & Root Cause Analysis (RCA) Section (Only when filled) ── */}
-                  {(Boolean(act.rootCause) || Boolean(act.correctiveAction) || Boolean(act.preventiveAction) || Boolean(act.closureRemark)) && (
-                    <div className="bg-indigo-50/50 p-4 rounded-2xl border border-indigo-100 space-y-2">
-                      <span className="text-[11px] font-black text-indigo-900 uppercase tracking-wider flex items-center space-x-1.5">
-                        <Wrench className="w-3.5 h-3.5 text-indigo-600" />
-                        <span>CAPA &amp; Root Cause Analysis (RCA)</span>
-                      </span>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-                        {act.rootCause && (
-                          <div className="bg-white p-2.5 rounded-xl border border-indigo-100">
-                            <strong className="text-slate-500 font-bold block text-[10px] uppercase">
-                              Root Cause:
-                            </strong>
-                            <p className="text-slate-900 font-semibold mt-0.5">{act.rootCause}</p>
-                          </div>
+                  {/* ── CAPA & Root Cause Analysis (RCA) Section ── */}
+                  {(act.status === 'Closed' || activeSubTab === 'Closed' || Boolean(act.rootCause) || Boolean(act.correctiveAction) || Boolean(act.preventiveAction) || Boolean(act.closureRemark) || Boolean(act.targetClosureDate)) && (
+                    <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-black text-slate-800 uppercase tracking-wider flex items-center space-x-1.5">
+                          <Wrench className="w-3.5 h-3.5 text-indigo-600" />
+                          <span>CAPA &amp; Root Cause Analysis (RCA)</span>
+                        </span>
+                        {act.closedDate && (
+                          <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md border border-emerald-200">
+                            Closed on {act.closedDate} {act.closedBy ? `by ${act.closedBy}` : ''}
+                          </span>
                         )}
+                      </div>
 
-                        {act.correctiveAction && (
-                          <div className="bg-white p-2.5 rounded-xl border border-indigo-100">
-                            <strong className="text-slate-500 font-bold block text-[10px] uppercase">
-                              Corrective Action:
-                            </strong>
-                            <p className="text-slate-900 font-semibold mt-0.5">{act.correctiveAction}</p>
-                          </div>
-                        )}
+                      <div className="space-y-2 text-xs">
+                        {/* Target Closure Date (TCD) */}
+                        <div className="bg-white p-2.5 rounded-xl border border-slate-200">
+                          <strong className="text-slate-500 font-bold block text-[10px] uppercase tracking-wider">
+                            Target Closure Date (TCD):
+                          </strong>
+                          <p className="text-slate-900 font-bold mt-0.5">
+                            {act.targetClosureDate || act.targetDate || '-'}
+                          </p>
+                        </div>
 
-                        {act.preventiveAction && (
-                          <div className="bg-white p-2.5 rounded-xl border border-indigo-100">
-                            <strong className="text-slate-500 font-bold block text-[10px] uppercase">
-                              Preventive Action:
-                            </strong>
-                            <p className="text-slate-900 font-semibold mt-0.5">{act.preventiveAction}</p>
-                          </div>
-                        )}
+                        {/* Root Cause Analysis (RCA) */}
+                        <div className="bg-white p-2.5 rounded-xl border border-slate-200">
+                          <strong className="text-slate-500 font-bold block text-[10px] uppercase tracking-wider">
+                            Root Cause Analysis (RCA):
+                          </strong>
+                          <p className="text-slate-900 font-semibold mt-0.5 whitespace-pre-wrap">
+                            {act.rootCause || '-'}
+                          </p>
+                        </div>
 
-                        {act.closureRemark && (
-                          <div className="bg-white p-2.5 rounded-xl border border-indigo-100">
-                            <strong className="text-slate-500 font-bold block text-[10px] uppercase">
-                              Closure Remarks:
-                            </strong>
-                            <p className="text-slate-900 font-semibold mt-0.5">{act.closureRemark}</p>
-                          </div>
-                        )}
+                        {/* Corrective Action Taken */}
+                        <div className="bg-white p-2.5 rounded-xl border border-slate-200">
+                          <strong className="text-slate-500 font-bold block text-[10px] uppercase tracking-wider">
+                            Corrective Action Taken:
+                          </strong>
+                          <p className="text-slate-900 font-semibold mt-0.5 whitespace-pre-wrap">
+                            {act.correctiveAction || '-'}
+                          </p>
+                        </div>
+
+                        {/* Preventive Action (CAPA) */}
+                        <div className="bg-white p-2.5 rounded-xl border border-slate-200">
+                          <strong className="text-slate-500 font-bold block text-[10px] uppercase tracking-wider">
+                            Preventive Action (CAPA):
+                          </strong>
+                          <p className="text-slate-900 font-semibold mt-0.5 whitespace-pre-wrap">
+                            {act.preventiveAction || '-'}
+                          </p>
+                        </div>
+
+                        {/* Maintenance Remarks / SAP Order */}
+                        <div className="bg-white p-2.5 rounded-xl border border-slate-200">
+                          <strong className="text-slate-500 font-bold block text-[10px] uppercase tracking-wider">
+                            Maintenance Remarks / SAP Order:
+                          </strong>
+                          <p className="text-slate-900 font-semibold mt-0.5 whitespace-pre-wrap">
+                            {act.closureRemark || '-'}
+                          </p>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -1079,10 +1100,10 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
                 />
               </div>
 
-              {/* Preventive Action */}
+              {/* Preventive Action (CAPA) */}
               <div>
                 <label className="text-slate-700 font-bold block mb-1">
-                  Preventive Action <span className="text-slate-400 font-normal">(To prevent recurrence)</span>
+                  Preventive Action (CAPA) <span className="text-slate-400 font-normal">(To prevent recurrence)</span>
                 </label>
                 <textarea
                   rows={2}
@@ -1150,9 +1171,9 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
                 </div>
               </div>
 
-              {/* Maintenance Log Notes */}
+              {/* Maintenance Remarks / SAP Order */}
               <div>
-                <label className="text-slate-700 font-bold block mb-1">Additional Log / SAP Work Order ID</label>
+                <label className="text-slate-700 font-bold block mb-1">Maintenance Remarks / SAP Order</label>
                 <textarea
                   rows={2}
                   placeholder="Enter SAP work order number, spares consumed, or team notes..."
