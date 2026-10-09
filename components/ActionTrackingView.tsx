@@ -327,14 +327,20 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
       closedBy: currentUser?.name || 'Department Lead',
     };
 
-    StorageEngine.updateActionDetailed(editingAction.actionId, updates);
-    setActions(StorageEngine.getActions());
-
     // If status is Closed, dispatch email notification
     if (newStatus === 'Closed') {
-      const closedActionItem: ActionItem = {
+      const matchedAudit = StorageEngine.getAudits().find((a) => a.auditId === editingAction.auditId);
+      const matchedResult = StorageEngine.getAuditResults().find(
+        (r) =>
+          (r.auditId === editingAction.auditId && r.checkpointText === editingAction.checkpointText) ||
+          (r.auditId === editingAction.auditId && r.componentName === editingAction.componentName)
+      );
+
+      const closedActionItem: any = {
         ...editingAction,
         ...updates,
+        photoUrl: editingAction.photoUrl || matchedResult?.photoUrl || undefined,
+        auditorName: matchedAudit?.auditorName || editingAction.auditorEmail || 'Auditor',
       };
 
       const toList = Array.from(
