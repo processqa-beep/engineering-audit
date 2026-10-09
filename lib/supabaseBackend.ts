@@ -513,6 +513,7 @@ export class SupabaseBackendClient {
           preventiveAction: capa.preventiveAction || d.preventive_action,
           closureRemark: capa.closureRemark,
           closurePhotoUrl: d.closure_photo_url,
+          photoUrl: d.photo_url,
           closedDate: d.closed_date,
           closedBy: capa.closedBy || d.closed_by,
           createdAt: d.created_at,

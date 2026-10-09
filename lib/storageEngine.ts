@@ -74,6 +74,7 @@ function slimResult(r: AuditResult): Partial<AuditResult> {
     actualValue: r.actualValue,
     status: r.status,
     observationNotes: r.observationNotes,
+    photoUrl: r.photoUrl,
     isCritical: r.isCritical,
     timestamp: r.timestamp,
   };

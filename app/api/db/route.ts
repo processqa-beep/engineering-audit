@@ -415,32 +415,40 @@ export async function POST(req: NextRequest) {
 
       // Insert Action Items
       if (actions && actions.length > 0) {
-        const actionRows = actions.map((a: any) => ({
-          action_id: a.actionId,
-          audit_id: header.auditId,
-          section_id: a.sectionId,
-          section_name: a.sectionName,
-          sub_section_id: a.subSectionId,
-          sub_section_name: a.subSectionName,
-          line_id: a.lineId,
-          line_name: a.lineName,
-          equipment_id: a.equipmentId,
-          equipment_name: a.equipmentName,
-          component_name: a.componentName,
-          checkpoint_text: a.checkpointText,
-          observation: a.observation,
-          recommended_action: a.recommendedAction,
-          responsible_person: a.responsiblePerson,
-          responsible_department: a.responsibleDepartment,
-          assigned_email: a.assignedEmail,
-          cc_person: a.ccPerson,
-          cc_email: a.ccEmail,
-          target_date: a.targetDate,
-          priority: a.priority,
-          status: a.status || 'Open',
-          created_at: a.createdAt || new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        }));
+        const actionRows = actions.map((a: any) => {
+          const matchRes = resultsWithUploadedPhotos.find(
+            (r: any) =>
+              (r.checkpointText && r.checkpointText === a.checkpointText) ||
+              (r.componentName && r.componentName === a.componentName)
+          );
+          return {
+            action_id: a.actionId,
+            audit_id: header.auditId,
+            section_id: a.sectionId,
+            section_name: a.sectionName,
+            sub_section_id: a.subSectionId,
+            sub_section_name: a.subSectionName,
+            line_id: a.lineId,
+            line_name: a.lineName,
+            equipment_id: a.equipmentId,
+            equipment_name: a.equipmentName,
+            component_name: a.componentName,
+            checkpoint_text: a.checkpointText,
+            observation: a.observation,
+            recommendedAction: a.recommendedAction,
+            responsible_person: a.responsiblePerson,
+            responsible_department: a.responsibleDepartment,
+            assigned_email: a.assignedEmail,
+            cc_person: a.ccPerson,
+            cc_email: a.ccEmail,
+            target_date: a.targetDate,
+            priority: a.priority,
+            status: a.status || 'Open',
+            photo_url: a.photoUrl || matchRes?.photoUrl || null,
+            created_at: a.createdAt || new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          };
+        });
 
         const { error: actionsError } = await supabase.from('action_items').upsert(actionRows);
         if (actionsError) {

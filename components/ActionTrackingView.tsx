@@ -69,45 +69,44 @@ function sanitizeAction(
     } catch (_) {}
   }
 
-  // 2. Lookup standard spec, actual value, and potential impact strictly from audit results or master checkpoints (no dummy placeholders)
-  if (!cleaned.standardParameter || !cleaned.actualValue || !cleaned.potentialImpact) {
-    const matchedRes = auditResults.find(
-      (r) =>
-        (r.auditId === cleaned.auditId && r.checkpointText === cleaned.checkpointText) ||
-        (r.auditId === cleaned.auditId && r.componentName === cleaned.componentName)
-    );
-    const matchedCk = checkpoints.find(
-      (c) =>
-        c.checkpointText === cleaned.checkpointText ||
-        (c.componentName === cleaned.componentName && c.checkpointText === cleaned.checkpointText) ||
-        c.componentName === cleaned.componentName
-    );
+  // 2. Lookup standard spec, actual value, potential impact, and photoUrl from audit results or master checkpoints
+  const matchedRes = auditResults.find(
+    (r) =>
+      (r.auditId === cleaned.auditId && r.checkpointText === cleaned.checkpointText) ||
+      (r.auditId === cleaned.auditId && r.componentName === cleaned.componentName) ||
+      (r.auditId === cleaned.auditId && r.checkpointId && r.checkpointId === cleaned.checkpointText)
+  );
+  const matchedCk = checkpoints.find(
+    (c) =>
+      c.checkpointText === cleaned.checkpointText ||
+      (c.componentName === cleaned.componentName && c.checkpointText === cleaned.checkpointText) ||
+      c.componentName === cleaned.componentName
+  );
 
-    if (!cleaned.standardParameter) {
-      cleaned.standardParameter =
-        matchedRes?.standardParameter ||
-        matchedCk?.standardParameter ||
-        (matchedCk?.minimum !== undefined && matchedCk?.maximum !== undefined
-          ? `${matchedCk.minimum} - ${matchedCk.maximum} ${matchedCk.unit || ''}`.trim()
-          : '');
-    }
+  if (!cleaned.photoUrl && matchedRes?.photoUrl) {
+    cleaned.photoUrl = matchedRes.photoUrl;
+  }
 
-    if (!cleaned.actualValue) {
-      cleaned.actualValue = matchedRes?.actualValue || '';
-    }
+  if (!cleaned.standardParameter) {
+    cleaned.standardParameter =
+      matchedRes?.standardParameter ||
+      matchedCk?.standardParameter ||
+      (matchedCk?.minimum !== undefined && matchedCk?.maximum !== undefined
+        ? `${matchedCk.minimum} - ${matchedCk.maximum} ${matchedCk.unit || ''}`.trim()
+        : '');
+  }
 
-    if (!cleaned.potentialImpact) {
-      cleaned.potentialImpact =
-        matchedRes?.whatImpactIfThisPartGetsFail ||
-        matchedRes?.impactOfFailure ||
-        matchedCk?.whatImpactIfThisPartGetsFail ||
-        matchedCk?.impactOfFailure ||
-        '';
-    }
+  if (!cleaned.actualValue) {
+    cleaned.actualValue = matchedRes?.actualValue || '';
+  }
 
-    if (!cleaned.photoUrl && matchedRes?.photoUrl) {
-      cleaned.photoUrl = matchedRes.photoUrl;
-    }
+  if (!cleaned.potentialImpact) {
+    cleaned.potentialImpact =
+      matchedRes?.whatImpactIfThisPartGetsFail ||
+      matchedRes?.impactOfFailure ||
+      matchedCk?.whatImpactIfThisPartGetsFail ||
+      matchedCk?.impactOfFailure ||
+      '';
   }
 
   return cleaned;
@@ -753,6 +752,64 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
                       </p>
                     </div>
                   </div>
+
+                  {/* ── Photo Evidence Box (Finding / Before & Closure / After) ── */}
+                  {(act.photoUrl || act.closurePhotoUrl) && (
+                    <div className="bg-slate-50/90 p-3 rounded-2xl border border-slate-200 flex flex-wrap items-center gap-3">
+                      <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider block shrink-0 flex items-center space-x-1">
+                        <Camera className="w-3.5 h-3.5 text-slate-400" />
+                        <span>Evidence Photos:</span>
+                      </span>
+
+                      <div className="flex flex-wrap items-center gap-2.5">
+                        {act.photoUrl && (
+                          <button
+                            type="button"
+                            onClick={() => setActivePhotoModal(act.photoUrl || null)}
+                            className="flex items-center space-x-2 bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-2xs hover:border-indigo-400 hover:bg-indigo-50/30 cursor-pointer transition text-left group"
+                          >
+                            <img
+                              src={act.photoUrl}
+                              alt="Finding photo"
+                              className="w-8 h-8 object-cover rounded-lg border border-slate-200 group-hover:scale-105 transition"
+                            />
+                            <div>
+                              <span className="text-[10px] font-black text-rose-700 block uppercase">
+                                Finding (Before Photo)
+                              </span>
+                              <span className="text-[9px] text-slate-400 font-semibold flex items-center space-x-0.5">
+                                <span>Click to enlarge</span>
+                                <ExternalLink className="w-2.5 h-2.5 text-slate-400" />
+                              </span>
+                            </div>
+                          </button>
+                        )}
+
+                        {act.closurePhotoUrl && (
+                          <button
+                            type="button"
+                            onClick={() => setActivePhotoModal(act.closurePhotoUrl || null)}
+                            className="flex items-center space-x-2 bg-white px-3 py-1.5 rounded-xl border border-emerald-200 shadow-2xs hover:border-emerald-400 hover:bg-emerald-50/30 cursor-pointer transition text-left group"
+                          >
+                            <img
+                              src={act.closurePhotoUrl}
+                              alt="Closure evidence"
+                              className="w-8 h-8 object-cover rounded-lg border border-emerald-300 group-hover:scale-105 transition"
+                            />
+                            <div>
+                              <span className="text-[10px] font-black text-emerald-700 block uppercase">
+                                Resolved (After Photo)
+                              </span>
+                              <span className="text-[9px] text-slate-400 font-semibold flex items-center space-x-0.5">
+                                <span>Click to enlarge</span>
+                                <ExternalLink className="w-2.5 h-2.5 text-slate-400" />
+                              </span>
+                            </div>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                   {/* ── CAPA & Root Cause Analysis (RCA) Section ── */}
                   {(act.status === 'Closed' || activeSubTab === 'Closed' || Boolean(act.rootCause) || Boolean(act.correctiveAction) || Boolean(act.preventiveAction) || Boolean(act.closureRemark) || Boolean(act.targetClosureDate)) && (
