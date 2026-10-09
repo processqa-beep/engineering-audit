@@ -70,18 +70,21 @@ function sanitizeAction(
   }
 
   // 2. Lookup standard spec, actual value, potential impact, and photoUrl from audit results or master checkpoints
-  const matchedRes = auditResults.find(
-    (r) =>
-      (r.auditId === cleaned.auditId && r.checkpointText === cleaned.checkpointText) ||
-      (r.auditId === cleaned.auditId && r.componentName === cleaned.componentName) ||
-      (r.auditId === cleaned.auditId && r.checkpointId && r.checkpointId === cleaned.checkpointText)
-  );
-  const matchedCk = checkpoints.find(
-    (c) =>
-      c.checkpointText === cleaned.checkpointText ||
-      (c.componentName === cleaned.componentName && c.checkpointText === cleaned.checkpointText) ||
-      c.componentName === cleaned.componentName
-  );
+  const cleanCpText = (cleaned.checkpointText || '').trim().toLowerCase();
+  const matchedRes = auditResults.find((r) => {
+    if (r.auditId !== cleaned.auditId) return false;
+    const rCpText = (r.checkpointText || '').trim().toLowerCase();
+    if (cleanCpText && rCpText && cleanCpText === rCpText) return true;
+    if (cleaned.checkpointText && r.checkpointId && cleaned.checkpointText.trim() === r.checkpointId.trim()) return true;
+    return false;
+  });
+
+  const matchedCk = checkpoints.find((c) => {
+    const cCpText = (c.checkpointText || '').trim().toLowerCase();
+    if (cleanCpText && cCpText && cleanCpText === cCpText) return true;
+    if (cleaned.checkpointText && c.id && cleaned.checkpointText.trim() === c.id.trim()) return true;
+    return false;
+  });
 
   if (!cleaned.photoUrl && matchedRes?.photoUrl) {
     cleaned.photoUrl = matchedRes.photoUrl;
@@ -912,35 +915,6 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
                     </div>
 
                     <div className="flex items-center space-x-3 shrink-0 self-end sm:self-center">
-                      {/* Before & After Photo Thumbnails */}
-                      <div className="flex items-center space-x-2">
-                        {act.photoUrl && (
-                          <div className="text-center">
-                            <img
-                              src={act.photoUrl}
-                              alt="Finding"
-                              onClick={() => setActivePhotoModal(act.photoUrl || null)}
-                              className="w-10 h-10 object-cover rounded-xl border border-slate-300 cursor-pointer shadow-xs hover:scale-105 transition"
-                              title="Click to zoom Finding / Before Photo"
-                            />
-                            <span className="text-[8px] text-slate-400 font-bold block">Finding</span>
-                          </div>
-                        )}
-
-                        {act.closurePhotoUrl && (
-                          <div className="text-center">
-                            <img
-                              src={act.closurePhotoUrl}
-                              alt="Closure"
-                              onClick={() => setActivePhotoModal(act.closurePhotoUrl || null)}
-                              className="w-10 h-10 object-cover rounded-xl border border-emerald-300 ring-2 ring-emerald-400/40 cursor-pointer shadow-xs hover:scale-105 transition"
-                              title="Click to zoom After / Closure Evidence Photo"
-                            />
-                            <span className="text-[8px] text-emerald-700 font-bold block">After Fix</span>
-                          </div>
-                        )}
-                      </div>
-
                       {/* Department-Protected Action Button */}
                       {hasPermission ? (
                         <button
