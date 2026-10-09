@@ -9,6 +9,62 @@ const supabase = createClient(supabaseUrl, supabaseKey, {
   auth: { persistSession: false },
 });
 
+// ── CAPA & CLOSURE SERIALIZATION HELPERS ──────────────────────────────────
+function packClosureRemark(updates: {
+  closureRemark?: string;
+  rootCause?: string;
+  correctiveAction?: string;
+  preventiveAction?: string;
+  targetClosureDate?: string;
+  closedBy?: string;
+}): string {
+  const hasCapa = updates.rootCause || updates.correctiveAction || updates.preventiveAction || updates.targetClosureDate || updates.closedBy;
+  if (!hasCapa) {
+    return updates.closureRemark || '';
+  }
+  const meta = {
+    rc: updates.rootCause || '',
+    ca: updates.correctiveAction || '',
+    pa: updates.preventiveAction || '',
+    tcd: updates.targetClosureDate || '',
+    cb: updates.closedBy || '',
+    rmk: updates.closureRemark || '',
+  };
+  const json = JSON.stringify(meta);
+  return `<!--CAPA_DATA:${json}-->\n${updates.closureRemark || ''}`.trim();
+}
+
+function unpackClosureRemark(rawRemark: string | null | undefined): {
+  closureRemark: string;
+  rootCause?: string;
+  correctiveAction?: string;
+  preventiveAction?: string;
+  targetClosureDate?: string;
+  closedBy?: string;
+} {
+  if (!rawRemark) {
+    return { closureRemark: '' };
+  }
+  if (rawRemark.includes('<!--CAPA_DATA:') && rawRemark.includes('-->')) {
+    try {
+      const match = rawRemark.match(/<!--CAPA_DATA:(.*?)-->/);
+      if (match && match[1]) {
+        const meta = JSON.parse(match[1]);
+        const cleanRemark = rawRemark.replace(/<!--CAPA_DATA:.*?-->/, '').trim();
+        return {
+          closureRemark: cleanRemark || meta.rmk || '',
+          rootCause: meta.rc || undefined,
+          correctiveAction: meta.ca || undefined,
+          preventiveAction: meta.pa || undefined,
+          targetClosureDate: meta.tcd || undefined,
+          closedBy: meta.cb || undefined,
+        };
+      }
+    } catch (_) {}
+  }
+  return { closureRemark: rawRemark };
+}
+
 // ── PLANT STRUCTURE HELPERS ────────────────────────────────────────────────
 async function getPlantStructureFromSupabase(checkpointsData?: any[]) {
   // 1. Try fetching from plant_structure table (JSON storage)
@@ -560,19 +616,55 @@ export async function POST(req: NextRequest) {
     // 5. UPDATE ACTION ITEM
     if (action === 'UPDATE_ACTION') {
       const { actionId, updates } = payload;
+
+      let finalPhotoUrl = updates.closurePhotoUrl;
+      if (finalPhotoUrl && finalPhotoUrl.startsWith('data:image')) {
+        try {
+          const parts = finalPhotoUrl.split(';base64,');
+          const contentType = parts[0].split(':')[1] || 'image/jpeg';
+          const buffer = Buffer.from(parts[1], 'base64');
+          const fileName = `closure_${actionId.replace(/[^a-zA-Z0-9_-]/g, '_')}_${Date.now()}.jpg`;
+          const filePath = `audits/${fileName}`;
+
+          const { error: uploadErr } = await supabase.storage
+            .from('audit-photos')
+            .upload(filePath, buffer, {
+              contentType,
+              upsert: true,
+            });
+
+          if (!uploadErr) {
+            const { data: urlData } = supabase.storage
+              .from('audit-photos')
+              .getPublicUrl(filePath);
+            if (urlData?.publicUrl) {
+              finalPhotoUrl = urlData.publicUrl;
+            }
+          }
+        } catch (pErr) {
+          console.warn('[Server Closure Photo Upload Error]:', pErr);
+        }
+      }
+
       const updateData: any = {
         updated_at: new Date().toISOString(),
       };
       if (updates.status) updateData.status = updates.status;
-      if (updates.rootCause !== undefined) updateData.root_cause = updates.rootCause;
-      if (updates.correctiveAction !== undefined) updateData.corrective_action = updates.correctiveAction;
-      if (updates.preventiveAction !== undefined) updateData.preventive_action = updates.preventiveAction;
-      if (updates.targetClosureDate !== undefined) updateData.target_closure_date = updates.targetClosureDate;
-      if (updates.closureRemark !== undefined) updateData.closure_remark = updates.closureRemark;
-      if (updates.closurePhotoUrl !== undefined) updateData.closure_photo_url = updates.closurePhotoUrl;
+      if (
+        updates.closureRemark !== undefined ||
+        updates.rootCause !== undefined ||
+        updates.correctiveAction !== undefined ||
+        updates.preventiveAction !== undefined ||
+        updates.targetClosureDate !== undefined ||
+        updates.closedBy !== undefined
+      ) {
+        updateData.closure_remark = packClosureRemark(updates);
+      }
+      if (finalPhotoUrl !== undefined) {
+        updateData.closure_photo_url = finalPhotoUrl;
+      }
       if (updates.status === 'Closed') {
         updateData.closed_date = updates.closedDate || new Date().toISOString().substring(0, 10);
-        if (updates.closedBy) updateData.closed_by = updates.closedBy;
       }
 
       const { error } = await supabase
@@ -580,8 +672,11 @@ export async function POST(req: NextRequest) {
         .update(updateData)
         .eq('action_id', actionId);
 
-      if (error) throw error;
-      return NextResponse.json({ success: true });
+      if (error) {
+        console.error('[Supabase UPDATE_ACTION Error]:', error);
+        throw error;
+      }
+      return NextResponse.json({ success: true, photoUrl: finalPhotoUrl });
     }
 
     // 6. REQUEST ACCESS

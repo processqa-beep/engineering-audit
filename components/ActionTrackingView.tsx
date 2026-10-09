@@ -236,6 +236,10 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
 
     try {
       await SupabaseBackendClient.updateActionDetailed(editingAction.actionId, updates);
+      const freshActions = await SupabaseBackendClient.fetchActions();
+      if (freshActions && freshActions.length > 0) {
+        setActions(freshActions);
+      }
     } catch (err) {
       console.warn('Action sync notice:', err);
     } finally {

@@ -12,6 +12,37 @@ import {
 } from './types';
 import { StorageEngine } from './storageEngine';
 
+function unpackClosureRemark(rawRemark: string | null | undefined): {
+  closureRemark: string;
+  rootCause?: string;
+  correctiveAction?: string;
+  preventiveAction?: string;
+  targetClosureDate?: string;
+  closedBy?: string;
+} {
+  if (!rawRemark) {
+    return { closureRemark: '' };
+  }
+  if (rawRemark.includes('<!--CAPA_DATA:') && rawRemark.includes('-->')) {
+    try {
+      const match = rawRemark.match(/<!--CAPA_DATA:(.*?)-->/);
+      if (match && match[1]) {
+        const meta = JSON.parse(match[1]);
+        const cleanRemark = rawRemark.replace(/<!--CAPA_DATA:.*?-->/, '').trim();
+        return {
+          closureRemark: cleanRemark || meta.rmk || '',
+          rootCause: meta.rc || undefined,
+          correctiveAction: meta.ca || undefined,
+          preventiveAction: meta.pa || undefined,
+          targetClosureDate: meta.tcd || undefined,
+          closedBy: meta.cb || undefined,
+        };
+      }
+    } catch (_) {}
+  }
+  return { closureRemark: rawRemark };
+}
+
 /**
  * SupabaseBackendClient
  *
@@ -451,39 +482,42 @@ export class SupabaseBackendClient {
         return StorageEngine.getActions();
       }
 
-      const mapped: ActionItem[] = json.data.map((d: any) => ({
-        actionId: d.action_id,
-        auditId: d.audit_id,
-        sectionId: d.section_id,
-        sectionName: d.section_name,
-        subSectionId: d.sub_section_id,
-        subSectionName: d.sub_section_name,
-        lineId: d.line_id,
-        lineName: d.line_name,
-        equipmentId: d.equipment_id,
-        equipmentName: d.equipment_name,
-        componentName: d.component_name,
-        checkpointText: d.checkpoint_text,
-        observation: d.observation,
-        recommendedAction: d.recommended_action,
-        responsiblePerson: d.responsible_person,
-        responsibleDepartment: d.responsible_department,
-        assignedEmail: d.assigned_email,
-        ccPerson: d.cc_person,
-        ccEmail: d.cc_email,
-        targetDate: d.target_date,
-        targetClosureDate: d.target_closure_date,
-        priority: d.priority,
-        status: d.status,
-        rootCause: d.root_cause,
-        correctiveAction: d.corrective_action,
-        preventiveAction: d.preventive_action,
-        closureRemark: d.closure_remark,
-        closurePhotoUrl: d.closure_photo_url,
-        closedDate: d.closed_date,
-        closedBy: d.closed_by,
-        createdAt: d.created_at,
-      }));
+      const mapped: ActionItem[] = json.data.map((d: any) => {
+        const capa = unpackClosureRemark(d.closure_remark);
+        return {
+          actionId: d.action_id,
+          auditId: d.audit_id,
+          sectionId: d.section_id,
+          sectionName: d.section_name,
+          subSectionId: d.sub_section_id,
+          subSectionName: d.sub_section_name,
+          lineId: d.line_id,
+          lineName: d.line_name,
+          equipmentId: d.equipment_id,
+          equipmentName: d.equipment_name,
+          componentName: d.component_name,
+          checkpointText: d.checkpoint_text,
+          observation: d.observation,
+          recommendedAction: d.recommended_action,
+          responsiblePerson: d.responsible_person,
+          responsibleDepartment: d.responsible_department,
+          assignedEmail: d.assigned_email,
+          ccPerson: d.cc_person,
+          ccEmail: d.cc_email,
+          targetDate: d.target_date,
+          targetClosureDate: capa.targetClosureDate || d.target_closure_date,
+          priority: d.priority,
+          status: d.status,
+          rootCause: capa.rootCause || d.root_cause,
+          correctiveAction: capa.correctiveAction || d.corrective_action,
+          preventiveAction: capa.preventiveAction || d.preventive_action,
+          closureRemark: capa.closureRemark,
+          closurePhotoUrl: d.closure_photo_url,
+          closedDate: d.closed_date,
+          closedBy: capa.closedBy || d.closed_by,
+          createdAt: d.created_at,
+        };
+      });
 
       StorageEngine.saveActions(mapped);
       return mapped;
@@ -676,39 +710,42 @@ export class SupabaseBackendClient {
       }
 
       if (actions && actions.length > 0) {
-        const mappedAct: ActionItem[] = actions.map((d: any) => ({
-          actionId: d.action_id,
-          auditId: d.audit_id,
-          sectionId: d.section_id,
-          sectionName: d.section_name,
-          subSectionId: d.sub_section_id,
-          subSectionName: d.sub_section_name,
-          lineId: d.line_id,
-          lineName: d.line_name,
-          equipmentId: d.equipment_id,
-          equipmentName: d.equipment_name,
-          componentName: d.component_name,
-          checkpointText: d.checkpoint_text,
-          observation: d.observation,
-          recommendedAction: d.recommended_action,
-          responsiblePerson: d.responsible_person,
-          responsibleDepartment: d.responsible_department,
-          assignedEmail: d.assigned_email,
-          ccPerson: d.cc_person,
-          ccEmail: d.cc_email,
-          targetDate: d.target_date,
-          targetClosureDate: d.target_closure_date,
-          priority: d.priority,
-          status: d.status,
-          rootCause: d.root_cause,
-          correctiveAction: d.corrective_action,
-          preventiveAction: d.preventive_action,
-          closureRemark: d.closure_remark,
-          closurePhotoUrl: d.closure_photo_url,
-          closedDate: d.closed_date,
-          closedBy: d.closed_by,
-          createdAt: d.created_at,
-        }));
+        const mappedAct: ActionItem[] = actions.map((d: any) => {
+          const capa = unpackClosureRemark(d.closure_remark);
+          return {
+            actionId: d.action_id,
+            auditId: d.audit_id,
+            sectionId: d.section_id,
+            sectionName: d.section_name,
+            subSectionId: d.sub_section_id,
+            subSectionName: d.sub_section_name,
+            lineId: d.line_id,
+            lineName: d.line_name,
+            equipmentId: d.equipment_id,
+            equipmentName: d.equipment_name,
+            componentName: d.component_name,
+            checkpointText: d.checkpoint_text,
+            observation: d.observation,
+            recommendedAction: d.recommended_action,
+            responsiblePerson: d.responsible_person,
+            responsibleDepartment: d.responsible_department,
+            assignedEmail: d.assigned_email,
+            ccPerson: d.cc_person,
+            ccEmail: d.cc_email,
+            targetDate: d.target_date,
+            targetClosureDate: capa.targetClosureDate || d.target_closure_date,
+            priority: d.priority,
+            status: d.status,
+            rootCause: capa.rootCause || d.root_cause,
+            correctiveAction: capa.correctiveAction || d.corrective_action,
+            preventiveAction: capa.preventiveAction || d.preventive_action,
+            closureRemark: capa.closureRemark,
+            closurePhotoUrl: d.closure_photo_url,
+            closedDate: d.closed_date,
+            closedBy: capa.closedBy || d.closed_by,
+            createdAt: d.created_at,
+          };
+        });
         StorageEngine.saveActions(mappedAct);
       }
 
