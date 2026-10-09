@@ -25,13 +25,11 @@ import {
   FileCheck2,
   ChevronLeft,
   ChevronRight,
-  ChevronDown,
-  Activity,
-  Zap,
-  Info,
   Sliders,
-  CheckCircle,
+  MapPin,
+  FileText,
   HelpCircle,
+  Sparkles,
 } from 'lucide-react';
 import { StorageEngine } from '../lib/storageEngine';
 import { SupabaseBackendClient } from '../lib/supabaseBackend';
@@ -42,15 +40,15 @@ interface ActionTrackingViewProps {
   currentUser?: AuthUser | null;
 }
 
-// ── SANITIZER & BACKFILLER HELPER ─────────────────────────────────────────────
-function cleanAndEnrichAction(
+// ── SANITIZER HELPER (NO DUMMY / AUTO-FILLED DATA) ────────────────────────────
+function sanitizeAction(
   act: ActionItem,
   auditResults: any[],
   checkpoints: any[]
 ): ActionItem {
   const cleaned: ActionItem = { ...act };
 
-  // 1. Clean up closureRemark and extract CAPA metadata
+  // 1. Clean up closureRemark and extract CAPA metadata without raw JSON tags
   if (
     cleaned.closureRemark &&
     cleaned.closureRemark.includes('<!--CAPA_DATA:') &&
@@ -71,7 +69,7 @@ function cleanAndEnrichAction(
     } catch (_) {}
   }
 
-  // 2. Backfill spec, actual value, and potential impact if missing
+  // 2. Lookup standard spec, actual value, and potential impact strictly from audit results or master checkpoints (no dummy placeholders)
   if (!cleaned.standardParameter || !cleaned.actualValue || !cleaned.potentialImpact) {
     const matchedRes = auditResults.find(
       (r) =>
@@ -85,26 +83,26 @@ function cleanAndEnrichAction(
         c.componentName === cleaned.componentName
     );
 
-    if (!cleaned.standardParameter || cleaned.standardParameter === '-') {
+    if (!cleaned.standardParameter) {
       cleaned.standardParameter =
         matchedRes?.standardParameter ||
         matchedCk?.standardParameter ||
         (matchedCk?.minimum !== undefined && matchedCk?.maximum !== undefined
-          ? `${matchedCk.minimum} – ${matchedCk.maximum} ${matchedCk.unit || ''}`.trim()
-          : '-');
+          ? `${matchedCk.minimum} - ${matchedCk.maximum} ${matchedCk.unit || ''}`.trim()
+          : '');
     }
 
-    if (!cleaned.actualValue || cleaned.actualValue === '-') {
-      cleaned.actualValue = matchedRes?.actualValue || 'NG Finding';
+    if (!cleaned.actualValue) {
+      cleaned.actualValue = matchedRes?.actualValue || '';
     }
 
-    if (!cleaned.potentialImpact || cleaned.potentialImpact === '-') {
+    if (!cleaned.potentialImpact) {
       cleaned.potentialImpact =
         matchedRes?.whatImpactIfThisPartGetsFail ||
         matchedRes?.impactOfFailure ||
         matchedCk?.whatImpactIfThisPartGetsFail ||
         matchedCk?.impactOfFailure ||
-        'Potential equipment downtime or quality variation';
+        '';
     }
 
     if (!cleaned.photoUrl && matchedRes?.photoUrl) {
@@ -177,9 +175,9 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
     };
   }, [editingAction, activePhotoModal]);
 
-  // Clean and Enrich Actions
-  const enrichedActions = useMemo(() => {
-    return actions.map((act) => cleanAndEnrichAction(act, auditResults, checkpoints));
+  // Clean actions
+  const sanitizedActions = useMemo(() => {
+    return actions.map((act) => sanitizeAction(act, auditResults, checkpoints));
   }, [actions, auditResults, checkpoints]);
 
   // Check user edit permissions
@@ -219,12 +217,12 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
   };
 
   const departmentsList = useMemo(() => {
-    return Array.from(new Set(enrichedActions.map((a) => a.responsibleDepartment).filter(Boolean))) as string[];
-  }, [enrichedActions]);
+    return Array.from(new Set(sanitizedActions.map((a) => a.responsibleDepartment).filter(Boolean))) as string[];
+  }, [sanitizedActions]);
 
   // Filtered Actions
   const filteredActions = useMemo(() => {
-    return enrichedActions.filter((act) => {
+    return sanitizedActions.filter((act) => {
       if (activeSubTab !== 'ALL' && act.status !== activeSubTab) return false;
       if (priorityFilter !== 'ALL' && act.priority !== priorityFilter) return false;
       if (departmentFilter !== 'ALL' && act.responsibleDepartment !== departmentFilter) return false;
@@ -244,7 +242,7 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
       }
       return true;
     });
-  }, [enrichedActions, activeSubTab, priorityFilter, departmentFilter, searchQuery]);
+  }, [sanitizedActions, activeSubTab, priorityFilter, departmentFilter, searchQuery]);
 
   // Reset pagination on filter change
   useEffect(() => {
@@ -252,11 +250,11 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
   }, [activeSubTab, priorityFilter, departmentFilter, searchQuery, pageSize]);
 
   // Counts for Sub-Tabs
-  const totalCount = enrichedActions.length;
-  const openCount = enrichedActions.filter((a) => a.status === 'Open').length;
-  const inProgressCount = enrichedActions.filter((a) => a.status === 'In Progress').length;
-  const closedCount = enrichedActions.filter((a) => a.status === 'Closed').length;
-  const overdueCount = enrichedActions.filter((a) => a.status === 'Overdue').length;
+  const totalCount = sanitizedActions.length;
+  const openCount = sanitizedActions.filter((a) => a.status === 'Open').length;
+  const inProgressCount = sanitizedActions.filter((a) => a.status === 'In Progress').length;
+  const closedCount = sanitizedActions.filter((a) => a.status === 'Closed').length;
+  const overdueCount = sanitizedActions.filter((a) => a.status === 'Overdue').length;
 
   // Pagination Slice
   const totalPages = Math.ceil(filteredActions.length / pageSize) || 1;
@@ -270,7 +268,7 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
     setNewStatus(act.status || 'Open');
     setNewTcd(act.targetClosureDate || act.targetDate || '');
     setNewRootCause(act.rootCause || '');
-    setNewCorrectiveAction(act.correctiveAction || act.recommendedAction || '');
+    setNewCorrectiveAction(act.correctiveAction || '');
     setNewPreventiveAction(act.preventiveAction || '');
     setNewRemarks(act.closureRemark || '');
     setNewClosurePhoto(act.closurePhotoUrl || '');
@@ -358,7 +356,7 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
           cc: ccList,
           type: 'ACTION_CLOSURE',
           actionClosure: closedActionItem,
-          subject: `[ACTION CLOSED] ${editingAction.componentName} – ${editingAction.lineName || editingAction.sectionName} (Audit ${editingAction.auditId})`,
+          subject: `[ACTION CLOSED] ${editingAction.componentName} - ${editingAction.lineName || editingAction.sectionName} (Audit ${editingAction.auditId})`,
         }),
       }).catch((mailErr) => console.warn('[Closure email dispatch notice]:', mailErr));
     }
@@ -570,7 +568,7 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
         {/* Pagination Summary & Buttons */}
         <div className="flex items-center space-x-3 ml-auto">
           <span className="text-slate-500 font-bold text-[11px]">
-            Showing <strong className="text-slate-800">{filteredActions.length > 0 ? (currentPage - 1) * pageSize + 1 : 0}–{Math.min(currentPage * pageSize, filteredActions.length)}</strong> of <strong className="text-slate-800">{filteredActions.length}</strong>
+            Showing <strong className="text-slate-800">{filteredActions.length > 0 ? (currentPage - 1) * pageSize + 1 : 0}-{Math.min(currentPage * pageSize, filteredActions.length)}</strong> of <strong className="text-slate-800">{filteredActions.length}</strong>
           </span>
 
           <div className="flex items-center space-x-1">
@@ -633,7 +631,7 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
                       {act.actionId}
                     </span>
                     <span className="text-xs text-slate-400 font-semibold">
-                      • Audit #{act.auditId}
+                      Audit #{act.auditId}
                     </span>
                     <span
                       className={`px-2.5 py-0.5 text-[10px] font-black rounded-lg ${
@@ -655,8 +653,9 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
                     )}
 
                     {(act.lineName || act.sectionName) && (
-                      <span className="bg-slate-50 text-slate-600 border border-slate-200 text-[10px] font-bold px-2 py-0.5 rounded-lg">
-                        📍 {act.lineName || act.sectionName}
+                      <span className="bg-slate-50 text-slate-600 border border-slate-200 text-[10px] font-bold px-2 py-0.5 rounded-lg flex items-center space-x-1">
+                        <MapPin className="w-3 h-3 text-slate-400" />
+                        <span>{act.lineName || act.sectionName}</span>
                       </span>
                     )}
                   </div>
@@ -714,7 +713,7 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
                         Actual Value Measured
                       </span>
                       <p className="font-extrabold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200 inline-block">
-                        {act.actualValue || 'NG Finding'}
+                        {act.actualValue || '-'}
                       </p>
                     </div>
 
@@ -724,7 +723,7 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
                         Observation / Finding Remarks
                       </span>
                       <p className="font-bold text-rose-800 bg-rose-50/50 p-2 rounded-xl border border-rose-100">
-                        ⚠️ {act.observation || '-'}
+                        {act.observation || '-'}
                       </p>
                     </div>
 
@@ -734,7 +733,7 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
                         Potential Impact / Failure Risk
                       </span>
                       <p className="font-bold text-amber-900 bg-amber-50/60 p-2 rounded-xl border border-amber-100">
-                        ⚡ {act.potentialImpact || 'Equipment downtime or quality deviation'}
+                        {act.potentialImpact || '-'}
                       </p>
                     </div>
 
@@ -744,13 +743,13 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
                         Recommended Action
                       </span>
                       <p className="font-bold text-emerald-900 bg-emerald-50/70 p-2 rounded-xl border border-emerald-100">
-                        💡 {act.recommendedAction || 'Inspect and service component'}
+                        {act.recommendedAction || '-'}
                       </p>
                     </div>
                   </div>
 
-                  {/* ── CAPA & Root Cause Analysis (RCA) Section (Clean Display) ── */}
-                  {(act.rootCause || act.correctiveAction || act.preventiveAction || act.closureRemark) && (
+                  {/* ── CAPA & Root Cause Analysis (RCA) Section (Only when filled) ── */}
+                  {(Boolean(act.rootCause) || Boolean(act.correctiveAction) || Boolean(act.preventiveAction) || Boolean(act.closureRemark)) && (
                     <div className="bg-indigo-50/50 p-4 rounded-2xl border border-indigo-100 space-y-2">
                       <span className="text-[11px] font-black text-indigo-900 uppercase tracking-wider flex items-center space-x-1.5">
                         <Wrench className="w-3.5 h-3.5 text-indigo-600" />
@@ -761,7 +760,7 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
                         {act.rootCause && (
                           <div className="bg-white p-2.5 rounded-xl border border-indigo-100">
                             <strong className="text-slate-500 font-bold block text-[10px] uppercase">
-                              🎯 Root Cause (Why failure occurred):
+                              Root Cause:
                             </strong>
                             <p className="text-slate-900 font-semibold mt-0.5">{act.rootCause}</p>
                           </div>
@@ -770,7 +769,7 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
                         {act.correctiveAction && (
                           <div className="bg-white p-2.5 rounded-xl border border-indigo-100">
                             <strong className="text-slate-500 font-bold block text-[10px] uppercase">
-                              🔧 Corrective Action Taken:
+                              Corrective Action:
                             </strong>
                             <p className="text-slate-900 font-semibold mt-0.5">{act.correctiveAction}</p>
                           </div>
@@ -779,7 +778,7 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
                         {act.preventiveAction && (
                           <div className="bg-white p-2.5 rounded-xl border border-indigo-100">
                             <strong className="text-slate-500 font-bold block text-[10px] uppercase">
-                              🛡️ Preventive Action (To stop recurrence):
+                              Preventive Action:
                             </strong>
                             <p className="text-slate-900 font-semibold mt-0.5">{act.preventiveAction}</p>
                           </div>
@@ -788,7 +787,7 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
                         {act.closureRemark && (
                           <div className="bg-white p-2.5 rounded-xl border border-indigo-100">
                             <strong className="text-slate-500 font-bold block text-[10px] uppercase">
-                              📝 Closure Remarks / Notes:
+                              Closure Remarks:
                             </strong>
                             <p className="text-slate-900 font-semibold mt-0.5">{act.closureRemark}</p>
                           </div>
@@ -802,12 +801,12 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
                     <div className="flex flex-wrap items-center gap-3 text-slate-500 text-[11px] font-semibold">
                       <span className="flex items-center space-x-1">
                         <User className="w-3.5 h-3.5 text-slate-400" />
-                        <span>FPR Lead: <strong className="text-slate-800">{act.responsiblePerson}</strong></span>
+                        <span>FPR Lead: <strong className="text-slate-800">{act.responsiblePerson || '-'}</strong></span>
                       </span>
 
                       <span className="flex items-center space-x-1">
                         <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                        <span>Target: <strong className="text-slate-800">{act.targetDate}</strong></span>
+                        <span>Target: <strong className="text-slate-800">{act.targetDate || '-'}</strong></span>
                       </span>
 
                       {act.targetClosureDate && (
@@ -818,8 +817,9 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
                       )}
 
                       {act.closedDate && (
-                        <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-md">
-                          ✓ Closed on: {act.closedDate} {act.closedBy ? `by ${act.closedBy}` : ''}
+                        <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-md flex items-center space-x-1">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>Closed on: {act.closedDate} {act.closedBy ? `by ${act.closedBy}` : ''}</span>
                         </span>
                       )}
                     </div>
