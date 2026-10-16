@@ -46,12 +46,12 @@ export default function Home() {
     // Initial background sync from Supabase so incognito & new devices load full data
     SupabaseBackendClient.syncAllFromCloud().then(() => {
       const actions = StorageEngine.getActions();
-      const openCount = actions.filter((a) => a.status === 'Open' || a.status === 'In Progress').length;
+      const openCount = actions.filter((a) => a.status === 'Open' || a.status === 'In Progress' || a.status === 'Pending Verification').length;
       setOpenActionCount(openCount);
     }).catch(() => {});
 
     const actions = StorageEngine.getActions();
-    const openCount = actions.filter((a) => a.status === 'Open' || a.status === 'In Progress').length;
+    const openCount = actions.filter((a) => a.status === 'Open' || a.status === 'In Progress' || a.status === 'Pending Verification').length;
     setOpenActionCount(openCount);
 
     if (typeof window !== 'undefined') {
@@ -65,7 +65,7 @@ export default function Home() {
 
   useEffect(() => {
     const actions = StorageEngine.getActions();
-    const openCount = actions.filter((a) => a.status === 'Open' || a.status === 'In Progress').length;
+    const openCount = actions.filter((a) => a.status === 'Open' || a.status === 'In Progress' || a.status === 'Pending Verification').length;
     setOpenActionCount(openCount);
   }, [activeTab]);
 

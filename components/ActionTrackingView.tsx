@@ -30,6 +30,7 @@ import {
   FileText,
   HelpCircle,
   Sparkles,
+  RefreshCw,
 } from 'lucide-react';
 import { StorageEngine } from '../lib/storageEngine';
 import { SupabaseBackendClient } from '../lib/supabaseBackend';
@@ -149,8 +150,25 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
   const [newAdminRemarks, setNewAdminRemarks] = useState<string>('');
   const [activePhotoModal, setActivePhotoModal] = useState<string | null>(null);
   const [saving, setSaving] = useState<boolean>(false);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [lastSyncedTime, setLastSyncedTime] = useState<string>('');
 
-  // Initial Sync from Supabase Cloud
+  const refreshActionsFromCloud = async (silent = false) => {
+    if (!silent) setIsRefreshing(true);
+    try {
+      const freshActions = await SupabaseBackendClient.fetchActions();
+      if (freshActions && freshActions.length > 0) {
+        setActions(freshActions);
+      }
+      setLastSyncedTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+    } catch (err) {
+      console.warn('[Action sync refresh notice]:', err);
+    } finally {
+      if (!silent) setIsRefreshing(false);
+    }
+  };
+
+  // Initial Sync from Supabase Cloud + Auto-polling & Focus Listener for Multi-Device Real-Time Sync
   useEffect(() => {
     if (SupabaseBackendClient.isConfigured()) {
       Promise.allSettled([
@@ -167,7 +185,24 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
         if (ckRes.status === 'fulfilled' && ckRes.value && ckRes.value.length > 0) {
           setCheckpoints(ckRes.value);
         }
+        setLastSyncedTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
       });
+
+      // Poll Supabase every 12 seconds so updates made by Admin/Engineers on another PC/laptop reflect automatically
+      const pollTimer = setInterval(() => {
+        refreshActionsFromCloud(true);
+      }, 12000);
+
+      // Instantly sync when switching back to this browser tab or window
+      const handleWindowFocus = () => {
+        refreshActionsFromCloud(true);
+      };
+      window.addEventListener('focus', handleWindowFocus);
+
+      return () => {
+        clearInterval(pollTimer);
+        window.removeEventListener('focus', handleWindowFocus);
+      };
     }
   }, []);
 
@@ -409,11 +444,8 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
     }
 
     try {
-      await SupabaseBackendClient.updateActionDetailed(editingAction.actionId, updates);
-      const freshActions = await SupabaseBackendClient.fetchActions();
-      if (freshActions && freshActions.length > 0) {
-        setActions(freshActions);
-      }
+      await SupabaseBackendClient.updateActionDetailed(editingAction.actionId, updates, { ...editingAction, ...updates });
+      await refreshActionsFromCloud(true);
     } catch (err) {
       console.warn('Action sync notice:', err);
     } finally {
@@ -436,16 +468,34 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
           </p>
         </div>
 
-        {/* Global Search Box */}
-        <div className="relative min-w-[260px]">
-          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
-          <input
-            type="text"
-            placeholder="Search component, checkpoint, FPR..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-800 font-semibold focus:outline-none focus:border-indigo-500 transition shadow-xs"
-          />
+        {/* Sync Button & Global Search Box */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            type="button"
+            onClick={() => refreshActionsFromCloud(false)}
+            disabled={isRefreshing}
+            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold transition shadow-xs cursor-pointer shrink-0 disabled:opacity-60"
+            title="Fetch live updates from Supabase Cloud database"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-indigo-600 ${isRefreshing ? 'animate-spin' : ''}`} />
+            <span>{isRefreshing ? 'Syncing...' : 'Sync Cloud'}</span>
+            {lastSyncedTime && (
+              <span className="text-[10px] text-indigo-500 font-semibold hidden sm:inline">
+                ({lastSyncedTime})
+              </span>
+            )}
+          </button>
+
+          <div className="relative min-w-[220px]">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+            <input
+              type="text"
+              placeholder="Search component, checkpoint, FPR..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-800 font-semibold focus:outline-none focus:border-indigo-500 transition shadow-xs"
+            />
+          </div>
         </div>
       </div>
 

@@ -486,7 +486,13 @@ export class SupabaseBackendClient {
   // ── 7. ACTIONS VIA SERVER PROXY ────────────────────────────────────────────
   public static async fetchActions(): Promise<ActionItem[]> {
     try {
-      const res = await fetch('/api/db?action=fetchActions');
+      const res = await fetch(`/api/db?action=fetchActions&_t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+        },
+      });
       const json = await res.json();
       if (!res.ok || !json.success || !json.data || json.data.length === 0) {
         return StorageEngine.getActions();
@@ -544,7 +550,8 @@ export class SupabaseBackendClient {
 
   public static async updateActionDetailed(
     actionId: string,
-    updates: Partial<ActionItem>
+    updates: Partial<ActionItem>,
+    fullAction?: ActionItem
   ): Promise<{ status: string; message: string }> {
     StorageEngine.updateActionDetailed(actionId, updates);
     try {
@@ -553,7 +560,7 @@ export class SupabaseBackendClient {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'UPDATE_ACTION',
-          payload: { actionId, updates },
+          payload: { actionId, updates, fullAction },
         }),
       });
       const json = await res.json();
@@ -580,7 +587,13 @@ export class SupabaseBackendClient {
   // ── 8. FULL SYSTEM SYNC VIA 1-CALL SERVER PROXY ────────────────────────────
   public static async syncAllFromCloud(): Promise<{ success: boolean; message: string }> {
     try {
-      const res = await fetch('/api/db?action=syncAll');
+      const res = await fetch(`/api/db?action=syncAll&_t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+        },
+      });
       const json = await res.json();
       if (!res.ok || !json.success || !json.data) {
         throw new Error(json.message || 'Sync failed');

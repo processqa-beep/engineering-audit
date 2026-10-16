@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 // Initialize Supabase Client on Node.js server (Runs outside corporate firewall on Vercel)
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || 'https://nywznyvvqhiiktvoskkv.supabase.co';
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || 'sb_publishable_wEYpcobIlO1eWIjA7cRdFQ_SkMrwmpZ';
@@ -653,7 +656,7 @@ export async function POST(req: NextRequest) {
 
     // 5. UPDATE ACTION ITEM
     if (action === 'UPDATE_ACTION') {
-      const { actionId, updates } = payload;
+      const { actionId, updates, fullAction } = payload;
 
       let finalPhotoUrl = updates.closurePhotoUrl;
       if (finalPhotoUrl && finalPhotoUrl.startsWith('data:image')) {
@@ -684,36 +687,101 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      const updateData: any = {
-        updated_at: new Date().toISOString(),
-      };
-      if (updates.status) updateData.status = updates.status;
-      if (
-        updates.closureRemark !== undefined ||
-        updates.rootCause !== undefined ||
-        updates.correctiveAction !== undefined ||
-        updates.preventiveAction !== undefined ||
-        updates.targetClosureDate !== undefined ||
-        updates.closedBy !== undefined
-      ) {
-        updateData.closure_remark = packClosureRemark(updates);
-      }
-      if (finalPhotoUrl !== undefined) {
-        updateData.closure_photo_url = finalPhotoUrl;
-      }
-      if (updates.status === 'Closed') {
-        updateData.closed_date = updates.closedDate || new Date().toISOString().substring(0, 10);
-      }
-
-      const { error } = await supabase
+      // 1. Fetch existing action row from Supabase to merge fields seamlessly
+      const { data: existingRows } = await supabase
         .from('action_items')
-        .update(updateData)
-        .eq('action_id', actionId);
+        .select('*')
+        .eq('action_id', actionId)
+        .limit(1);
 
-      if (error) {
-        console.error('[Supabase UPDATE_ACTION Error]:', error);
-        throw error;
+      const existing = existingRows && existingRows.length > 0 ? existingRows[0] : null;
+      const existingCapa: any = existing ? unpackClosureRemark(existing.closure_remark) : {};
+
+      const mergedUpdates = {
+        closureRemark: updates.closureRemark !== undefined ? updates.closureRemark : (existingCapa.closureRemark || fullAction?.closureRemark || ''),
+        rootCause: updates.rootCause !== undefined ? updates.rootCause : (existingCapa.rootCause || fullAction?.rootCause || ''),
+        correctiveAction: updates.correctiveAction !== undefined ? updates.correctiveAction : (existingCapa.correctiveAction || fullAction?.correctiveAction || ''),
+        preventiveAction: updates.preventiveAction !== undefined ? updates.preventiveAction : (existingCapa.preventiveAction || fullAction?.preventiveAction || ''),
+        targetClosureDate: updates.targetClosureDate !== undefined ? updates.targetClosureDate : (existingCapa.targetClosureDate || fullAction?.targetClosureDate || ''),
+        closedBy: updates.closedBy !== undefined ? updates.closedBy : (existingCapa.closedBy || fullAction?.closedBy || ''),
+        resolvedBy: updates.resolvedBy !== undefined ? updates.resolvedBy : (existingCapa.resolvedBy || fullAction?.resolvedBy || ''),
+        resolvedDate: updates.resolvedDate !== undefined ? updates.resolvedDate : (existingCapa.resolvedDate || fullAction?.resolvedDate || ''),
+        verifiedBy: updates.verifiedBy !== undefined ? updates.verifiedBy : (existingCapa.verifiedBy || fullAction?.verifiedBy || ''),
+        verifiedDate: updates.verifiedDate !== undefined ? updates.verifiedDate : (existingCapa.verifiedDate || fullAction?.verifiedDate || ''),
+        adminVerificationRemarks: updates.adminVerificationRemarks !== undefined ? updates.adminVerificationRemarks : (existingCapa.adminVerificationRemarks || fullAction?.adminVerificationRemarks || ''),
+      };
+
+      const packedRemark = packClosureRemark(mergedUpdates);
+
+      if (existing) {
+        // Row exists in Supabase: Update it!
+        const updateData: any = {
+          updated_at: new Date().toISOString(),
+          closure_remark: packedRemark,
+        };
+        if (updates.status) updateData.status = updates.status;
+        if (finalPhotoUrl !== undefined) {
+          updateData.closure_photo_url = finalPhotoUrl;
+        }
+        if (updates.status === 'Closed') {
+          updateData.closed_date = updates.closedDate || existing.closed_date || new Date().toISOString().substring(0, 10);
+        } else if (updates.status === 'Open' || updates.status === 'In Progress' || updates.status === 'Pending Verification') {
+          updateData.closed_date = null;
+        }
+
+        const { error } = await supabase
+          .from('action_items')
+          .update(updateData)
+          .eq('action_id', actionId);
+
+        if (error) {
+          console.error('[Supabase UPDATE_ACTION Error]:', error);
+          throw error;
+        }
+      } else {
+        // Row does not exist in Supabase yet (e.g. from local migration or demo): Upsert full record!
+        const base = fullAction || {};
+        const newRow: any = {
+          action_id: actionId,
+          audit_id: base.auditId || 'AUD-MANUAL',
+          section_id: base.sectionId || '',
+          section_name: base.sectionName || '',
+          sub_section_id: base.subSectionId || '',
+          sub_section_name: base.subSectionName || '',
+          line_id: base.lineId || '',
+          line_name: base.lineName || '',
+          equipment_id: base.equipmentId || '',
+          equipment_name: base.equipmentName || '',
+          component_name: base.componentName || '',
+          checkpoint_text: base.checkpointText || '',
+          observation: base.observation || '',
+          recommended_action: base.recommendedAction || '',
+          responsible_person: base.responsiblePerson || '',
+          responsible_department: base.responsibleDepartment || '',
+          assigned_email: base.assignedEmail || '',
+          cc_person: base.ccPerson || '',
+          cc_email: base.ccEmail || '',
+          target_date: base.targetDate || '',
+          priority: base.priority || 'Medium',
+          status: updates.status || base.status || 'Open',
+          closure_remark: packedRemark,
+          closure_photo_url: finalPhotoUrl !== undefined ? finalPhotoUrl : (base.closurePhotoUrl || null),
+          photo_url: base.photoUrl || null,
+          closed_date: updates.status === 'Closed' ? (updates.closedDate || new Date().toISOString().substring(0, 10)) : null,
+          created_at: base.createdAt || new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+
+        const { error: upsertErr } = await supabase
+          .from('action_items')
+          .upsert([newRow], { onConflict: 'action_id' });
+
+        if (upsertErr) {
+          console.error('[Supabase UPSERT Action Item Error]:', upsertErr);
+          throw upsertErr;
+        }
       }
+
       return NextResponse.json({ success: true, photoUrl: finalPhotoUrl });
     }
 
