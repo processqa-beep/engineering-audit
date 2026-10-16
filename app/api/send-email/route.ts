@@ -33,8 +33,9 @@ export async function POST(req: NextRequest) {
     const emailAttachments: any[] = [];
     let htmlContent = customHtml;
 
-    if (!htmlContent && type === 'ACTION_CLOSURE' && actionClosure) {
+    if (!htmlContent && (type === 'ACTION_CLOSURE' || type === 'ACTION_PENDING_VERIFICATION') && actionClosure) {
       const act = actionClosure;
+      const isPendingVerification = type === 'ACTION_PENDING_VERIFICATION';
       let findingPhotoHtml = '';
       let afterPhotoHtml = '';
       let hasFindingPhoto = false;
@@ -144,6 +145,98 @@ export async function POST(req: NextRequest) {
       const lineEquip = `${act.lineName || act.lineId || 'Line'}${act.equipmentName ? ` - ${act.equipmentName}` : ''}`;
       const auditorDisplayName = act.auditorName || act.auditor || 'Engineering Auditor';
 
+      const badgeHtml = isPendingVerification
+        ? `<span style="display: inline-block; background-color: #d97706; color: #ffffff; padding: 5px 14px; border-radius: 6px; font-weight: bold; font-size: 13px; letter-spacing: 0.5px;">ACTION RESOLVED — PENDING SHOP-FLOOR ADMIN VERIFICATION</span>`
+        : `<span style="display: inline-block; background-color: #10b981; color: #ffffff; padding: 5px 14px; border-radius: 6px; font-weight: bold; font-size: 13px; letter-spacing: 0.5px;">AUDIT DEVIATION PHYSICALLY VERIFIED &amp; CLOSED</span>`;
+
+      const introHtml = isPendingVerification
+        ? `
+          <p style="margin-top: 10px;">Dear Admin &amp; QA Team,</p>
+          <p>The following audit deviation has been marked as <strong>RESOLVED</strong> by the responsible engineering department lead (<strong>${act.resolvedBy || act.responsiblePerson || 'Engineer'}</strong>). RCA, Corrective/Preventive action, and after-evidence photos have been submitted.</p>
+          <div style="background-color: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 12px 16px; margin: 14px 0; color: #92400e; font-size: 13px; line-height: 1.5;">
+            🔍 <strong>Physical Shop-Floor Verification Required:</strong> In accordance with the audit closure governance, please <strong>inspect this equipment in actual on the shop floor</strong> to verify the physical resolution, then confirm official closure in the Audit Portal.
+          </div>
+        `
+        : `
+          <p style="margin-top: 10px;">Dear Team,</p>
+          <p>Please note that the following deviation identified during the Engineering Audit has been <strong>physically verified in actual on the shop floor and officially closed</strong>.</p>
+        `;
+
+      const capaRowsHtml = isPendingVerification
+        ? `
+          <tr>
+            <td class="capa-lbl">Submitted / Resolved By:</td>
+            <td class="capa-val"><strong>${act.resolvedBy || act.responsiblePerson}</strong> (${act.responsibleDepartment || 'Department Engineer'})</td>
+          </tr>
+          <tr>
+            <td class="capa-lbl">Resolution Date:</td>
+            <td class="capa-val"><strong>${act.resolvedDate || closedDt}</strong></td>
+          </tr>
+          <tr>
+            <td class="capa-lbl">Current Status:</td>
+            <td class="capa-val"><span style="background-color: #fef3c7; color: #92400e; padding: 2px 8px; border-radius: 4px; font-weight: bold;">Pending Admin Shop-Floor Verification</span></td>
+          </tr>
+          <tr>
+            <td class="capa-lbl">Target Closure Date (TCD):</td>
+            <td class="capa-val">${act.targetClosureDate || act.targetDate || '-'}</td>
+          </tr>
+          <tr>
+            <td class="capa-lbl">Root Cause Analysis (RCA):</td>
+            <td class="capa-val">${act.rootCause || '-'}</td>
+          </tr>
+          <tr>
+            <td class="capa-lbl">Corrective Action Taken:</td>
+            <td class="capa-val">${act.correctiveAction || '-'}</td>
+          </tr>
+          <tr>
+            <td class="capa-lbl">Preventive Action (CAPA):</td>
+            <td class="capa-val">${act.preventiveAction || '-'}</td>
+          </tr>
+          <tr>
+            <td class="capa-lbl">Maintenance Remarks / SAP Order:</td>
+            <td class="capa-val">${act.closureRemark || '-'}</td>
+          </tr>
+        `
+        : `
+          <tr>
+            <td class="capa-lbl">Verified in Actual &amp; Closed By:</td>
+            <td class="capa-val"><strong>${act.verifiedBy || act.closedBy || 'Admin'}</strong> (${act.responsibleDepartment || 'Audit / QA Lead'})</td>
+          </tr>
+          <tr>
+            <td class="capa-lbl">Verification &amp; Closure Date:</td>
+            <td class="capa-val"><strong>${act.verifiedDate || closedDt}</strong></td>
+          </tr>
+          ${act.adminVerificationRemarks ? `
+          <tr>
+            <td class="capa-lbl">Admin Verification Remarks:</td>
+            <td class="capa-val"><strong style="color: #047857;">${act.adminVerificationRemarks}</strong></td>
+          </tr>` : ''}
+          <tr>
+            <td class="capa-lbl">Resolved By (Engineer):</td>
+            <td class="capa-val">${act.resolvedBy || act.responsiblePerson || '-'}</td>
+          </tr>
+          <tr>
+            <td class="capa-lbl">Target Closure Date (TCD):</td>
+            <td class="capa-val">${act.targetClosureDate || act.targetDate || '-'}</td>
+          </tr>
+          <tr>
+            <td class="capa-lbl">Root Cause Analysis (RCA):</td>
+            <td class="capa-val">${act.rootCause || '-'}</td>
+          </tr>
+          <tr>
+            <td class="capa-lbl">Corrective Action Taken:</td>
+            <td class="capa-val">${act.correctiveAction || '-'}</td>
+          </tr>
+          <tr>
+            <td class="capa-lbl">Preventive Action (CAPA):</td>
+            <td class="capa-val">${act.preventiveAction || '-'}</td>
+          </tr>
+          <tr>
+            <td class="capa-lbl">Maintenance Remarks / SAP Order:</td>
+            <td class="capa-val">${act.closureRemark || '-'}</td>
+          </tr>
+        `;
+
       htmlContent = `
         <!DOCTYPE html>
         <html>
@@ -152,15 +245,14 @@ export async function POST(req: NextRequest) {
           <style>
             body { font-family: Calibri, Arial, Helvetica, sans-serif; font-size: 14px; color: #1e293b; line-height: 1.5; background-color: #ffffff; margin: 0; padding: 20px; }
             .container { max-width: 880px; margin: 0 auto; }
-            .badge-closed { display: inline-block; background-color: #10b981; color: #ffffff; padding: 5px 14px; border-radius: 6px; font-weight: bold; font-size: 13px; letter-spacing: 0.5px; }
             .card { background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px 20px; margin: 16px 0; }
-            .capa-card { background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 18px 22px; margin: 16px 0; }
+            .capa-card { background-color: ${isPendingVerification ? '#fffbeb' : '#f0fdf4'}; border: 1px solid ${isPendingVerification ? '#fde68a' : '#bbf7d0'}; border-radius: 8px; padding: 18px 22px; margin: 16px 0; }
             .info-table { width: 100%; border-collapse: collapse; font-size: 13px; }
             .info-table td { padding: 6px 6px; }
             .info-lbl { color: #64748b; font-weight: bold; width: 22%; }
             .info-val { color: #0f172a; width: 28%; font-weight: 600; }
-            .capa-lbl { color: #166534; font-weight: bold; width: 25%; }
-            .capa-val { color: #0f172a; width: 75%; }
+            .capa-lbl { color: ${isPendingVerification ? '#92400e' : '#166534'}; font-weight: bold; width: 28%; }
+            .capa-val { color: #0f172a; width: 72%; }
             .heading { font-size: 15px; font-weight: bold; color: #0f172a; margin: 0 0 10px 0; }
             .portal-btn { display: inline-block; background-color: #0284c7; color: #ffffff !important; padding: 12px 28px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 14px; }
           </style>
@@ -168,12 +260,11 @@ export async function POST(req: NextRequest) {
         <body>
           <div class="container">
             <div style="margin-bottom: 16px;">
-              <span class="badge-closed">AUDIT DEVIATION RESOLVED &amp; CLOSED</span>
+              ${badgeHtml}
               <span style="font-size: 13px; color: #475569; font-weight: bold; margin-left: 12px;">Action ID: ${act.actionId}</span>
             </div>
 
-            <p style="margin-top: 10px;">Dear Team,</p>
-            <p>Please note that the following deviation identified during the Engineering Audit has been <strong>successfully resolved and closed</strong> by the responsible department.</p>
+            ${introHtml}
 
             <!-- Deviation Overview -->
             <div class="card">
@@ -208,36 +299,11 @@ export async function POST(req: NextRequest) {
 
             <!-- CAPA & Closure Resolution Details -->
             <div class="capa-card">
-              <div class="heading" style="color: #15803d;">Resolution &amp; CAPA Summary</div>
+              <div class="heading" style="color: ${isPendingVerification ? '#b45309' : '#15803d'};">
+                ${isPendingVerification ? 'Submitted Resolution &amp; CAPA' : 'Resolution &amp; CAPA Summary'}
+              </div>
               <table class="info-table">
-                <tr>
-                  <td class="capa-lbl">Closed By:</td>
-                  <td class="capa-val"><strong>${act.closedBy || act.responsiblePerson}</strong> (${act.responsibleDepartment || 'Department Lead'})</td>
-                </tr>
-                <tr>
-                  <td class="capa-lbl">Closure Date:</td>
-                  <td class="capa-val"><strong>${closedDt}</strong></td>
-                </tr>
-                <tr>
-                  <td class="capa-lbl">Target Closure Date (TCD):</td>
-                  <td class="capa-val">${act.targetClosureDate || act.targetDate || '-'}</td>
-                </tr>
-                <tr>
-                  <td class="capa-lbl">Root Cause Analysis (RCA):</td>
-                  <td class="capa-val">${act.rootCause || '-'}</td>
-                </tr>
-                <tr>
-                  <td class="capa-lbl">Corrective Action Taken:</td>
-                  <td class="capa-val">${act.correctiveAction || '-'}</td>
-                </tr>
-                <tr>
-                  <td class="capa-lbl">Preventive Action (CAPA):</td>
-                  <td class="capa-val">${act.preventiveAction || '-'}</td>
-                </tr>
-                <tr>
-                  <td class="capa-lbl">Maintenance Remarks / SAP Order:</td>
-                  <td class="capa-val">${act.closureRemark || '-'}</td>
-                </tr>
+                ${capaRowsHtml}
               </table>
             </div>
 
@@ -246,7 +312,7 @@ export async function POST(req: NextRequest) {
 
             <div style="text-align: center; margin: 30px 0;">
               <a href="https://brl-engineering-audit.vercel.app/?tab=actions" class="portal-btn" style="color: #ffffff !important;">
-                Open Action Tracker in Portal →
+                ${isPendingVerification ? 'Inspect &amp; Verify Action in Portal →' : 'Open Action Tracker in Portal →'}
               </a>
             </div>
 

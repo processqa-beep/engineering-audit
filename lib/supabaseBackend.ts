@@ -19,6 +19,11 @@ function unpackClosureRemark(rawRemark: string | null | undefined): {
   preventiveAction?: string;
   targetClosureDate?: string;
   closedBy?: string;
+  resolvedBy?: string;
+  resolvedDate?: string;
+  verifiedBy?: string;
+  verifiedDate?: string;
+  adminVerificationRemarks?: string;
 } {
   if (!rawRemark) {
     return { closureRemark: '' };
@@ -36,6 +41,11 @@ function unpackClosureRemark(rawRemark: string | null | undefined): {
           preventiveAction: meta.pa || undefined,
           targetClosureDate: meta.tcd || undefined,
           closedBy: meta.cb || undefined,
+          resolvedBy: meta.rb || undefined,
+          resolvedDate: meta.rd || undefined,
+          verifiedBy: meta.vb || undefined,
+          verifiedDate: meta.vd || undefined,
+          adminVerificationRemarks: meta.vr || undefined,
         };
       }
     } catch (_) {}
@@ -516,6 +526,11 @@ export class SupabaseBackendClient {
           photoUrl: d.photo_url,
           closedDate: d.closed_date,
           closedBy: capa.closedBy || d.closed_by,
+          resolvedBy: capa.resolvedBy,
+          resolvedDate: capa.resolvedDate,
+          verifiedBy: capa.verifiedBy,
+          verifiedDate: capa.verifiedDate,
+          adminVerificationRemarks: capa.adminVerificationRemarks,
           createdAt: d.created_at,
         };
       });
@@ -745,6 +760,11 @@ export class SupabaseBackendClient {
             photoUrl: d.photo_url,
             closedDate: d.closed_date,
             closedBy: capa.closedBy || d.closed_by,
+            resolvedBy: capa.resolvedBy,
+            resolvedDate: capa.resolvedDate,
+            verifiedBy: capa.verifiedBy,
+            verifiedDate: capa.verifiedDate,
+            adminVerificationRemarks: capa.adminVerificationRemarks,
             createdAt: d.created_at,
           };
         });

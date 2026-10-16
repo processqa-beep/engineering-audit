@@ -8,7 +8,7 @@ export type OverallStatusType = 'PASS' | 'PASS WITH OBSERVATIONS' | 'FAIL' | 'PE
 
 export type ActionPriority = 'Critical' | 'Major' | 'Minor' | 'High' | 'Medium' | 'Low';
 
-export type ActionStatus = 'Open' | 'In Progress' | 'Closed' | 'Overdue';
+export type ActionStatus = 'Open' | 'In Progress' | 'Pending Verification' | 'Closed' | 'Overdue';
 
 export type PhotoType = 'REFERENCE' | 'OBSERVATION' | 'CLOSURE';
 
@@ -286,6 +286,11 @@ export interface ActionItem {
   closureRemark?: string;
   closurePhotoUrl?: string;    // After Photo (evidence of fix)
   photoUrl?: string;           // Finding / Before Photo
+  resolvedBy?: string;         // Engineer who resolved
+  resolvedDate?: string;       // Date submitted for verification
+  verifiedBy?: string;         // Admin who verified and closed
+  verifiedDate?: string;       // Date verified
+  adminVerificationRemarks?: string; // Remarks from Admin
   closedDate?: string;
   closedBy?: string;
   createdAt: string;

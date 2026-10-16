@@ -451,6 +451,11 @@ export class StorageEngine {
               preventiveAction: act.preventiveAction || meta.pa || undefined,
               targetClosureDate: act.targetClosureDate || meta.tcd || undefined,
               closedBy: act.closedBy || meta.cb || undefined,
+              resolvedBy: act.resolvedBy || meta.rb || undefined,
+              resolvedDate: act.resolvedDate || meta.rd || undefined,
+              verifiedBy: act.verifiedBy || meta.vb || undefined,
+              verifiedDate: act.verifiedDate || meta.vd || undefined,
+              adminVerificationRemarks: act.adminVerificationRemarks || meta.vr || undefined,
             };
           }
         } catch (_) {}

@@ -65,6 +65,11 @@ function sanitizeAction(
         cleaned.preventiveAction = cleaned.preventiveAction || meta.pa || undefined;
         cleaned.targetClosureDate = cleaned.targetClosureDate || meta.tcd || undefined;
         cleaned.closedBy = cleaned.closedBy || meta.cb || undefined;
+        cleaned.resolvedBy = cleaned.resolvedBy || meta.rb || undefined;
+        cleaned.resolvedDate = cleaned.resolvedDate || meta.rd || undefined;
+        cleaned.verifiedBy = cleaned.verifiedBy || meta.vb || undefined;
+        cleaned.verifiedDate = cleaned.verifiedDate || meta.vd || undefined;
+        cleaned.adminVerificationRemarks = cleaned.adminVerificationRemarks || meta.vr || undefined;
       }
     } catch (_) {}
   }
@@ -121,7 +126,7 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
   const [checkpoints, setCheckpoints] = useState<any[]>(() => StorageEngine.getCheckpoints());
 
   // Filter States
-  const [activeSubTab, setActiveSubTab] = useState<'ALL' | 'Open' | 'In Progress' | 'Overdue' | 'Closed'>('ALL');
+  const [activeSubTab, setActiveSubTab] = useState<'ALL' | 'Open' | 'In Progress' | 'Pending Verification' | 'Overdue' | 'Closed'>('ALL');
   const [priorityFilter, setPriorityFilter] = useState<string>('ALL');
   const [departmentFilter, setDepartmentFilter] = useState<string>(() =>
     currentUser?.role === 'Engineering' && currentUser?.department ? currentUser.department : 'ALL'
@@ -141,6 +146,7 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
   const [newPreventiveAction, setNewPreventiveAction] = useState<string>('');
   const [newRemarks, setNewRemarks] = useState<string>('');
   const [newClosurePhoto, setNewClosurePhoto] = useState<string>('');
+  const [newAdminRemarks, setNewAdminRemarks] = useState<string>('');
   const [activePhotoModal, setActivePhotoModal] = useState<string | null>(null);
   const [saving, setSaving] = useState<boolean>(false);
 
@@ -182,10 +188,12 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
     return actions.map((act) => sanitizeAction(act, auditResults, checkpoints));
   }, [actions, auditResults, checkpoints]);
 
+  const isAdmin = currentUser?.role === 'Admin' || currentUser?.role === 'QA';
+
   // Check user edit permissions
   const canUserEditAction = (act: ActionItem): boolean => {
     if (!currentUser) return false;
-    if (currentUser.role === 'Admin') return true;
+    if (currentUser.role === 'Admin' || currentUser.role === 'QA') return true;
     if (currentUser.role === 'Viewer') return false;
 
     // Check department match
@@ -255,6 +263,7 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
   const totalCount = sanitizedActions.length;
   const openCount = sanitizedActions.filter((a) => a.status === 'Open').length;
   const inProgressCount = sanitizedActions.filter((a) => a.status === 'In Progress').length;
+  const pendingVerificationCount = sanitizedActions.filter((a) => a.status === 'Pending Verification').length;
   const closedCount = sanitizedActions.filter((a) => a.status === 'Closed').length;
   const overdueCount = sanitizedActions.filter((a) => a.status === 'Overdue').length;
 
@@ -274,6 +283,7 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
     setNewPreventiveAction(act.preventiveAction || '');
     setNewRemarks(act.closureRemark || '');
     setNewClosurePhoto(act.closurePhotoUrl || '');
+    setNewAdminRemarks(act.adminVerificationRemarks || '');
   };
 
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -325,37 +335,66 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
       preventiveAction: newPreventiveAction,
       closureRemark: newRemarks,
       closurePhotoUrl: newClosurePhoto,
-      closedDate: newStatus === 'Closed' ? new Date().toISOString().substring(0, 10) : undefined,
-      closedBy: currentUser?.name || 'Department Lead',
     };
 
-    // If status is Closed, dispatch email notification
-    if (newStatus === 'Closed') {
-      const matchedAudit = StorageEngine.getAudits().find((a) => a.auditId === editingAction.auditId);
-      const matchedResult = StorageEngine.getAuditResults().find(
-        (r) =>
-          (r.auditId === editingAction.auditId && r.checkpointText === editingAction.checkpointText) ||
-          (r.auditId === editingAction.auditId && r.componentName === editingAction.componentName)
-      );
+    if (newStatus === 'Pending Verification') {
+      updates.resolvedBy = editingAction.resolvedBy || currentUser?.name || 'Department Engineer';
+      updates.resolvedDate = editingAction.resolvedDate || new Date().toISOString().substring(0, 10);
+      if (newAdminRemarks) {
+        updates.adminVerificationRemarks = newAdminRemarks;
+      }
+    } else if (newStatus === 'Closed') {
+      updates.closedDate = new Date().toISOString().substring(0, 10);
+      updates.closedBy = currentUser?.name || 'Admin';
+      updates.verifiedBy = currentUser?.name || 'Admin';
+      updates.verifiedDate = new Date().toISOString().substring(0, 10);
+      updates.adminVerificationRemarks = newAdminRemarks || 'Physically inspected on shop floor and verified.';
+    } else if (newStatus === 'In Progress' && editingAction.status === 'Pending Verification' && isAdmin) {
+      updates.adminVerificationRemarks = newAdminRemarks || 'Returned by Admin for re-work.';
+    }
 
-      const closedActionItem: any = {
-        ...editingAction,
-        ...updates,
-        photoUrl: editingAction.photoUrl || matchedResult?.photoUrl || undefined,
-        auditorName: matchedAudit?.auditorName || editingAction.auditorEmail || 'Auditor',
-      };
+    // Match audit & result for richer email notifications
+    const matchedAudit = StorageEngine.getAudits().find((a) => a.auditId === editingAction.auditId);
+    const matchedResult = StorageEngine.getAuditResults().find(
+      (r) =>
+        (r.auditId === editingAction.auditId && r.checkpointText === editingAction.checkpointText) ||
+        (r.auditId === editingAction.auditId && r.componentName === editingAction.componentName)
+    );
 
-      const toList = Array.from(
-        new Set([editingAction.assignedEmail, 'mehul.chikhaliya@borosil.com'].filter(Boolean))
-      );
-      const ccList = Array.from(
-        new Set(
-          [editingAction.ccEmail, editingAction.auditorEmail, 'process.qa@borosil.com']
-            .filter(Boolean)
-            .flatMap((c) => (c || '').split(',').map((x) => x.trim()).filter(Boolean))
-        )
-      );
+    const emailPayloadAction: any = {
+      ...editingAction,
+      ...updates,
+      photoUrl: editingAction.photoUrl || matchedResult?.photoUrl || undefined,
+      auditorName: matchedAudit?.auditorName || editingAction.auditorEmail || 'Auditor',
+    };
 
+    const toList = Array.from(
+      new Set([editingAction.assignedEmail, 'mehul.chikhaliya@borosil.com'].filter(Boolean))
+    );
+    const ccList = Array.from(
+      new Set(
+        [editingAction.ccEmail, editingAction.auditorEmail, 'process.qa@borosil.com']
+          .filter(Boolean)
+          .flatMap((c) => (c || '').split(',').map((x) => x.trim()).filter(Boolean))
+      )
+    );
+
+    // 1. Dispatch email when engineer submits for verification
+    if (newStatus === 'Pending Verification') {
+      fetch('/api/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: toList,
+          cc: ccList,
+          type: 'ACTION_PENDING_VERIFICATION',
+          actionClosure: emailPayloadAction,
+          subject: `[VERIFICATION REQUIRED] Action Resolved: ${editingAction.componentName} (Audit #${editingAction.auditId}) - Awaiting Admin Shop-Floor Verification`,
+        }),
+      }).catch((mailErr) => console.warn('[Verification request email dispatch notice]:', mailErr));
+    }
+    // 2. Dispatch email when Admin officially verifies in actual and closes
+    else if (newStatus === 'Closed') {
       fetch('/api/send-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -363,8 +402,8 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
           to: toList,
           cc: ccList,
           type: 'ACTION_CLOSURE',
-          actionClosure: closedActionItem,
-          subject: `[ACTION CLOSED] ${editingAction.componentName} - ${editingAction.lineName || editingAction.sectionName} (Audit ${editingAction.auditId})`,
+          actionClosure: emailPayloadAction,
+          subject: `[ACTION CLOSED & VERIFIED] ${editingAction.componentName} - ${editingAction.lineName || editingAction.sectionName} (Audit #${editingAction.auditId})`,
         }),
       }).catch((mailErr) => console.warn('[Closure email dispatch notice]:', mailErr));
     }
@@ -411,11 +450,11 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
       </div>
 
       {/* ── SUB-TABS & KPI STATUS BAR ────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
         <button
           type="button"
           onClick={() => setActiveSubTab('ALL')}
-          className={`p-3.5 rounded-2xl border text-left transition flex items-center justify-between shadow-xs cursor-pointer ${
+          className={`p-3 rounded-2xl border text-left transition flex items-center justify-between shadow-xs cursor-pointer ${
             activeSubTab === 'ALL'
               ? 'bg-indigo-600 border-indigo-700 text-white ring-2 ring-indigo-400/30'
               : 'bg-white border-slate-200/90 hover:bg-slate-50 text-slate-700'
@@ -437,7 +476,7 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
         <button
           type="button"
           onClick={() => setActiveSubTab('Open')}
-          className={`p-3.5 rounded-2xl border text-left transition flex items-center justify-between shadow-xs cursor-pointer ${
+          className={`p-3 rounded-2xl border text-left transition flex items-center justify-between shadow-xs cursor-pointer ${
             activeSubTab === 'Open'
               ? 'bg-rose-600 border-rose-700 text-white ring-2 ring-rose-400/30'
               : 'bg-white border-slate-200/90 hover:bg-rose-50/50 text-slate-700'
@@ -459,29 +498,51 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
         <button
           type="button"
           onClick={() => setActiveSubTab('In Progress')}
-          className={`p-3.5 rounded-2xl border text-left transition flex items-center justify-between shadow-xs cursor-pointer ${
+          className={`p-3 rounded-2xl border text-left transition flex items-center justify-between shadow-xs cursor-pointer ${
             activeSubTab === 'In Progress'
-              ? 'bg-amber-500 border-amber-600 text-white ring-2 ring-amber-400/30'
-              : 'bg-white border-slate-200/90 hover:bg-amber-50/50 text-slate-700'
+              ? 'bg-blue-600 border-blue-700 text-white ring-2 ring-blue-400/30'
+              : 'bg-white border-slate-200/90 hover:bg-blue-50/50 text-slate-700'
           }`}
         >
           <div>
-            <span className={`text-[10px] font-extrabold uppercase tracking-wider block ${activeSubTab === 'In Progress' ? 'text-amber-100' : 'text-slate-400'}`}>
+            <span className={`text-[10px] font-extrabold uppercase tracking-wider block ${activeSubTab === 'In Progress' ? 'text-blue-100' : 'text-slate-400'}`}>
               In Progress
             </span>
-            <div className={`text-xl font-black mt-0.5 ${activeSubTab === 'In Progress' ? 'text-white' : 'text-amber-600'}`}>
+            <div className={`text-xl font-black mt-0.5 ${activeSubTab === 'In Progress' ? 'text-white' : 'text-blue-600'}`}>
               {inProgressCount}
             </div>
           </div>
-          <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${activeSubTab === 'In Progress' ? 'bg-amber-400 text-white' : 'bg-amber-50 text-amber-600'}`}>
+          <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${activeSubTab === 'In Progress' ? 'bg-blue-500 text-white' : 'bg-blue-50 text-blue-600'}`}>
             <Clock className="w-4 h-4" />
           </div>
         </button>
 
         <button
           type="button"
+          onClick={() => setActiveSubTab('Pending Verification')}
+          className={`p-3 rounded-2xl border text-left transition flex items-center justify-between shadow-xs cursor-pointer ${
+            activeSubTab === 'Pending Verification'
+              ? 'bg-amber-600 border-amber-700 text-white ring-2 ring-amber-400/30'
+              : 'bg-white border-slate-200/90 hover:bg-amber-50/50 text-slate-700'
+          }`}
+        >
+          <div>
+            <span className={`text-[10px] font-extrabold uppercase tracking-wider block ${activeSubTab === 'Pending Verification' ? 'text-amber-100' : 'text-amber-700 font-black'}`}>
+              Pending Verify
+            </span>
+            <div className={`text-xl font-black mt-0.5 ${activeSubTab === 'Pending Verification' ? 'text-white' : 'text-amber-600'}`}>
+              {pendingVerificationCount}
+            </div>
+          </div>
+          <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${activeSubTab === 'Pending Verification' ? 'bg-amber-500 text-white' : 'bg-amber-50 text-amber-600'}`}>
+            <ShieldCheck className="w-4 h-4" />
+          </div>
+        </button>
+
+        <button
+          type="button"
           onClick={() => setActiveSubTab('Overdue')}
-          className={`p-3.5 rounded-2xl border text-left transition flex items-center justify-between shadow-xs cursor-pointer ${
+          className={`p-3 rounded-2xl border text-left transition flex items-center justify-between shadow-xs cursor-pointer ${
             activeSubTab === 'Overdue'
               ? 'bg-red-700 border-red-800 text-white ring-2 ring-red-400/30'
               : 'bg-white border-slate-200/90 hover:bg-red-50/50 text-slate-700'
@@ -503,7 +564,7 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
         <button
           type="button"
           onClick={() => setActiveSubTab('Closed')}
-          className={`p-3.5 rounded-2xl border text-left transition flex items-center justify-between shadow-xs cursor-pointer ${
+          className={`p-3 rounded-2xl border text-left transition flex items-center justify-between shadow-xs cursor-pointer ${
             activeSubTab === 'Closed'
               ? 'bg-emerald-600 border-emerald-700 text-white ring-2 ring-emerald-400/30'
               : 'bg-white border-slate-200/90 hover:bg-emerald-50/50 text-slate-700'
@@ -671,20 +732,58 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
                   <div className="flex items-center space-x-2 shrink-0">
                     {/* Status Pill */}
                     <span
-                      className={`px-3 py-1 text-xs font-black rounded-xl shadow-xs ${
+                      className={`px-3 py-1 text-xs font-black rounded-xl shadow-xs flex items-center space-x-1.5 ${
                         act.status === 'Closed'
                           ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                          : act.status === 'Pending Verification'
+                          ? 'bg-amber-100 text-amber-900 border border-amber-400 ring-2 ring-amber-300/40'
                           : act.status === 'In Progress'
-                          ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                          ? 'bg-blue-100 text-blue-800 border border-blue-300'
                           : act.status === 'Overdue'
                           ? 'bg-rose-200 text-rose-900 border border-rose-400'
                           : 'bg-rose-100 text-rose-800 border border-rose-300'
                       }`}
                     >
-                      {act.status}
+                      {act.status === 'Pending Verification' && <ShieldCheck className="w-3.5 h-3.5 text-amber-700" />}
+                      <span>{act.status}</span>
                     </span>
                   </div>
                 </div>
+
+                {/* ── Pending Verification Alert Banner (Shop-Floor Inspection Required) ── */}
+                {act.status === 'Pending Verification' && (
+                  <div className="mb-3.5 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-300 rounded-2xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+                    <div className="flex items-start sm:items-center space-x-3">
+                      <div className="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs">
+                        <ShieldCheck className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="text-xs font-extrabold text-amber-950 flex items-center space-x-2">
+                          <span>Awaiting Admin Shop-Floor Physical Verification</span>
+                          <span className="bg-amber-200/80 text-amber-900 text-[10px] font-black px-2 py-0.5 rounded-md">
+                            Action Resolved
+                          </span>
+                        </div>
+                        <div className="text-[11px] font-semibold text-amber-800 mt-0.5">
+                          Resolved by <strong className="text-amber-950">{act.resolvedBy || act.responsiblePerson || 'Department Engineer'}</strong> on <strong className="text-amber-950">{act.resolvedDate || 'recently'}</strong>. Official closure requires Admin physical inspection in actual.
+                        </div>
+                      </div>
+                    </div>
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleOpenStatusModal(act);
+                          setNewStatus('Closed');
+                        }}
+                        className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-extrabold transition shadow-md shadow-emerald-600/20 flex items-center space-x-1.5 self-start sm:self-center cursor-pointer shrink-0"
+                      >
+                        <CheckCircle2 className="w-4 h-4" />
+                        <span>Inspect &amp; Verify Closure</span>
+                      </button>
+                    )}
+                  </div>
+                )}
 
                 {/* ── Component & Checkpoint Details Grid ────────────────────── */}
                 <div className="space-y-3 text-xs">
@@ -818,18 +917,27 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
                   </div>
 
                   {/* ── CAPA & Root Cause Analysis (RCA) Section ── */}
-                  {(act.status === 'Closed' || activeSubTab === 'Closed' || Boolean(act.rootCause) || Boolean(act.correctiveAction) || Boolean(act.preventiveAction) || Boolean(act.closureRemark) || Boolean(act.targetClosureDate)) && (
+                  {(act.status === 'Closed' || act.status === 'Pending Verification' || activeSubTab === 'Closed' || activeSubTab === 'Pending Verification' || Boolean(act.rootCause) || Boolean(act.correctiveAction) || Boolean(act.preventiveAction) || Boolean(act.closureRemark) || Boolean(act.targetClosureDate)) && (
                     <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2.5">
-                      <div className="flex items-center justify-between">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
                         <span className="text-[11px] font-black text-slate-800 uppercase tracking-wider flex items-center space-x-1.5">
                           <Wrench className="w-3.5 h-3.5 text-indigo-600" />
                           <span>CAPA &amp; Root Cause Analysis (RCA)</span>
                         </span>
-                        {act.closedDate && (
-                          <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md border border-emerald-200">
-                            Closed on {act.closedDate} {act.closedBy ? `by ${act.closedBy}` : ''}
-                          </span>
-                        )}
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {act.closedDate && (
+                            <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-md border border-emerald-200 flex items-center space-x-1">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                              <span>Closed on {act.closedDate} {act.closedBy ? `by ${act.closedBy}` : ''}</span>
+                            </span>
+                          )}
+                          {act.status === 'Pending Verification' && (
+                            <span className="text-[10px] font-black text-amber-900 bg-amber-100 px-2.5 py-0.5 rounded-md border border-amber-300 flex items-center space-x-1">
+                              <ShieldCheck className="w-3 h-3 text-amber-700" />
+                              <span>Submitted on {act.resolvedDate || 'recently'} {act.resolvedBy ? `by ${act.resolvedBy}` : ''} (Awaiting Admin Verification)</span>
+                            </span>
+                          )}
+                        </div>
                       </div>
 
                       <div className="space-y-2 text-xs">
@@ -882,6 +990,26 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
                             {act.closureRemark || '-'}
                           </p>
                         </div>
+
+                        {/* Admin Physical Verification Details */}
+                        {(Boolean(act.verifiedBy) || Boolean(act.adminVerificationRemarks)) && (
+                          <div className="bg-emerald-50/90 p-2.5 rounded-xl border border-emerald-200">
+                            <strong className="text-emerald-800 font-black block text-[10px] uppercase tracking-wider flex items-center space-x-1">
+                              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                              <span>Admin Physical Shop-Floor Verification:</span>
+                            </strong>
+                            <p className="text-emerald-950 font-semibold mt-0.5">
+                              {act.verifiedBy && (
+                                <span>Verified on <strong className="text-emerald-900">{act.verifiedDate || act.closedDate}</strong> by <strong className="text-emerald-900">{act.verifiedBy}</strong>. </span>
+                              )}
+                              {act.adminVerificationRemarks && (
+                                <span className="text-emerald-900 block mt-0.5 italic">
+                                  &ldquo;{act.adminVerificationRemarks}&rdquo;
+                                </span>
+                              )}
+                            </p>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
@@ -906,10 +1034,24 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
                         </span>
                       )}
 
+                      {act.status === 'Pending Verification' && (
+                        <span className="text-amber-800 font-bold bg-amber-50 px-2 py-0.5 rounded-md flex items-center space-x-1 border border-amber-200">
+                          <Clock className="w-3.5 h-3.5 text-amber-600" />
+                          <span>Awaiting Admin Inspection</span>
+                        </span>
+                      )}
+
                       {act.closedDate && (
                         <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-md flex items-center space-x-1">
                           <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                          <span>Closed on: {act.closedDate} {act.closedBy ? `by ${act.closedBy}` : ''}</span>
+                          <span>Closed: {act.closedDate} {act.closedBy ? `(${act.closedBy})` : ''}</span>
+                        </span>
+                      )}
+
+                      {act.verifiedBy && (
+                        <span className="text-indigo-700 font-bold bg-indigo-50 px-2 py-0.5 rounded-md flex items-center space-x-1 border border-indigo-200">
+                          <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" />
+                          <span>Verified: {act.verifiedBy}</span>
                         </span>
                       )}
                     </div>
@@ -919,10 +1061,29 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
                       {hasPermission ? (
                         <button
                           onClick={() => handleOpenStatusModal(act)}
-                          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-extrabold transition shadow-md shadow-indigo-500/20 flex items-center space-x-1.5 cursor-pointer"
+                          className={`px-4 py-2 text-white rounded-xl text-xs font-extrabold transition shadow-md flex items-center space-x-1.5 cursor-pointer ${
+                            act.status === 'Pending Verification' && isAdmin
+                              ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-500/20'
+                              : 'bg-indigo-600 hover:bg-indigo-500 shadow-indigo-500/20'
+                          }`}
                         >
-                          <Wrench className="w-3.5 h-3.5" />
-                          <span>Update RCA / Close</span>
+                          {act.status === 'Pending Verification' && isAdmin ? (
+                            <>
+                              <ShieldCheck className="w-3.5 h-3.5" />
+                              <span>Verify &amp; Close</span>
+                            </>
+                          ) : (
+                            <>
+                              <Wrench className="w-3.5 h-3.5" />
+                              <span>
+                                {isAdmin
+                                  ? 'Update RCA / Close'
+                                  : act.status === 'Pending Verification'
+                                  ? 'View / Update Resolution'
+                                  : 'Resolve & Submit for Verification'}
+                              </span>
+                            </>
+                          )}
                         </button>
                       ) : (
                         <div
@@ -1082,7 +1243,14 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
               {/* Status & TCD in 2 Columns */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="text-slate-700 font-bold block mb-1">Action Status</label>
+                  <label className="text-slate-700 font-bold block mb-1">
+                    Action Status
+                    {!isAdmin && (
+                      <span className="text-[10px] text-amber-700 font-medium ml-1">
+                        (Submit for Admin verification)
+                      </span>
+                    )}
+                  </label>
                   <select
                     value={newStatus}
                     onChange={(e) => setNewStatus(e.target.value as any)}
@@ -1090,8 +1258,18 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
                   >
                     <option value="Open">Open</option>
                     <option value="In Progress">In Progress</option>
-                    <option value="Closed">Closed / Completed</option>
-                    <option value="Overdue">Overdue</option>
+                    {isAdmin ? (
+                      <>
+                        <option value="Pending Verification">Pending Verification (Awaiting Inspection)</option>
+                        <option value="Closed">Verified in Actual &amp; Closed ✓</option>
+                        <option value="Overdue">Overdue</option>
+                      </>
+                    ) : (
+                      <>
+                        <option value="Pending Verification">Resolved — Submit for Admin Verification &amp; Closure</option>
+                        <option value="Overdue">Overdue</option>
+                      </>
+                    )}
                   </select>
                 </div>
 
@@ -1216,6 +1394,38 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 font-semibold focus:outline-none focus:border-indigo-500 transition shadow-xs"
                 />
               </div>
+
+              {/* Admin Shop-Floor Physical Verification Remarks */}
+              {(isAdmin || Boolean(editingAction.adminVerificationRemarks) || Boolean(editingAction.verifiedBy)) && (
+                <div className="bg-indigo-50/70 p-3.5 rounded-2xl border border-indigo-200 space-y-2">
+                  <div className="flex items-center space-x-2">
+                    <ShieldCheck className="w-4 h-4 text-indigo-700" />
+                    <span className="font-extrabold text-indigo-950 text-xs">
+                      Admin Shop-Floor Physical Verification
+                    </span>
+                  </div>
+                  {isAdmin ? (
+                    <div>
+                      <label className="text-indigo-900 font-bold block mb-1 text-[11px]">
+                        Physical Verification Remarks / Shop-Floor Findings
+                      </label>
+                      <textarea
+                        rows={2}
+                        placeholder="Confirm physical observation on shop floor, e.g. Checked on machine in actual, correct alignment/no vibration observed, verified OK..."
+                        value={newAdminRemarks}
+                        onChange={(e) => setNewAdminRemarks(e.target.value)}
+                        className="w-full bg-white border border-indigo-200 rounded-xl p-2.5 text-xs text-slate-900 font-semibold focus:outline-none focus:border-indigo-500 transition shadow-xs"
+                      />
+                    </div>
+                  ) : (
+                    <div className="text-[11px] text-slate-700 font-semibold bg-white p-2.5 rounded-xl border border-indigo-100">
+                      <div><strong className="text-indigo-900">Verified By: </strong>{editingAction.verifiedBy || 'Pending Admin Physical Verification'}</div>
+                      {editingAction.verifiedDate && <div><strong className="text-indigo-900">Date: </strong>{editingAction.verifiedDate}</div>}
+                      {editingAction.adminVerificationRemarks && <div className="mt-1"><strong className="text-indigo-900">Remarks: </strong>{editingAction.adminVerificationRemarks}</div>}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Sticky Footer */}
@@ -1231,10 +1441,24 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
                 type="button"
                 disabled={saving}
                 onClick={handleSaveStatusUpdate}
-                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-extrabold transition shadow-md shadow-indigo-500/20 disabled:opacity-50 flex items-center space-x-1.5 cursor-pointer"
+                className={`px-5 py-2 text-white rounded-xl text-xs font-extrabold transition shadow-md disabled:opacity-50 flex items-center space-x-1.5 cursor-pointer ${
+                  newStatus === 'Closed' && isAdmin
+                    ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-500/20'
+                    : newStatus === 'Pending Verification'
+                    ? 'bg-amber-600 hover:bg-amber-500 shadow-amber-500/20'
+                    : 'bg-indigo-600 hover:bg-indigo-500 shadow-indigo-500/20'
+                }`}
               >
                 <FileCheck2 className="w-4 h-4" />
-                <span>{saving ? 'Saving...' : 'Save & Update Action'}</span>
+                <span>
+                  {saving
+                    ? 'Saving...'
+                    : newStatus === 'Closed' && isAdmin
+                    ? 'Verify in Actual & Close Action'
+                    : newStatus === 'Pending Verification' && !isAdmin
+                    ? 'Submit for Admin Verification'
+                    : 'Save & Update Action'}
+                </span>
               </button>
             </div>
           </div>

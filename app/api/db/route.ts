@@ -17,8 +17,23 @@ function packClosureRemark(updates: {
   preventiveAction?: string;
   targetClosureDate?: string;
   closedBy?: string;
+  resolvedBy?: string;
+  resolvedDate?: string;
+  verifiedBy?: string;
+  verifiedDate?: string;
+  adminVerificationRemarks?: string;
 }): string {
-  const hasCapa = updates.rootCause || updates.correctiveAction || updates.preventiveAction || updates.targetClosureDate || updates.closedBy;
+  const hasCapa =
+    updates.rootCause ||
+    updates.correctiveAction ||
+    updates.preventiveAction ||
+    updates.targetClosureDate ||
+    updates.closedBy ||
+    updates.resolvedBy ||
+    updates.resolvedDate ||
+    updates.verifiedBy ||
+    updates.verifiedDate ||
+    updates.adminVerificationRemarks;
   if (!hasCapa) {
     return updates.closureRemark || '';
   }
@@ -29,6 +44,11 @@ function packClosureRemark(updates: {
     tcd: updates.targetClosureDate || '',
     cb: updates.closedBy || '',
     rmk: updates.closureRemark || '',
+    rb: updates.resolvedBy || '',
+    rd: updates.resolvedDate || '',
+    vb: updates.verifiedBy || '',
+    vd: updates.verifiedDate || '',
+    vr: updates.adminVerificationRemarks || '',
   };
   const json = JSON.stringify(meta);
   return `<!--CAPA_DATA:${json}-->\n${updates.closureRemark || ''}`.trim();
@@ -41,6 +61,11 @@ function unpackClosureRemark(rawRemark: string | null | undefined): {
   preventiveAction?: string;
   targetClosureDate?: string;
   closedBy?: string;
+  resolvedBy?: string;
+  resolvedDate?: string;
+  verifiedBy?: string;
+  verifiedDate?: string;
+  adminVerificationRemarks?: string;
 } {
   if (!rawRemark) {
     return { closureRemark: '' };
@@ -58,6 +83,11 @@ function unpackClosureRemark(rawRemark: string | null | undefined): {
           preventiveAction: meta.pa || undefined,
           targetClosureDate: meta.tcd || undefined,
           closedBy: meta.cb || undefined,
+          resolvedBy: meta.rb || undefined,
+          resolvedDate: meta.rd || undefined,
+          verifiedBy: meta.vb || undefined,
+          verifiedDate: meta.vd || undefined,
+          adminVerificationRemarks: meta.vr || undefined,
         };
       }
     } catch (_) {}
