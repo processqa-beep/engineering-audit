@@ -158,12 +158,10 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
 
   const handleSendDigestNow = async () => {
     const ok = window.confirm(
-      'Are you sure you want to send the 15-Day Open Points Digest Email now to:\n\n' +
-      '• Mehul Chikhaliya (mehul.chikhaliya@borosil.com)\n' +
-      '• Chhayank Dave (chhayank.dave@borosil.com)\n' +
-      '• Hiren Dodiya (hiren.dodiya@borosil.com)\n' +
-      '• Purvesh Kapadiya (purvesh.kapadiya@borosil.com)\n' +
-      '• And all concerned department FPRs/Engineers?'
+      'Send 15-Day Open Points Governance Digest Email?\n\n' +
+      '🔒 DEVELOPMENT MODE:\n' +
+      'Email will be dispatched EXCLUSIVELY to Mehul Chikhaliya (mehul.chikhaliya@borosil.com).\n\n' +
+      'No email will be sent to any other person (Chhayank Dave, Hiren Dodiya, Purvesh Kapadiya, etc.) while under development.'
     );
     if (!ok) return;
 
@@ -178,7 +176,7 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
       });
       const data = await res.json();
       if (data.success) {
-        setDigestSuccessMsg(`Digest email sent successfully to ${data.to?.length || 4} primary recipients + ${data.ccCount || 0} concerned engineers! (${data.stats?.totalOpen || 0} open points)`);
+        setDigestSuccessMsg(`Digest email sent exclusively to Mehul Chikhaliya (${data.stats?.totalOpen || 0} real open points)!`);
         setTimeout(() => setDigestSuccessMsg(null), 8000);
       } else {
         alert('Failed to send digest: ' + (data.error || 'Server error'));
