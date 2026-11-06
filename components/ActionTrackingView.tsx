@@ -170,10 +170,15 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
     setSendingDigest(true);
     setDigestSuccessMsg(null);
     try {
-      const res = await fetch('/api/cron/open-points-digest', { method: 'POST' });
+      const currentActionList = sanitizedActions || actions || [];
+      const res = await fetch('/api/cron/open-points-digest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actions: currentActionList }),
+      });
       const data = await res.json();
       if (data.success) {
-        setDigestSuccessMsg(`Digest email sent successfully to ${data.to?.length || 4} primary recipients + ${data.ccCount || 0} concerned engineers!`);
+        setDigestSuccessMsg(`Digest email sent successfully to ${data.to?.length || 4} primary recipients + ${data.ccCount || 0} concerned engineers! (${data.stats?.totalOpen || 0} open points)`);
         setTimeout(() => setDigestSuccessMsg(null), 8000);
       } else {
         alert('Failed to send digest: ' + (data.error || 'Server error'));
