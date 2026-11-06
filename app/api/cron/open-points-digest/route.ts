@@ -149,6 +149,17 @@ function calculateDaysOpen(createdAt?: string, targetDate?: string): { days: num
   return { days, isOverdue, overdueDays };
 }
 
+function formatAuditDate(dateStr?: string | null): string {
+  if (!dateStr) return '-';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return '-';
+  const day = String(d.getDate()).padStart(2, '0');
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const month = months[d.getMonth()];
+  const year = d.getFullYear();
+  return `${day}-${month}-${year}`;
+}
+
 // Generate modern, pure HTML/CSS Visual Charts (KPI Cards, Aging Stack Bar, and Department Pills)
 // Zero external image attachments required — renders 100% reliably in all email clients without image blocks
 function generateHtmlCharts(stats: {
@@ -311,10 +322,13 @@ async function handleCronTrigger(req: NextRequest) {
       const assignedEmail = a.assigned_email || a.assignedEmail || matrixMatch.fprEmail;
       const ccEmail = a.cc_email || a.ccEmail || matrixMatch.hodEmail;
 
+      const auditDate = formatAuditDate(a.audit_date || a.auditDate || a.created_at || a.createdAt);
+
       return {
         ...a,
         actionId: a.action_id || a.actionId || a.id,
         auditId: a.audit_id || a.auditId,
+        auditDate,
         lineName: a.line_name || a.lineName || a.lineId || '-',
         sectionName: a.section_name || a.sectionName || a.sectionId || '-',
         subSectionName: a.sub_section_name || a.subSectionName || a.subSectionId || '-',
@@ -466,30 +480,33 @@ async function handleCronTrigger(req: NextRequest) {
 
             return `
               <tr style="background-color: ${rowBg}; ${highlightBorder}">
-                <td style="padding: 8px 6px; border-bottom: 1px solid #e2e8f0; vertical-align: top;">
-                  <strong style="color: #0f172a; font-size: 11.5px; display: block;">${act.lineName || '-'}</strong>
-                  <span style="font-size: 10px; color: #64748b;">${act.sectionName || '-'}</span>
+                <td style="padding: 8px 6px; border-bottom: 1px solid #e2e8f0; vertical-align: top; font-size: 10.5px; color: #334155; font-weight: 600;">
+                  ${act.auditDate}
                 </td>
                 <td style="padding: 8px 6px; border-bottom: 1px solid #e2e8f0; vertical-align: top;">
-                  <span style="font-size: 11px; color: #334155; font-weight: 600;">${act.subSectionName || '-'}</span>
+                  <strong style="color: #0f172a; font-size: 11px; display: block;">${act.lineName || '-'}</strong>
+                  <span style="font-size: 9.5px; color: #64748b;">${act.sectionName || '-'}</span>
                 </td>
                 <td style="padding: 8px 6px; border-bottom: 1px solid #e2e8f0; vertical-align: top;">
-                  <strong style="color: #0f172a; font-size: 11.5px; display: block;">${act.componentName}</strong>
-                  <div style="font-size: 10.5px; color: #64748b; line-height: 1.35; margin-top: 2px;">${act.checkpointText}</div>
+                  <span style="font-size: 10.5px; color: #334155; font-weight: 600;">${act.subSectionName || '-'}</span>
                 </td>
-                <td style="padding: 8px 6px; font-size: 11px; color: #b91c1c; font-weight: 600; line-height: 1.35; border-bottom: 1px solid #e2e8f0; vertical-align: top;">
+                <td style="padding: 8px 6px; border-bottom: 1px solid #e2e8f0; vertical-align: top;">
+                  <strong style="color: #0f172a; font-size: 11px; display: block;">${act.componentName}</strong>
+                  <div style="font-size: 10px; color: #64748b; line-height: 1.35; margin-top: 2px;">${act.checkpointText}</div>
+                </td>
+                <td style="padding: 8px 6px; font-size: 10.5px; color: #b91c1c; font-weight: 600; line-height: 1.35; border-bottom: 1px solid #e2e8f0; vertical-align: top;">
                   ${act.observation}
                 </td>
                 <td style="padding: 8px 6px; border-bottom: 1px solid #e2e8f0; vertical-align: top;">
-                  <strong style="color: #1e293b; font-size: 11px; display: block;">${act.responsiblePerson}</strong>
-                  <div style="font-size: 10px; color: #64748b;">${act.responsibleDepartment}</div>
+                  <strong style="color: #1e293b; font-size: 10.5px; display: block;">${act.responsiblePerson}</strong>
+                  <div style="font-size: 9.5px; color: #64748b;">${act.responsibleDepartment}</div>
                 </td>
                 <td style="padding: 8px 6px; border-bottom: 1px solid #e2e8f0; vertical-align: top; text-align: center;">
                   ${prioBadge}
                 </td>
                 <td style="padding: 8px 6px; border-bottom: 1px solid #e2e8f0; vertical-align: top; text-align: center;">
                   ${statusBadge}
-                  <div style="font-size: 9.5px; color: #64748b; margin-top: 3px;">TCD: ${act.targetDate}</div>
+                  <div style="font-size: 9px; color: #64748b; margin-top: 3px;">TCD: ${act.targetDate}</div>
                 </td>
                 <td style="padding: 8px 6px; border-bottom: 1px solid #e2e8f0; vertical-align: top; text-align: center;">
                   ${agingBadge}
@@ -500,7 +517,7 @@ async function handleCronTrigger(req: NextRequest) {
           .join('')
       : `
         <tr>
-          <td colspan="8" style="padding: 24px; text-align: center; color: #047857; font-weight: 700; font-size: 13px; background-color: #f0fdf4;">
+          <td colspan="9" style="padding: 24px; text-align: center; color: #047857; font-weight: 700; font-size: 13px; background-color: #f0fdf4;">
             🎉 <strong>Zero Open Deviations!</strong> All engineering audit checkpoints across all plant sections are currently compliant.
           </td>
         </tr>
@@ -523,10 +540,13 @@ async function handleCronTrigger(req: NextRequest) {
 <body>
   <div class="container">
     <div style="padding: 20px 20px 0 20px;">
-      <!-- Greetings Message & Action Required (Unified Single Block) -->
-      <p style="font-size: 13.5px; color: #1e293b; line-height: 1.6; margin: 0 0 18px 0;">
-        Dear Sir, please find below the open engineering deviation action points requiring your review and necessary action: 📌 <strong>Action Required:</strong> Below is the comprehensive list of <strong>${stats.totalOpen} open engineering deviation points</strong>. Please note that <strong>${stats.overdue} points</strong> have crossed their Target Closure Date (TCD). Responsible FPR leads are requested to submit RCA/CAPA and after-evidence photos in the portal. Points under <em>Pending Admin Verify</em> (${stats.pendingVerify}) require physical inspection on the shop floor before final sign-off.
-      </p>
+      <!-- Greetings Message (Exact User Requested Format) -->
+      <div style="font-size: 13px; line-height: 1.6; color: #1e293b; margin-bottom: 16px;">
+        <p style="margin: 0 0 10px 0; font-size: 13.5px; font-weight: 700; color: #0f172a;">Dear Sir,</p>
+        <p style="margin: 0 0 10px 0;">Currently, <strong>${stats.totalOpen} engineering deviation points</strong> are open, and all have exceeded their Target Closure Dates (TCDs).</p>
+        <p style="margin: 0 0 10px 0;">Concerned FPR leads are requested to submit RCA/CAPA and after-action photos in the portal at the earliest.</p>
+        <p style="margin: 0 0 4px 0;">Kindly prioritize these points and ensure timely closure.</p>
+      </div>
 
       <!-- Visual HTML Charts: KPI Cards, Aging Stack Bar & Department Breakdown -->
       ${generateHtmlCharts(stats)}
@@ -537,14 +557,15 @@ async function handleCronTrigger(req: NextRequest) {
       <table class="data-table">
         <thead>
           <tr>
-            <th style="width: 10%; padding: 8px 6px;">Line / Area</th>
-            <th style="width: 10%; padding: 8px 6px;">Sub-Section</th>
-            <th style="width: 25%; padding: 8px 6px;">Component &amp; Checkpoint</th>
-            <th style="width: 21%; padding: 8px 6px;">Observation Finding</th>
+            <th style="width: 8%; padding: 8px 6px;">Date of Audit</th>
+            <th style="width: 9%; padding: 8px 6px;">Line / Area</th>
+            <th style="width: 9%; padding: 8px 6px;">Sub-Section</th>
+            <th style="width: 24%; padding: 8px 6px;">Component &amp; Checkpoint</th>
+            <th style="width: 20%; padding: 8px 6px;">Observation Finding</th>
             <th style="width: 13%; padding: 8px 6px;">Assigned FPR</th>
-            <th style="width: 8%; padding: 8px 6px; text-align: center;">Priority</th>
-            <th style="width: 8%; padding: 8px 6px; text-align: center;">Status / TCD</th>
-            <th style="width: 5%; padding: 8px 6px; text-align: center;">Aging</th>
+            <th style="width: 6%; padding: 8px 6px; text-align: center;">Priority</th>
+            <th style="width: 7%; padding: 8px 6px; text-align: center;">Status / TCD</th>
+            <th style="width: 4%; padding: 8px 6px; text-align: center;">Aging</th>
           </tr>
         </thead>
         <tbody>
