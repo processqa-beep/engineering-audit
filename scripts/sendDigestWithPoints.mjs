@@ -45,7 +45,7 @@ const DEPT_CONFIG = {
   },
   electrical: {
     displayName: 'Electrical',
-    defaultFpr: 'ramesh.sharma@borosil.com',
+    defaultFpr: 'purvesh.kapadiya@borosil.com',
     defaultHod: 'purvesh.kapadiya@borosil.com',
   },
   'process qa': {
@@ -323,16 +323,6 @@ function buildEmailHtml(deptDisplayName, items) {
 </head>
 <body>
   <div class="container">
-    <!-- Header: Center Aligned in Good Font Structure -->
-    <div style="text-align: center; padding: 14px 20px 12px 20px; background-color: #f8fafc; border-bottom: 2px solid #e2e8f0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Calibri, Arial, sans-serif;">
-      <div style="font-size: 13.5px; font-weight: 800; color: #0f172a; letter-spacing: 0.3px; margin-bottom: 4px;">
-        Borosil Renewables Ltd | BRL Engineering audit portal
-      </div>
-      <div style="font-size: 11px; color: #64748b; line-height: 1.5;">
-        Note: This is an automated email generated .Support: <a href="mailto:mehul.chikhaliya@borosil.com" style="color: #2563eb; text-decoration: none; font-weight: 600;">mehul.chikhaliya@borosil.com</a> | <a href="mailto:process.qa@borosil.com" style="color: #2563eb; text-decoration: none; font-weight: 600;">process.qa@borosil.com</a>
-      </div>
-    </div>
-
     <div style="padding: 20px 20px 0 20px;">
       <!-- Greetings Message (Exact User Requested Format) -->
       <div style="font-size: 13px; line-height: 1.6; color: #1e293b; margin-bottom: 16px;">
@@ -379,8 +369,16 @@ function buildEmailHtml(deptDisplayName, items) {
     </div>
 
     <!-- Clean Footer -->
-    <div style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 16px 24px; font-size: 11px; color: #64748b; text-align: center;">
-      © ${today.getFullYear()} Borosil Renewables Ltd. • Process Quality Assurance Department.
+    <div style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 16px 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Calibri, Arial, sans-serif; text-align: center;">
+      <div style="font-size: 13px; font-weight: 800; color: #0f172a; margin-bottom: 4px;">
+        Borosil Renewables Ltd | BRL Engineering audit portal
+      </div>
+      <div style="font-size: 11px; color: #64748b; line-height: 1.5; margin-bottom: 8px;">
+        Note: This is an automated email generated .Support: <a href="mailto:mehul.chikhaliya@borosil.com" style="color: #2563eb; text-decoration: none; font-weight: 600;">mehul.chikhaliya@borosil.com</a> | <a href="mailto:process.qa@borosil.com" style="color: #2563eb; text-decoration: none; font-weight: 600;">process.qa@borosil.com</a>
+      </div>
+      <div style="font-size: 10.5px; color: #94a3b8;">
+        © ${today.getFullYear()} Borosil Renewables Ltd. • Process Quality Assurance Department.
+      </div>
     </div>
   </div>
 </body>
