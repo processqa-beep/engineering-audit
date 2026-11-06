@@ -70,11 +70,11 @@ const employees = [
   },
   {
     id: 'EMP-002',
-    name: 'Hiren Patel',
-    email: 'hiren.patel@borosil.com',
+    name: 'Process QA Admin',
+    email: 'process.qa@borosil.com',
     password: 'borosil@123',
-    role: 'Auditor',
-    department: 'Maintenance',
+    role: 'QA',
+    department: 'Process QA',
     status: 'Approved',
     email_participation: 'TO',
     section_scope: 'ALL',
@@ -87,7 +87,7 @@ const employees = [
     email: 'purvesh.kapadiya@borosil.com',
     password: 'borosil@123',
     role: 'HOD',
-    department: 'Electrical',
+    department: 'Engineering',
     status: 'Approved',
     email_participation: 'CC',
     section_scope: 'ALL',
@@ -96,11 +96,11 @@ const employees = [
   },
   {
     id: 'EMP-004',
-    name: 'Suresh Kumar',
-    email: 'suresh.kumar@borosil.com',
+    name: 'Chhayank Dave',
+    email: 'chhayank.dave@borosil.com',
     password: 'borosil@123',
-    role: 'QA',
-    department: 'Quality',
+    role: 'Engineering',
+    department: 'Engineering',
     status: 'Approved',
     email_participation: 'CC',
     section_scope: 'ALL',
@@ -109,63 +109,109 @@ const employees = [
   },
   {
     id: 'EMP-005',
-    name: 'Instrumentation Lead',
-    email: 'inst.lead@borosil.com',
+    name: 'Hiren Dodiya',
+    email: 'hiren.dodiya@borosil.com',
     password: 'borosil@123',
     role: 'Engineering',
-    department: 'Instrumentation',
+    department: 'Engineering',
     status: 'Approved',
-    email_participation: 'TO',
+    email_participation: 'CC',
     section_scope: 'ALL',
     trigger_on: 'ANY_NG',
     active: true,
-  }
+  },
+  {
+    id: 'EMP-006',
+    name: 'Kamal Verma',
+    email: 'kamalmohit.verma@borosil.com',
+    password: 'borosil@123',
+    role: 'HOD',
+    department: 'Production',
+    status: 'Approved',
+    email_participation: 'CC',
+    section_scope: 'ALL',
+    trigger_on: 'ANY_NG',
+    active: true,
+  },
 ];
 
-// 5. FPR Matrix
+// 5. FPR Matrix (Authentic Plant Matrix)
 const fprMatrix = [
   {
     id: 'FPR-001',
     department: 'Maintenance',
     section_id: 'ALL',
     line_id: 'ALL',
-    fpr_name: 'Hiren Patel',
-    fpr_email: 'hiren.patel@borosil.com',
-    hod_name: 'Mehul Chikhaliya',
-    hod_email: 'mehul.chikhaliya@borosil.com',
+    fpr_name: 'QA',
+    fpr_email: 'process.qa@borosil.com',
+    hod_name: 'Process QA',
+    hod_email: 'process.qa@borosil.com, purvesh.kapadiya@borosil.com',
     active: true,
   },
   {
     id: 'FPR-002',
-    department: 'Electrical',
-    section_id: 'ALL',
+    department: 'Utilities',
+    section_id: 'GR',
     line_id: 'ALL',
-    fpr_name: 'Purvesh Kapadiya',
-    fpr_email: 'purvesh.kapadiya@borosil.com',
-    hod_name: 'Purvesh Kapadiya',
-    hod_email: 'purvesh.kapadiya@borosil.com',
+    fpr_name: 'Rajesh Patel',
+    fpr_email: 'utility.gbl@borosil.com, rajesh.thakur@borosil.com, ravi.srivastav@borosil.com',
+    hod_name: 'Kamal Verma',
+    hod_email: 'rajesh.patel@borosil.com, kamalmohit.verma@borosil.com, process.qa@borosil.com, chhayank.dave@borosil.com, purvesh.kapadiya@borosil.com, pavan.singh@borosil.com',
     active: true,
   },
   {
     id: 'FPR-003',
-    department: 'Instrumentation',
-    section_id: 'ALL',
+    department: 'Production',
+    section_id: 'GR',
     line_id: 'ALL',
-    fpr_name: 'Instrumentation Lead',
-    fpr_email: 'inst.lead@borosil.com',
-    hod_name: 'Mehul Chikhaliya',
-    hod_email: 'mehul.chikhaliya@borosil.com',
+    fpr_name: 'Rajesh and Ravi',
+    fpr_email: 'rajesh.thakur@borosil.com, ravi.srivastav@borosil.com',
+    hod_name: 'Kamal Verma',
+    hod_email: 'kamalmohit.verma@borosil.com, process.qa@borosil.com, chhayank.dave@borosil.com, purvesh.kapadiya@borosil.com',
     active: true,
   },
   {
     id: 'FPR-004',
-    department: 'Quality',
+    department: 'Electrical',
+    section_id: 'GR',
+    line_id: 'ALL',
+    fpr_name: 'Ashutosh Patel',
+    fpr_email: 'electrical.brl@borosil.com, rajesh.thakur@borosil.com, ravi.srivastav@borosil.com',
+    hod_name: 'Kamal Verma',
+    hod_email: 'ashutosh.patel@borosil.com, bhadresh.patel@borosil.com, kamalmohit.verma@borosil.com, process.qa@borosil.com, chhayank.dave@borosil.com, purvesh.kapadiya@borosil.com, pavan.singh@borosil.com',
+    active: true,
+  },
+  {
+    id: 'FPR-005',
+    department: 'Maintenance',
+    section_id: 'GR',
+    line_id: 'ALL',
+    fpr_name: 'Sharvan Sahu',
+    fpr_email: 'mechanical.brl@borosil.com, rajesh.thakur@borosil.com, ravi.srivastav@borosil.com',
+    hod_name: 'Kamal Verma',
+    hod_email: 'kamalmohit.verma@borosil.com, process.qa@borosil.com, chhayank.dave@borosil.com, purvesh.kapadiya@borosil.com, jitu.patel@borosil.com, pavan.singh@borosil.com, shravan.sahu@borosil.com',
+    active: true,
+  },
+  {
+    id: 'FPR-006',
+    department: 'Instrumentation',
     section_id: 'ALL',
     line_id: 'ALL',
-    fpr_name: 'Suresh Kumar',
-    fpr_email: 'suresh.kumar@borosil.com',
-    hod_name: 'Mehul Chikhaliya',
-    hod_email: 'mehul.chikhaliya@borosil.com',
+    fpr_name: 'Sunil chodhary',
+    fpr_email: 'sunil.chodhary@borosil.com, pardeep.rathee@borosil.com',
+    hod_name: 'navin Singh',
+    hod_email: 'navin.singh@borosil.com, sandip.patel@borosil.com, pavan.singh@borosil.com, chhayank.dave@borosil.com, kamalmohit.verma@borosil.com',
+    active: true,
+  },
+  {
+    id: 'FPR-007',
+    department: 'Instrumentation',
+    section_id: 'GR',
+    line_id: 'ALL',
+    fpr_name: 'Nilesh Parmar',
+    fpr_email: 'nilesh.parmar@borosil.com, rajesh.thakur@borosil.com, ravi.srivastav@borosil.com',
+    hod_name: 'Kamal Verma',
+    hod_email: 'sandip.patel@borosil.com, pavan.singh@borosil.com, chhayank.dave@borosil.com, kamalmohit.verma@borosil.com, purvesh.kapadiya@borosil.com',
     active: true,
   },
 ];
@@ -189,14 +235,30 @@ async function seed() {
   else console.log('  ✅ Lines seeded (12 rows)');
 
   console.log('4. Pushing Employees & Admin Users...');
+  // Clean up any old dummy employees from previous seeds
+  await supabase.from('employees').delete().in('email', ['suresh.kumar@borosil.com', 'inst.lead@borosil.com', 'hiren.patel@borosil.com', 'ramesh.sharma@borosil.com']);
   const { error: empErr } = await supabase.from('employees').upsert(employees, { onConflict: 'email' });
   if (empErr) console.error('  ❌ Employees error:', empErr.message);
-  else console.log('  ✅ Employees seeded (5 rows)');
+  else console.log(`  ✅ Employees seeded (${employees.length} rows)`);
 
   console.log('5. Pushing FPR Responsibility Matrix...');
+  // Clean up any old dummy FPR matrix rows
+  await supabase.from('fpr_matrix').delete().neq('id', 'NONE');
   const { error: fprErr } = await supabase.from('fpr_matrix').upsert(fprMatrix);
   if (fprErr) console.error('  ❌ FPR Matrix error:', fprErr.message);
-  else console.log('  ✅ FPR Matrix seeded (4 rows)');
+  else console.log(`  ✅ FPR Matrix seeded (${fprMatrix.length} rows)`);
+
+  // Also update backup in plant_structure
+  try {
+    await supabase.from('plant_structure').upsert({
+      id: 'fpr_matrix_backup',
+      data: fprMatrix,
+      updated_at: new Date().toISOString(),
+    });
+    console.log('  ✅ FPR Matrix backup updated in plant_structure');
+  } catch (err) {
+    console.warn('  ⚠️ FPR Matrix backup notice:', err);
+  }
 
   console.log('\n🎉 ALL INITIAL DATA SUCCESSFULLY PUSHED TO SUPABASE!');
 }

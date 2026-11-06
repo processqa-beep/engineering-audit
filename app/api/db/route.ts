@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { initialFprMatrix } from '@/lib/demoData';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -295,7 +296,18 @@ export async function GET(req: NextRequest) {
         }
       } catch (e) {}
 
-      return NextResponse.json({ success: true, data: [] });
+      const fallbackRows = initialFprMatrix.map((f) => ({
+        id: f.id,
+        department: f.department,
+        section_id: f.sectionId,
+        line_id: f.lineId,
+        fpr_name: f.fprName,
+        fpr_email: f.fprEmail,
+        hod_name: f.hodName,
+        hod_email: f.hodEmail,
+        active: f.active !== false,
+      }));
+      return NextResponse.json({ success: true, data: fallbackRows });
     }
 
     // 6. FETCH AUDITS

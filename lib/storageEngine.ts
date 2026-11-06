@@ -29,6 +29,7 @@ import {
   initialAuditResults,
   initialActions,
   initialMailConfigs,
+  initialFprMatrix,
   defaultSettings,
 } from './demoData';
 
@@ -49,7 +50,7 @@ const STORAGE_KEYS = {
   MAIL_CONFIGS:  'plant_eng_mail_configs_v5',
   DRAFTS:        'plant_eng_drafts_v5',
   AUTH_USER:     'plant_eng_current_auth_user_v5',
-  FPR_MATRIX:    'plant_eng_fpr_matrix_v5',
+  FPR_MATRIX:    'plant_eng_fpr_matrix_v6',
 };
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -145,6 +146,7 @@ export class StorageEngine {
       if (!localStorage.getItem(STORAGE_KEYS.CHECKPOINTS)) setItem(STORAGE_KEYS.CHECKPOINTS, initialCheckpoints);
       if (!localStorage.getItem(STORAGE_KEYS.EMPLOYEES)) setItem(STORAGE_KEYS.EMPLOYEES, initialEmployees);
       if (!localStorage.getItem(STORAGE_KEYS.MAIL_CONFIGS)) setItem(STORAGE_KEYS.MAIL_CONFIGS, initialMailConfigs);
+      if (!localStorage.getItem(STORAGE_KEYS.FPR_MATRIX)) setItem(STORAGE_KEYS.FPR_MATRIX, initialFprMatrix);
       if (!localStorage.getItem(STORAGE_KEYS.SETTINGS)) setItem(STORAGE_KEYS.SETTINGS, defaultSettings);
       localStorage.setItem('plant_eng_portal_initialized_v7', 'true');
     }
@@ -552,7 +554,8 @@ export class StorageEngine {
 
   // ── FPR MATRIX (Department × Section/Line → Person + CC) ─────────────────
   public static getFprMatrix(): FprEntry[] {
-    return getItem<FprEntry[]>(STORAGE_KEYS.FPR_MATRIX, []);
+    const list = getItem<FprEntry[]>(STORAGE_KEYS.FPR_MATRIX, initialFprMatrix);
+    return list && list.length > 0 ? list : initialFprMatrix;
   }
 
   public static saveFprMatrix(matrix: FprEntry[]): void {

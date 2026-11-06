@@ -21,38 +21,113 @@ const CORE_FOUR_RECIPIENTS = [
   'mehul.chikhaliya@borosil.com',
 ];
 
-// Department default FPR and HOD configuration
-const PLANT_DEPT_CONFIG: Record<string, { displayName: string; defaultFpr: string; defaultHod: string }> = {
-  maintenance: {
-    displayName: 'Maintenance',
-    defaultFpr: 'hiren.patel@borosil.com',
-    defaultHod: 'purvesh.kapadiya@borosil.com',
+// Authentic Plant FPR Responsibility Matrix
+const AUTHENTIC_FPR_MATRIX = [
+  {
+    department: 'Maintenance',
+    sectionId: 'ALL',
+    lineId: 'ALL',
+    fprName: 'QA',
+    fprEmail: 'process.qa@borosil.com',
+    hodName: 'Process QA',
+    hodEmail: 'process.qa@borosil.com, purvesh.kapadiya@borosil.com',
   },
-  instrumentation: {
-    displayName: 'Instrumentation',
-    defaultFpr: 'nilesh.parmar@borosil.com',
-    defaultHod: 'kamalmohit.verma@borosil.com',
+  {
+    department: 'Utilities',
+    sectionId: 'GR',
+    lineId: 'ALL',
+    fprName: 'Rajesh Patel',
+    fprEmail: 'utility.gbl@borosil.com, rajesh.thakur@borosil.com, ravi.srivastav@borosil.com',
+    hodName: 'Kamal Verma',
+    hodEmail: 'rajesh.patel@borosil.com, kamalmohit.verma@borosil.com, process.qa@borosil.com, chhayank.dave@borosil.com, purvesh.kapadiya@borosil.com, pavan.singh@borosil.com',
   },
-  production: {
-    displayName: 'Production',
-    defaultFpr: 'rajesh.thakur@borosil.com',
-    defaultHod: 'kamalmohit.verma@borosil.com',
+  {
+    department: 'Production',
+    sectionId: 'GR',
+    lineId: 'ALL',
+    fprName: 'Rajesh and Ravi',
+    fprEmail: 'rajesh.thakur@borosil.com, ravi.srivastav@borosil.com',
+    hodName: 'Kamal Verma',
+    hodEmail: 'kamalmohit.verma@borosil.com, process.qa@borosil.com, chhayank.dave@borosil.com, purvesh.kapadiya@borosil.com',
   },
-  electrical: {
-    displayName: 'Electrical',
-    defaultFpr: 'purvesh.kapadiya@borosil.com',
-    defaultHod: 'purvesh.kapadiya@borosil.com',
+  {
+    department: 'Electrical',
+    sectionId: 'GR',
+    lineId: 'ALL',
+    fprName: 'Ashutosh Patel',
+    fprEmail: 'electrical.brl@borosil.com, rajesh.thakur@borosil.com, ravi.srivastav@borosil.com',
+    hodName: 'Kamal Verma',
+    hodEmail: 'ashutosh.patel@borosil.com, bhadresh.patel@borosil.com, kamalmohit.verma@borosil.com, process.qa@borosil.com, chhayank.dave@borosil.com, purvesh.kapadiya@borosil.com, pavan.singh@borosil.com',
   },
-  'process qa': {
-    displayName: 'Process QA',
-    defaultFpr: 'process.qa@borosil.com',
-    defaultHod: 'mehul.chikhaliya@borosil.com',
+  {
+    department: 'Maintenance',
+    sectionId: 'GR',
+    lineId: 'ALL',
+    fprName: 'Sharvan Sahu',
+    fprEmail: 'mechanical.brl@borosil.com, rajesh.thakur@borosil.com, ravi.srivastav@borosil.com',
+    hodName: 'Kamal Verma',
+    hodEmail: 'kamalmohit.verma@borosil.com, process.qa@borosil.com, chhayank.dave@borosil.com, purvesh.kapadiya@borosil.com, jitu.patel@borosil.com, pavan.singh@borosil.com, shravan.sahu@borosil.com',
   },
-  qa: {
-    displayName: 'Process QA',
-    defaultFpr: 'process.qa@borosil.com',
-    defaultHod: 'mehul.chikhaliya@borosil.com',
+  {
+    department: 'Instrumentation',
+    sectionId: 'ALL',
+    lineId: 'ALL',
+    fprName: 'Sunil chodhary',
+    fprEmail: 'sunil.chodhary@borosil.com, pardeep.rathee@borosil.com',
+    hodName: 'navin Singh',
+    hodEmail: 'navin.singh@borosil.com, sandip.patel@borosil.com, pavan.singh@borosil.com, chhayank.dave@borosil.com, kamalmohit.verma@borosil.com',
   },
+  {
+    department: 'Instrumentation',
+    sectionId: 'GR',
+    lineId: 'ALL',
+    fprName: 'Nilesh Parmar',
+    fprEmail: 'nilesh.parmar@borosil.com, rajesh.thakur@borosil.com, ravi.srivastav@borosil.com',
+    hodName: 'Kamal Verma',
+    hodEmail: 'sandip.patel@borosil.com, pavan.singh@borosil.com, chhayank.dave@borosil.com, kamalmohit.verma@borosil.com, purvesh.kapadiya@borosil.com',
+  },
+];
+
+function lookupAuthenticFpr(department: string, sectionId?: string, lineId?: string) {
+  const cleanDept = (department || '').trim().toLowerCase();
+  const cleanSec = (sectionId || '').trim().toUpperCase();
+  const cleanLine = (lineId || '').trim().toUpperCase();
+
+  const deptEntries = AUTHENTIC_FPR_MATRIX.filter(
+    (e) => e.department.toLowerCase() === cleanDept
+  );
+  if (deptEntries.length === 0) return null;
+
+  let match = deptEntries.find(
+    (e) => e.sectionId === cleanSec && e.lineId === cleanLine
+  );
+  if (!match) {
+    match = deptEntries.find(
+      (e) => e.sectionId === cleanSec && (e.lineId === 'ALL' || !e.lineId)
+    );
+  }
+  if (!match) {
+    match = deptEntries.find(
+      (e) => (e.sectionId === 'ALL' || !e.sectionId) && e.lineId === cleanLine
+    );
+  }
+  if (!match) {
+    match = deptEntries.find(
+      (e) => (e.sectionId === 'ALL' || !e.sectionId) && (e.lineId === 'ALL' || !e.lineId)
+    );
+  }
+  return match || deptEntries[0];
+}
+
+// Department display name configuration
+const PLANT_DEPT_CONFIG: Record<string, { displayName: string }> = {
+  maintenance: { displayName: 'Maintenance' },
+  utilities: { displayName: 'Utilities' },
+  production: { displayName: 'Production' },
+  electrical: { displayName: 'Electrical' },
+  instrumentation: { displayName: 'Instrumentation' },
+  'process qa': { displayName: 'Process QA' },
+  qa: { displayName: 'Process QA' },
 };
 
 function unpackClosureRemark(rawRemark: string | null | undefined): {
@@ -506,16 +581,28 @@ async function handleCronTrigger(req: NextRequest) {
 
     // 6. Send individual department emails
     for (const [key, { rawName, items }] of Object.entries(groups)) {
-      const cfg = PLANT_DEPT_CONFIG[key] || {
-        displayName: rawName,
-        defaultFpr: 'hiren.patel@borosil.com',
-        defaultHod: 'purvesh.kapadiya@borosil.com',
-      };
+      const displayName = PLANT_DEPT_CONFIG[key]?.displayName || rawName;
 
       const toSet = new Set<string>();
       const ccSet = new Set<string>(CORE_FOUR_RECIPIENTS);
 
       items.forEach((it) => {
+        // Look up against authentic FPR Responsibility Matrix for this section/line
+        const matchedFpr = lookupAuthenticFpr(it.responsibleDepartment || rawName, it.sectionId, it.lineId);
+        if (matchedFpr) {
+          (matchedFpr.fprEmail || '')
+            .split(',')
+            .map((s: string) => s.trim().toLowerCase())
+            .filter(Boolean)
+            .forEach((e: string) => toSet.add(e));
+
+          (matchedFpr.hodEmail || '')
+            .split(',')
+            .map((s: string) => s.trim().toLowerCase())
+            .filter(Boolean)
+            .forEach((e: string) => ccSet.add(e));
+        }
+
         (it.assignedEmail || '')
           .split(',')
           .map((s: string) => s.trim().toLowerCase())
@@ -529,17 +616,14 @@ async function handleCronTrigger(req: NextRequest) {
           .forEach((e: string) => ccSet.add(e));
       });
 
-      if (cfg.defaultFpr) toSet.add(cfg.defaultFpr.toLowerCase());
-      if (cfg.defaultHod) ccSet.add(cfg.defaultHod.toLowerCase());
-
       CORE_FOUR_RECIPIENTS.forEach((e) => ccSet.add(e.toLowerCase()));
       toSet.forEach((e) => ccSet.delete(e));
 
       const toList = Array.from(toSet);
       const ccList = Array.from(ccSet);
 
-      const subject = `⚠️ [Action Required] Engineering Audit (${cfg.displayName}): ${items.length} Open Deviations (All Overdue) — ${dateFormatted}`;
-      const htmlContent = buildDepartmentHtml(cfg.displayName, items);
+      const subject = `⚠️ [Action Required] Engineering Audit (${displayName}): ${items.length} Open Deviations (All Overdue) — ${dateFormatted}`;
+      const htmlContent = buildDepartmentHtml(displayName, items);
 
       try {
         const info = await transporter.sendMail({
@@ -551,7 +635,7 @@ async function handleCronTrigger(req: NextRequest) {
         });
 
         dispatchedResults.push({
-          department: cfg.displayName,
+          department: displayName,
           pointsCount: items.length,
           to: toList,
           cc: ccList,
@@ -559,9 +643,9 @@ async function handleCronTrigger(req: NextRequest) {
           success: true,
         });
       } catch (err: any) {
-        console.error(`[Error sending to department ${cfg.displayName}]:`, err);
+        console.error(`[Error sending to department ${displayName}]:`, err);
         dispatchedResults.push({
-          department: cfg.displayName,
+          department: displayName,
           pointsCount: items.length,
           error: err.message,
           success: false,

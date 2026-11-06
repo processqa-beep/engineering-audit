@@ -14,6 +14,7 @@ import {
   Component,
   Checkpoint,
   Employee,
+  FprEntry,
   AuditHeader,
   AuditResult,
   ActionItem,
@@ -148,6 +149,89 @@ export const initialAudits: AuditHeader[] = [];
 export const initialAuditResults: AuditResult[] = [];
 export const initialActions: ActionItem[] = (realPlantActionsData as unknown) as ActionItem[];
 export const initialMailConfigs: MailConfig[] = [];
+
+// ──────────────────────────────────────────────────────────────────────────────
+// FPR RESPONSIBILITY MATRIX (Authentic Plant Matrix)
+// ──────────────────────────────────────────────────────────────────────────────
+export const initialFprMatrix: FprEntry[] = [
+  {
+    id: 'FPR-001',
+    department: 'Maintenance',
+    sectionId: 'ALL',
+    lineId: 'ALL',
+    fprName: 'QA',
+    fprEmail: 'process.qa@borosil.com',
+    hodName: 'Process QA',
+    hodEmail: 'process.qa@borosil.com, purvesh.kapadiya@borosil.com',
+    active: true,
+  },
+  {
+    id: 'FPR-002',
+    department: 'Utilities',
+    sectionId: 'GR',
+    lineId: 'ALL',
+    fprName: 'Rajesh Patel',
+    fprEmail: 'utility.gbl@borosil.com, rajesh.thakur@borosil.com, ravi.srivastav@borosil.com',
+    hodName: 'Kamal Verma',
+    hodEmail: 'rajesh.patel@borosil.com, kamalmohit.verma@borosil.com, process.qa@borosil.com, chhayank.dave@borosil.com, purvesh.kapadiya@borosil.com, pavan.singh@borosil.com',
+    active: true,
+  },
+  {
+    id: 'FPR-003',
+    department: 'Production',
+    sectionId: 'GR',
+    lineId: 'ALL',
+    fprName: 'Rajesh and Ravi',
+    fprEmail: 'rajesh.thakur@borosil.com, ravi.srivastav@borosil.com',
+    hodName: 'Kamal Verma',
+    hodEmail: 'kamalmohit.verma@borosil.com, process.qa@borosil.com, chhayank.dave@borosil.com, purvesh.kapadiya@borosil.com',
+    active: true,
+  },
+  {
+    id: 'FPR-004',
+    department: 'Electrical',
+    sectionId: 'GR',
+    lineId: 'ALL',
+    fprName: 'Ashutosh Patel',
+    fprEmail: 'electrical.brl@borosil.com, rajesh.thakur@borosil.com, ravi.srivastav@borosil.com',
+    hodName: 'Kamal Verma',
+    hodEmail: 'ashutosh.patel@borosil.com, bhadresh.patel@borosil.com, kamalmohit.verma@borosil.com, process.qa@borosil.com, chhayank.dave@borosil.com, purvesh.kapadiya@borosil.com, pavan.singh@borosil.com',
+    active: true,
+  },
+  {
+    id: 'FPR-005',
+    department: 'Maintenance',
+    sectionId: 'GR',
+    lineId: 'ALL',
+    fprName: 'Sharvan Sahu',
+    fprEmail: 'mechanical.brl@borosil.com, rajesh.thakur@borosil.com, ravi.srivastav@borosil.com',
+    hodName: 'Kamal Verma',
+    hodEmail: 'kamalmohit.verma@borosil.com, process.qa@borosil.com, chhayank.dave@borosil.com, purvesh.kapadiya@borosil.com, jitu.patel@borosil.com, pavan.singh@borosil.com, shravan.sahu@borosil.com',
+    active: true,
+  },
+  {
+    id: 'FPR-006',
+    department: 'Instrumentation',
+    sectionId: 'ALL',
+    lineId: 'ALL',
+    fprName: 'Sunil chodhary',
+    fprEmail: 'sunil.chodhary@borosil.com, pardeep.rathee@borosil.com',
+    hodName: 'navin Singh',
+    hodEmail: 'navin.singh@borosil.com, sandip.patel@borosil.com, pavan.singh@borosil.com, chhayank.dave@borosil.com, kamalmohit.verma@borosil.com',
+    active: true,
+  },
+  {
+    id: 'FPR-007',
+    department: 'Instrumentation',
+    sectionId: 'GR',
+    lineId: 'ALL',
+    fprName: 'Nilesh Parmar',
+    fprEmail: 'nilesh.parmar@borosil.com, rajesh.thakur@borosil.com, ravi.srivastav@borosil.com',
+    hodName: 'Kamal Verma',
+    hodEmail: 'sandip.patel@borosil.com, pavan.singh@borosil.com, chhayank.dave@borosil.com, kamalmohit.verma@borosil.com, purvesh.kapadiya@borosil.com',
+    active: true,
+  },
+];
 
 // ──────────────────────────────────────────────────────────────────────────────
 // SYSTEM SETTINGS
