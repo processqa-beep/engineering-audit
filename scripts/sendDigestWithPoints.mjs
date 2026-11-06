@@ -18,6 +18,43 @@ const openDeviations = allActions.filter((a) => {
 
 console.log(`Loaded ${openDeviations.length} real open plant deviations.`);
 
+// Four core governance stakeholders required in CC of EACH mail
+const CORE_FOUR_RECIPIENTS = [
+  'chhayank.dave@borosil.com',
+  'hiren.dodiya@borosil.com',
+  'purvesh.kapadiya@borosil.com',
+  'mehul.chikhaliya@borosil.com',
+];
+
+// Department default FPR and HOD configuration
+const DEPT_CONFIG = {
+  maintenance: {
+    displayName: 'Maintenance',
+    defaultFpr: 'hiren.patel@borosil.com',
+    defaultHod: 'purvesh.kapadiya@borosil.com',
+  },
+  instrumentation: {
+    displayName: 'Instrumentation',
+    defaultFpr: 'nilesh.parmar@borosil.com',
+    defaultHod: 'kamalmohit.verma@borosil.com',
+  },
+  production: {
+    displayName: 'Production',
+    defaultFpr: 'rajesh.thakur@borosil.com',
+    defaultHod: 'kamalmohit.verma@borosil.com',
+  },
+  electrical: {
+    displayName: 'Electrical',
+    defaultFpr: 'ramesh.sharma@borosil.com',
+    defaultHod: 'purvesh.kapadiya@borosil.com',
+  },
+  'process qa': {
+    displayName: 'Process QA',
+    defaultFpr: 'process.qa@borosil.com',
+    defaultHod: 'mehul.chikhaliya@borosil.com',
+  },
+};
+
 function calculateDaysOpen(createdAt, targetDate) {
   const now = new Date();
   const created = createdAt ? new Date(createdAt) : now;
@@ -52,7 +89,6 @@ function formatAuditDate(dateStr) {
 }
 
 function generateHtmlCharts(stats) {
-  const depts = Object.entries(stats.deptBreakdown);
   const total = stats.totalOpen || 1;
   const p0to15 = Math.round((stats.age0to15 / total) * 100);
   const p16to30 = Math.round((stats.age16to30 / total) * 100);
@@ -60,81 +96,57 @@ function generateHtmlCharts(stats) {
 
   return `
     <!-- KPI Summary Row -->
-    <table style="width: 100%; border-collapse: separate; border-spacing: 8px; margin: 16px 0;">
+    <table style="width: 100%; border-collapse: separate; border-spacing: 8px; margin: 14px 0 16px 0;">
       <tr>
-        <td style="background: linear-gradient(135deg, #1e3a8a, #2563eb); border-radius: 10px; padding: 12px 14px; text-align: center; color: #ffffff; width: 20%;">
-          <div style="font-size: 10px; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px; opacity: 0.85;">Total Open</div>
-          <div style="font-size: 26px; font-weight: 900; line-height: 1.2; margin-top: 2px;">${stats.totalOpen}</div>
-          <div style="font-size: 10px; opacity: 0.85; margin-top: 2px;">Active Plant Points</div>
+        <td style="background: linear-gradient(135deg, #1e3a8a, #2563eb); border-radius: 8px; padding: 10px 12px; text-align: center; color: #ffffff; width: 25%;">
+          <div style="font-size: 9.5px; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px; opacity: 0.9;">Total Open</div>
+          <div style="font-size: 24px; font-weight: 900; line-height: 1.2; margin-top: 2px;">${stats.totalOpen}</div>
+          <div style="font-size: 9.5px; opacity: 0.85; margin-top: 2px;">Points Requiring Action</div>
         </td>
-        <td style="background: linear-gradient(135deg, #991b1b, #dc2626); border-radius: 10px; padding: 12px 14px; text-align: center; color: #ffffff; width: 20%;">
-          <div style="font-size: 10px; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px; opacity: 0.85;">Overdue</div>
-          <div style="font-size: 26px; font-weight: 900; line-height: 1.2; margin-top: 2px;">${stats.overdue}</div>
-          <div style="font-size: 10px; opacity: 0.85; margin-top: 2px;">&gt; Target Closure Date</div>
+        <td style="background: linear-gradient(135deg, #991b1b, #dc2626); border-radius: 8px; padding: 10px 12px; text-align: center; color: #ffffff; width: 25%;">
+          <div style="font-size: 9.5px; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px; opacity: 0.9;">Overdue</div>
+          <div style="font-size: 24px; font-weight: 900; line-height: 1.2; margin-top: 2px;">${stats.overdue}</div>
+          <div style="font-size: 9.5px; opacity: 0.85; margin-top: 2px;">&gt; Target Closure Date</div>
         </td>
-        <td style="background: linear-gradient(135deg, #92400e, #d97706); border-radius: 10px; padding: 12px 14px; text-align: center; color: #ffffff; width: 20%;">
-          <div style="font-size: 10px; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px; opacity: 0.85;">Pending Verify</div>
-          <div style="font-size: 26px; font-weight: 900; line-height: 1.2; margin-top: 2px;">${stats.pendingVerify}</div>
-          <div style="font-size: 10px; opacity: 0.85; margin-top: 2px;">Awaiting Physical Sign-off</div>
+        <td style="background: linear-gradient(135deg, #831843, #db2777); border-radius: 8px; padding: 10px 12px; text-align: center; color: #ffffff; width: 25%;">
+          <div style="font-size: 9.5px; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px; opacity: 0.9;">Critical Priority</div>
+          <div style="font-size: 24px; font-weight: 900; line-height: 1.2; margin-top: 2px;">${stats.critical}</div>
+          <div style="font-size: 9.5px; opacity: 0.85; margin-top: 2px;">High Plant Risk</div>
         </td>
-        <td style="background: linear-gradient(135deg, #065f46, #059669); border-radius: 10px; padding: 12px 14px; text-align: center; color: #ffffff; width: 20%;">
-          <div style="font-size: 10px; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px; opacity: 0.85;">In Progress</div>
-          <div style="font-size: 26px; font-weight: 900; line-height: 1.2; margin-top: 2px;">${stats.inProgress}</div>
-          <div style="font-size: 10px; opacity: 0.85; margin-top: 2px;">CAPA Underway</div>
-        </td>
-        <td style="background: linear-gradient(135deg, #831843, #db2777); border-radius: 10px; padding: 12px 14px; text-align: center; color: #ffffff; width: 20%;">
-          <div style="font-size: 10px; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px; opacity: 0.85;">Critical Priority</div>
-          <div style="font-size: 26px; font-weight: 900; line-height: 1.2; margin-top: 2px;">${stats.critical}</div>
-          <div style="font-size: 10px; opacity: 0.85; margin-top: 2px;">High Plant Risk</div>
+        <td style="background: linear-gradient(135deg, #92400e, #d97706); border-radius: 8px; padding: 10px 12px; text-align: center; color: #ffffff; width: 25%;">
+          <div style="font-size: 9.5px; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px; opacity: 0.9;">Pending Verify</div>
+          <div style="font-size: 24px; font-weight: 900; line-height: 1.2; margin-top: 2px;">${stats.pendingVerify}</div>
+          <div style="font-size: 9.5px; opacity: 0.85; margin-top: 2px;">Shop Floor Check</div>
         </td>
       </tr>
     </table>
 
-    <!-- Visual Distribution Charts (Aging & Department) -->
-    <table style="width: 100%; border-collapse: separate; border-spacing: 8px; margin-bottom: 16px;">
-      <tr>
-        <!-- Aging Progress Stack Chart -->
-        <td style="width: 50%; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 14px; vertical-align: top;">
-          <div style="font-size: 11px; font-weight: 800; color: #334155; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">
-            📊 Deviation Aging Distribution
-          </div>
-          <table style="width: 100%; height: 16px; border-collapse: collapse; border-radius: 4px; overflow: hidden; margin-bottom: 8px;">
-            <tr>
-              ${stats.age0to15 > 0 ? `<td style="width: ${p0to15}%; background-color: #10b981;" title="0-15 Days (${stats.age0to15})"></td>` : ''}
-              ${stats.age16to30 > 0 ? `<td style="width: ${p16to30}%; background-color: #f59e0b;" title="16-30 Days (${stats.age16to30})"></td>` : ''}
-              ${stats.age30plus > 0 ? `<td style="width: ${p30plus}%; background-color: #ef4444;" title=">30 Days (${stats.age30plus})"></td>` : ''}
-              ${stats.totalOpen === 0 ? `<td style="width: 100%; background-color: #10b981;"></td>` : ''}
-            </tr>
-          </table>
-          <table style="width: 100%; font-size: 11px;">
-            <tr>
-              <td style="color: #065f46; font-weight: 700;"><span style="display: inline-block; width: 8px; height: 8px; background-color: #10b981; border-radius: 2px; margin-right: 4px;"></span>0–15d: <strong>${stats.age0to15}</strong></td>
-              <td style="color: #92400e; font-weight: 700;"><span style="display: inline-block; width: 8px; height: 8px; background-color: #f59e0b; border-radius: 2px; margin-right: 4px;"></span>16–30d: <strong>${stats.age16to30}</strong></td>
-              <td style="color: #991b1b; font-weight: 700;"><span style="display: inline-block; width: 8px; height: 8px; background-color: #ef4444; border-radius: 2px; margin-right: 4px;"></span>&gt;30d: <strong>${stats.age30plus}</strong></td>
-            </tr>
-          </table>
-        </td>
-
-        <!-- Department Breakdown Summary -->
-        <td style="width: 50%; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 14px; vertical-align: top;">
-          <div style="font-size: 11px; font-weight: 800; color: #334155; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">
-            🏭 Open Deviations by Department
-          </div>
-          <div>
-            ${depts.length > 0 ? depts.map(([dept, count]) => `
-              <span style="display: inline-block; background-color: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px; padding: 3px 8px; margin: 2px 4px 2px 0; font-size: 10.5px; color: #1e293b;">
-                <strong>${dept}</strong>: <span style="color: #2563eb; font-weight: 800;">${count}</span>
-              </span>
-            `).join('') : '<span style="font-size: 11px; color: #64748b;">No department deviations recorded</span>'}
-          </div>
-        </td>
-      </tr>
-    </table>
+    <!-- Aging Progress Stack Chart -->
+    <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 14px; margin-bottom: 16px;">
+      <div style="font-size: 10.5px; font-weight: 800; color: #334155; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 6px;">
+        📊 Deviation Aging Breakdown
+      </div>
+      <table style="width: 100%; height: 12px; border-collapse: collapse; border-radius: 4px; overflow: hidden; margin-bottom: 6px;">
+        <tr>
+          ${stats.age0to15 > 0 ? `<td style="width: ${p0to15}%; background-color: #10b981;" title="0-15 Days (${stats.age0to15})"></td>` : ''}
+          ${stats.age16to30 > 0 ? `<td style="width: ${p16to30}%; background-color: #f59e0b;" title="16-30 Days (${stats.age16to30})"></td>` : ''}
+          ${stats.age30plus > 0 ? `<td style="width: ${p30plus}%; background-color: #ef4444;" title=">30 Days (${stats.age30plus})"></td>` : ''}
+          ${stats.totalOpen === 0 ? `<td style="width: 100%; background-color: #10b981;"></td>` : ''}
+        </tr>
+      </table>
+      <table style="width: 100%; font-size: 10.5px;">
+        <tr>
+          <td style="color: #065f46; font-weight: 700;"><span style="display: inline-block; width: 8px; height: 8px; background-color: #10b981; border-radius: 2px; margin-right: 4px;"></span>0–15d: <strong>${stats.age0to15}</strong></td>
+          <td style="color: #92400e; font-weight: 700;"><span style="display: inline-block; width: 8px; height: 8px; background-color: #f59e0b; border-radius: 2px; margin-right: 4px;"></span>16–30d: <strong>${stats.age16to30}</strong></td>
+          <td style="color: #991b1b; font-weight: 700;"><span style="display: inline-block; width: 8px; height: 8px; background-color: #ef4444; border-radius: 2px; margin-right: 4px;"></span>&gt;30d: <strong>${stats.age30plus}</strong></td>
+        </tr>
+      </table>
+    </div>
   `;
 }
 
-async function sendDigestDirectly() {
-  const processedActions = openDeviations.map((a) => {
+function buildEmailHtml(deptDisplayName, items) {
+  const processedActions = items.map((a) => {
     const targetDate = a.targetDate || a.targetClosureDate || a.target_date || '-';
     const { days, isOverdue, overdueDays } = calculateDaysOpen(a.createdAt || a.created_at, targetDate);
     const auditDate = formatAuditDate(a.auditDate || a.audit_date || a.createdAt || a.created_at);
@@ -156,7 +168,7 @@ async function sendDigestDirectly() {
       checkpointText: a.checkpointText || a.checkpoint_text || '-',
       observation: a.observation || '-',
       responsiblePerson: a.responsiblePerson || a.responsible_person || 'General FPR',
-      responsibleDepartment: a.responsibleDepartment || a.responsible_department || 'Maintenance',
+      responsibleDepartment: a.responsibleDepartment || a.responsible_department || deptDisplayName,
       assignedEmail: a.assignedEmail || a.assigned_email || '',
       ccEmail: a.ccEmail || a.cc_email || '',
       targetDate,
@@ -177,7 +189,6 @@ async function sendDigestDirectly() {
     return b.daysOpen - a.daysOpen;
   });
 
-  const deptBreakdown = {};
   let age0to15 = 0;
   let age16to30 = 0;
   let age30plus = 0;
@@ -188,9 +199,6 @@ async function sendDigestDirectly() {
   let openOnlyCount = 0;
 
   processedActions.forEach((act) => {
-    const dept = act.responsibleDepartment || 'General';
-    deptBreakdown[dept] = (deptBreakdown[dept] || 0) + 1;
-
     if (act.daysOpen <= 15) age0to15++;
     else if (act.daysOpen <= 30) age16to30++;
     else age30plus++;
@@ -209,30 +217,11 @@ async function sendDigestDirectly() {
     pendingVerify: pendingVerifyCount,
     overdue: overdueCount,
     critical: criticalCount,
-    deptBreakdown,
+    deptBreakdown: { [deptDisplayName]: processedActions.length },
     age0to15,
     age16to30,
     age30plus,
   };
-
-  // Strictly Mehul Chikhaliya only while in dev mode
-  const DEV_MODE_ONLY_MEHUL = true;
-  let toRecipients = [];
-  let ccRecipients = [];
-
-  if (DEV_MODE_ONLY_MEHUL) {
-    toRecipients = ['mehul.chikhaliya@borosil.com'];
-    ccRecipients = [];
-  }
-
-  const today = new Date();
-  const dateFormatted = today.toLocaleDateString('en-IN', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
-
-  const subject = `⚠️ [Action Required] Plant Engineering Audit: ${stats.totalOpen} Open Deviations (${stats.overdue} Overdue) — ${dateFormatted}`;
 
   const tableRowsHtml = processedActions.map((act, index) => {
     const isCritical = act.priority === 'Critical';
@@ -316,7 +305,9 @@ async function sendDigestDirectly() {
     `;
   }).join('');
 
-  const htmlContent = `
+  const today = new Date();
+
+  return `
 <!DOCTYPE html>
 <html>
 <head>
@@ -332,16 +323,26 @@ async function sendDigestDirectly() {
 </head>
 <body>
   <div class="container">
+    <!-- Header: Center Aligned in Good Font Structure -->
+    <div style="text-align: center; padding: 14px 20px 12px 20px; background-color: #f8fafc; border-bottom: 2px solid #e2e8f0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Calibri, Arial, sans-serif;">
+      <div style="font-size: 13.5px; font-weight: 800; color: #0f172a; letter-spacing: 0.3px; margin-bottom: 4px;">
+        Borosil Renewables Ltd | BRL Engineering audit portal
+      </div>
+      <div style="font-size: 11px; color: #64748b; line-height: 1.5;">
+        Note: This is an automated email generated .Support: <a href="mailto:mehul.chikhaliya@borosil.com" style="color: #2563eb; text-decoration: none; font-weight: 600;">mehul.chikhaliya@borosil.com</a> | <a href="mailto:process.qa@borosil.com" style="color: #2563eb; text-decoration: none; font-weight: 600;">process.qa@borosil.com</a>
+      </div>
+    </div>
+
     <div style="padding: 20px 20px 0 20px;">
       <!-- Greetings Message (Exact User Requested Format) -->
       <div style="font-size: 13px; line-height: 1.6; color: #1e293b; margin-bottom: 16px;">
         <p style="margin: 0 0 10px 0; font-size: 13.5px; font-weight: 700; color: #0f172a;">Dear Sir,</p>
-        <p style="margin: 0 0 10px 0;">Currently, <strong>${stats.totalOpen} engineering deviation points</strong> are open, and all have exceeded their Target Closure Dates (TCDs).</p>
+        <p style="margin: 0 0 10px 0;">Currently, <strong>${stats.totalOpen} engineering deviation points</strong> are open in the <strong>${deptDisplayName} Department</strong>, and all have exceeded their Target Closure Dates (TCDs).</p>
         <p style="margin: 0 0 10px 0;">Concerned FPR leads are requested to submit RCA/CAPA and after-action photos in the portal at the earliest.</p>
         <p style="margin: 0 0 4px 0;">Kindly prioritize these points and ensure timely closure.</p>
       </div>
 
-      <!-- Visual HTML Charts: KPI Cards, Aging Stack Bar & Department Breakdown -->
+      <!-- Visual HTML Charts: KPI Cards & Aging Stack Bar -->
       ${generateHtmlCharts(stats)}
     </div>
 
@@ -385,7 +386,9 @@ async function sendDigestDirectly() {
 </body>
 </html>
   `;
+}
 
+async function sendDepartmentDigests() {
   const transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com',
     port: 587,
@@ -397,20 +400,86 @@ async function sendDigestDirectly() {
     tls: { rejectUnauthorized: false },
   });
 
-  console.log('Sending email...');
-  console.log('TO:', toRecipients.join(', '));
-  console.log('CC:', ccRecipients.length > 0 ? ccRecipients.join(', ') : '(None - Strictly Dev Mode)');
-
-  const info = await transporter.sendMail({
-    from: 'Process QA <process.qa@borosil.com>',
-    to: toRecipients.join(', '),
-    subject,
-    html: htmlContent,
+  // Group actions by department
+  const groups = {};
+  openDeviations.forEach((act) => {
+    const rawDept = (act.responsibleDepartment || 'Maintenance').trim();
+    const key = rawDept.toLowerCase();
+    if (!groups[key]) groups[key] = { rawName: rawDept, items: [] };
+    groups[key].items.push(act);
   });
 
-  console.log(`✅ SUCCESS! Email successfully dispatched to Mehul Chikhaliya!`);
-  console.log(`Message ID: ${info.messageId}`);
-  console.log(`Stats: Total Open: ${stats.totalOpen}, Overdue: ${stats.overdue}, Critical: ${stats.critical}`);
+  console.log(`Found ${Object.keys(groups).length} departments with open deviation points.`);
+
+  const today = new Date();
+  const dateFormatted = today.toLocaleDateString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+
+  for (const [key, { rawName, items }] of Object.entries(groups)) {
+    const cfg = DEPT_CONFIG[key] || {
+      displayName: rawName,
+      defaultFpr: 'hiren.patel@borosil.com',
+      defaultHod: 'purvesh.kapadiya@borosil.com',
+    };
+
+    const toSet = new Set();
+    const ccSet = new Set(CORE_FOUR_RECIPIENTS);
+
+    // 1. Gather all assigned emails for this department
+    items.forEach((it) => {
+      (it.assignedEmail || '')
+        .split(',')
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean)
+        .forEach((e) => toSet.add(e));
+
+      (it.ccEmail || '')
+        .split(',')
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean)
+        .forEach((e) => ccSet.add(e));
+    });
+
+    // 2. Add default FPR & HOD
+    if (cfg.defaultFpr) toSet.add(cfg.defaultFpr.toLowerCase());
+    if (cfg.defaultHod) ccSet.add(cfg.defaultHod.toLowerCase());
+
+    // 3. Ensure CORE FOUR are always present in CC
+    CORE_FOUR_RECIPIENTS.forEach((e) => ccSet.add(e.toLowerCase()));
+
+    // 4. Remove any duplicate from CC that is already in TO
+    toSet.forEach((e) => ccSet.delete(e));
+
+    const toList = Array.from(toSet);
+    const ccList = Array.from(ccSet);
+
+    const subject = `⚠️ [Action Required] Engineering Audit (${cfg.displayName}): ${items.length} Open Deviations (All Overdue) — ${dateFormatted}`;
+    const htmlContent = buildEmailHtml(cfg.displayName, items);
+
+    console.log(`\n======================================================`);
+    console.log(`Sending to Department: ${cfg.displayName} (${items.length} points)`);
+    console.log(`TO: ${toList.join(', ')}`);
+    console.log(`CC: ${ccList.join(', ')}`);
+
+    try {
+      const info = await transporter.sendMail({
+        from: 'Process QA <process.qa@borosil.com>',
+        to: toList.join(', '),
+        cc: ccList.join(', '),
+        subject,
+        html: htmlContent,
+      });
+
+      console.log(`✅ Dispatched successfully! Message ID: ${info.messageId}`);
+    } catch (err) {
+      console.error(`❌ Failed to send for ${cfg.displayName}:`, err.message);
+    }
+  }
+
+  console.log(`\n🎉 All department emails dispatched successfully!`);
 }
 
-sendDigestDirectly().catch(console.error);
+sendDepartmentDigests().catch(console.error);
