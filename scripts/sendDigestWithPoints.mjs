@@ -136,6 +136,9 @@ async function sendDigestDirectly() {
       ...a,
       actionId: a.actionId || a.action_id || a.id,
       auditId: a.auditId || a.audit_id || '-',
+      lineName: a.lineName || a.line_name || a.lineId || '-',
+      sectionName: a.sectionName || a.section_name || a.sectionId || '-',
+      subSectionName: a.subSectionName || a.sub_section_name || a.subSectionId || '-',
       componentName: a.componentName || a.component_name || '-',
       checkpointText: a.checkpointText || a.checkpoint_text || '-',
       observation: a.observation || '-',
@@ -223,55 +226,72 @@ async function sendDigestDirectly() {
     const isOverdue = act.isOverdue || act.status === 'Overdue';
     const rowBg = index % 2 === 0 ? '#ffffff' : '#f8fafc';
 
-    let prioBadge = '<span style="background-color: #f1f5f9; color: #475569; padding: 3px 8px; border-radius: 4px; font-weight: 700; font-size: 11px;">Medium</span>';
+    let prioBadge = '<span style="background-color: #f1f5f9; color: #475569; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 9.5px; border: 1px solid #e2e8f0; display: inline-block;">Medium</span>';
     if (act.priority === 'Critical') {
-      prioBadge = '<span style="background-color: #fee2e2; color: #991b1b; padding: 3px 8px; border-radius: 4px; font-weight: 800; font-size: 11px; border: 1px solid #fecaca;">CRITICAL</span>';
+      prioBadge = '<span style="background-color: #fee2e2; color: #991b1b; padding: 2px 6px; border-radius: 4px; font-weight: 800; font-size: 9.5px; border: 1px solid #fecaca; display: inline-block;">CRITICAL</span>';
     } else if (act.priority === 'High' || act.priority === 'Major') {
-      prioBadge = '<span style="background-color: #ffedd5; color: #9a3412; padding: 3px 8px; border-radius: 4px; font-weight: 700; font-size: 11px; border: 1px solid #fed7aa;">HIGH</span>';
+      prioBadge = '<span style="background-color: #ffedd5; color: #9a3412; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 9.5px; border: 1px solid #fed7aa; display: inline-block;">HIGH</span>';
     }
 
-    let statusBadge = `<span style="background-color: #dbeafe; color: #1e40af; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: 700;">${act.status}</span>`;
+    let statusBadge = `<span style="background-color: #dbeafe; color: #1e40af; padding: 2px 6px; border-radius: 4px; font-size: 9.5px; font-weight: 800; border: 1px solid #93c5fd; display: inline-block;">${act.status}</span>`;
     if (act.status === 'Pending Verification' || act.status === 'Pending Admin Verify') {
-      statusBadge = '<span style="background-color: #fef3c7; color: #92400e; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: 700;">Pending Admin Verify</span>';
+      statusBadge = '<span style="background-color: #fef3c7; color: #92400e; padding: 2px 6px; border-radius: 4px; font-size: 9.5px; font-weight: 800; border: 1px solid #f59e0b; display: inline-block;">Pending Verify</span>';
     } else if (isOverdue) {
-      statusBadge = `<span style="background-color: #fee2e2; color: #b91c1c; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: 800;">Overdue (${act.overdueDays}d)</span>`;
+      statusBadge = `<span style="background-color: #fee2e2; color: #b91c1c; padding: 2px 6px; border-radius: 4px; font-size: 9.5px; font-weight: 800; border: 1px solid #ef4444; display: inline-block;">Overdue (${act.overdueDays}d)</span>`;
     }
 
-    let agingBadge = `<span style="background-color: #f0fdf4; color: #166534; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: 700;">${act.daysOpen} Days</span>`;
+    let agingBadge = `<span style="background-color: #ecfdf5; color: #065f46; padding: 2px 6px; border-radius: 4px; font-size: 10.5px; font-weight: 800; border: 1px solid #a7f3d0; display: inline-block;">${act.daysOpen}d</span>`;
     if (act.daysOpen > 30) {
-      agingBadge = `<span style="background-color: #fee2e2; color: #991b1b; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: 800;">${act.daysOpen} Days</span>`;
+      agingBadge = `<span style="background-color: #fee2e2; color: #991b1b; padding: 2px 6px; border-radius: 4px; font-size: 10.5px; font-weight: 800; border: 1px solid #fecaca; display: inline-block;">${act.daysOpen}d</span>`;
     } else if (act.daysOpen > 15) {
-      agingBadge = `<span style="background-color: #fef3c7; color: #92400e; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: 700;">${act.daysOpen} Days</span>`;
+      agingBadge = `<span style="background-color: #fef3c7; color: #92400e; padding: 2px 6px; border-radius: 4px; font-size: 10.5px; font-weight: 800; border: 1px solid #fde68a; display: inline-block;">${act.daysOpen}d</span>`;
     }
 
-    const highlightBorder = isCritical ? 'border-left: 4px solid #ec4899;' : isOverdue ? 'border-left: 4px solid #ef4444;' : '';
+    const highlightBorder = isCritical ? 'border-left: 3px solid #db2777;' : isOverdue ? 'border-left: 3px solid #ef4444;' : '';
 
     return `
       <tr style="background-color: ${rowBg}; ${highlightBorder}">
-        <td style="padding: 10px 10px; font-size: 12px; font-weight: 800; color: #4338ca; border-bottom: 1px solid #e2e8f0; vertical-align: top;">
-          ${act.actionId}
-          <div style="font-size: 10px; color: #64748b; font-weight: normal; margin-top: 2px;">#${act.auditId || '-'}</div>
+        <!-- Line / Area -->
+        <td style="padding: 8px 6px; border-bottom: 1px solid #e2e8f0; vertical-align: top;">
+          <strong style="color: #0f172a; font-size: 11.5px; display: block;">${act.lineName || '-'}</strong>
+          <span style="font-size: 10px; color: #64748b;">${act.sectionName || '-'}</span>
         </td>
-        <td style="padding: 10px 10px; font-size: 12px; font-weight: 700; color: #0f172a; border-bottom: 1px solid #e2e8f0; vertical-align: top;">
-          <div>${act.componentName}</div>
-          <div style="font-size: 11px; color: #64748b; font-weight: normal; margin-top: 2px;">${act.checkpointText}</div>
+
+        <!-- Sub-Section -->
+        <td style="padding: 8px 6px; border-bottom: 1px solid #e2e8f0; vertical-align: top;">
+          <span style="font-size: 11px; color: #334155; font-weight: 600;">${act.subSectionName || '-'}</span>
         </td>
-        <td style="padding: 10px 10px; font-size: 11.5px; color: #b91c1c; font-weight: 600; border-bottom: 1px solid #e2e8f0; vertical-align: top; max-width: 220px;">
+
+        <!-- Component & Checkpoint -->
+        <td style="padding: 8px 6px; border-bottom: 1px solid #e2e8f0; vertical-align: top;">
+          <strong style="color: #0f172a; font-size: 11.5px; display: block;">${act.componentName}</strong>
+          <div style="font-size: 10.5px; color: #64748b; line-height: 1.35; margin-top: 2px;">${act.checkpointText}</div>
+        </td>
+
+        <!-- Observation Finding -->
+        <td style="padding: 8px 6px; font-size: 11px; color: #b91c1c; font-weight: 600; line-height: 1.35; border-bottom: 1px solid #e2e8f0; vertical-align: top;">
           ${act.observation}
         </td>
-        <td style="padding: 10px 10px; font-size: 11px; color: #0f172a; border-bottom: 1px solid #e2e8f0; vertical-align: top; white-space: nowrap;">
-          <strong style="color: #1e293b;">${act.responsiblePerson}</strong>
-          <div style="font-size: 10px; color: #64748b;">${act.responsibleDepartment} (Matrix FPR)</div>
-          ${act.assignedEmail ? `<div style="font-size: 9.5px; color: #3b82f6;">${act.assignedEmail}</div>` : ''}
+
+        <!-- Assigned FPR -->
+        <td style="padding: 8px 6px; border-bottom: 1px solid #e2e8f0; vertical-align: top;">
+          <strong style="color: #1e293b; font-size: 11px; display: block;">${act.responsiblePerson}</strong>
+          <div style="font-size: 10px; color: #64748b;">${act.responsibleDepartment}</div>
         </td>
-        <td style="padding: 10px 10px; border-bottom: 1px solid #e2e8f0; vertical-align: top; text-align: center; white-space: nowrap;">
+
+        <!-- Priority -->
+        <td style="padding: 8px 6px; border-bottom: 1px solid #e2e8f0; vertical-align: top; text-align: center;">
           ${prioBadge}
         </td>
-        <td style="padding: 10px 10px; border-bottom: 1px solid #e2e8f0; vertical-align: top; text-align: center; white-space: nowrap;">
+
+        <!-- Status / TCD -->
+        <td style="padding: 8px 6px; border-bottom: 1px solid #e2e8f0; vertical-align: top; text-align: center;">
           ${statusBadge}
-          <div style="font-size: 10px; color: #64748b; margin-top: 4px;">TCD: ${act.targetDate}</div>
+          <div style="font-size: 9.5px; color: #64748b; margin-top: 3px;">TCD: ${act.targetDate}</div>
         </td>
-        <td style="padding: 10px 10px; border-bottom: 1px solid #e2e8f0; vertical-align: top; text-align: center; white-space: nowrap;">
+
+        <!-- Aging -->
+        <td style="padding: 8px 6px; border-bottom: 1px solid #e2e8f0; vertical-align: top; text-align: center;">
           ${agingBadge}
         </td>
       </tr>
@@ -284,17 +304,17 @@ async function sendDigestDirectly() {
 <head>
   <meta charset="utf-8">
   <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, Calibri, Arial, sans-serif; font-size: 13px; color: #1e293b; background-color: #f1f5f9; margin: 0; padding: 20px; }
-    .container { max-width: 860px; margin: 0 auto; background: #ffffff; border-radius: 14px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 4px 16px rgba(0,0,0,0.06); }
-    .portal-btn { display: inline-block; background-color: #4f46e5; color: #ffffff !important; padding: 12px 28px; text-decoration: none; border-radius: 8px; font-weight: 800; font-size: 13px; letter-spacing: 0.3px; }
-    .table-container { padding: 0 24px 24px 24px; overflow-x: auto; }
-    table.data-table { width: 100%; border-collapse: collapse; text-align: left; }
-    table.data-table th { background-color: #f8fafc; font-size: 10px; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.5px; padding: 10px; border-bottom: 2px solid #cbd5e1; }
+    body { font-family: -apple-system, BlinkMacSystemFont, Calibri, Arial, sans-serif; font-size: 12px; color: #1e293b; background-color: #f1f5f9; margin: 0; padding: 12px; }
+    .container { width: 100% !important; max-width: 100% !important; background: #ffffff; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 4px 16px rgba(0,0,0,0.06); box-sizing: border-box; }
+    .portal-btn { display: inline-block; background-color: #4f46e5; color: #ffffff !important; padding: 10px 24px; text-decoration: none; border-radius: 8px; font-weight: 800; font-size: 12.5px; letter-spacing: 0.3px; }
+    .table-container { padding: 0 16px 20px 16px; width: 100%; box-sizing: border-box; }
+    table.data-table { width: 100% !important; border-collapse: collapse; table-layout: fixed; word-break: break-word; overflow-wrap: break-word; }
+    table.data-table th { background-color: #f8fafc; font-size: 9.5px; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.4px; border-bottom: 2px solid #cbd5e1; text-align: left; }
   </style>
 </head>
 <body>
   <div class="container">
-    <div style="padding: 24px 28px 0 28px;">
+    <div style="padding: 20px 20px 0 20px;">
       <!-- Greetings Message & Action Required (Unified Single Block) -->
       <p style="font-size: 13.5px; color: #1e293b; line-height: 1.6; margin: 0 0 18px 0;">
         Dear Sir, please find below the open engineering deviation action points requiring your review and necessary action: 📌 <strong>Action Required:</strong> Below is the comprehensive list of <strong>${stats.totalOpen} open engineering deviation points</strong>. Please note that <strong>${stats.overdue} points</strong> have crossed their Target Closure Date (TCD). Responsible FPR leads are requested to submit RCA/CAPA and after-evidence photos in the portal. Points under <em>Pending Admin Verify</em> (${stats.pendingVerify}) require physical inspection on the shop floor before final sign-off.
@@ -304,18 +324,19 @@ async function sendDigestDirectly() {
       ${generateHtmlCharts(stats)}
     </div>
 
-    <!-- Data Table -->
+    <!-- Data Table (Fits 100% width with no horizontal scroll) -->
     <div class="table-container">
       <table class="data-table">
         <thead>
           <tr>
-            <th>Action ID</th>
-            <th>Component &amp; Checkpoint</th>
-            <th>Observation Finding</th>
-            <th>Assigned FPR</th>
-            <th style="text-align: center;">Priority</th>
-            <th style="text-align: center;">Status / TCD</th>
-            <th style="text-align: center;">Aging</th>
+            <th style="width: 10%; padding: 8px 6px;">Line / Area</th>
+            <th style="width: 10%; padding: 8px 6px;">Sub-Section</th>
+            <th style="width: 25%; padding: 8px 6px;">Component &amp; Checkpoint</th>
+            <th style="width: 21%; padding: 8px 6px;">Observation Finding</th>
+            <th style="width: 13%; padding: 8px 6px;">Assigned FPR</th>
+            <th style="width: 8%; padding: 8px 6px; text-align: center;">Priority</th>
+            <th style="width: 8%; padding: 8px 6px; text-align: center;">Status / TCD</th>
+            <th style="width: 5%; padding: 8px 6px; text-align: center;">Aging</th>
           </tr>
         </thead>
         <tbody>
