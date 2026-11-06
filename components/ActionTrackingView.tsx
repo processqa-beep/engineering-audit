@@ -31,6 +31,7 @@ import {
   HelpCircle,
   Sparkles,
   RefreshCw,
+  Mail,
 } from 'lucide-react';
 import { StorageEngine } from '../lib/storageEngine';
 import { SupabaseBackendClient } from '../lib/supabaseBackend';
@@ -152,6 +153,37 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
   const [saving, setSaving] = useState<boolean>(false);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [lastSyncedTime, setLastSyncedTime] = useState<string>('');
+  const [sendingDigest, setSendingDigest] = useState<boolean>(false);
+  const [digestSuccessMsg, setDigestSuccessMsg] = useState<string | null>(null);
+
+  const handleSendDigestNow = async () => {
+    const ok = window.confirm(
+      'Are you sure you want to send the 15-Day Open Points Digest Email now to:\n\n' +
+      '• Mehul Chikhaliya (mehul.chikhaliya@borosil.com)\n' +
+      '• Chhayank Dave (chhayank.dave@borosil.com)\n' +
+      '• Hiren Dodiya (hiren.dodiya@borosil.com)\n' +
+      '• Purvesh Kapadiya (purvesh.kapadiya@borosil.com)\n' +
+      '• And all concerned department FPRs/Engineers?'
+    );
+    if (!ok) return;
+
+    setSendingDigest(true);
+    setDigestSuccessMsg(null);
+    try {
+      const res = await fetch('/api/cron/open-points-digest', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        setDigestSuccessMsg(`Digest email sent successfully to ${data.to?.length || 4} primary recipients + ${data.ccCount || 0} concerned engineers!`);
+        setTimeout(() => setDigestSuccessMsg(null), 8000);
+      } else {
+        alert('Failed to send digest: ' + (data.error || 'Server error'));
+      }
+    } catch (err: any) {
+      alert('Error sending digest: ' + err.message);
+    } finally {
+      setSendingDigest(false);
+    }
+  };
 
   const refreshActionsFromCloud = async (silent = false) => {
     if (!silent) setIsRefreshing(true);
@@ -470,6 +502,19 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
 
         {/* Sync Button & Global Search Box */}
         <div className="flex flex-wrap items-center gap-2.5">
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={handleSendDigestNow}
+              disabled={sendingDigest}
+              className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold transition shadow-xs cursor-pointer shrink-0 disabled:opacity-60"
+              title="Send 15-Day Open Points Infographic Digest email immediately to Mehul, Chhayank, Hiren, Purvesh & Team"
+            >
+              <Mail className={`w-3.5 h-3.5 text-rose-600 ${sendingDigest ? 'animate-bounce' : ''}`} />
+              <span>{sendingDigest ? 'Sending Digest...' : '15-Day Digest Email'}</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={() => refreshActionsFromCloud(false)}
@@ -498,6 +543,14 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
           </div>
         </div>
       </div>
+
+      {/* Digest Sent Success Notice */}
+      {digestSuccessMsg && (
+        <div className="bg-emerald-50 border border-emerald-300 rounded-2xl p-3.5 text-emerald-900 text-xs font-bold flex items-center space-x-2 animate-fade-in shadow-xs">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+          <span>{digestSuccessMsg}</span>
+        </div>
+      )}
 
       {/* ── SUB-TABS & KPI STATUS BAR ────────────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">

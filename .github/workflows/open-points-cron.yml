@@ -1,0 +1,16 @@
+name: 15-Day Engineering Open Points Cron Digest
+
+on:
+  schedule:
+    # Runs at 03:30 UTC (09:00 AM IST) on the 1st and 16th of every month (every 15 days)
+    - cron: '30 3 1,16 * *'
+  workflow_dispatch: # Allows manual trigger anytime from GitHub Actions tab
+
+jobs:
+  trigger-digest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger 15-Day Open Points Digest Email
+        run: |
+          echo "Triggering 15-day Open Points Digest on Vercel deployment..."
+          curl -X GET "https://brl-engineering-audit.vercel.app/api/cron/open-points-digest" -H "User-Agent: GitHub-Actions-Cron"
