@@ -149,8 +149,9 @@ function calculateDaysOpen(createdAt?: string, targetDate?: string): { days: num
   return { days, isOverdue, overdueDays };
 }
 
-// Generate inline SVG Visual Infographic Banner as a data URI / buffer
-function generateSummaryInfographic(stats: {
+// Generate modern, pure HTML/CSS Visual Charts (KPI Cards, Aging Stack Bar, and Department Pills)
+// Zero external image attachments required — renders 100% reliably in all email clients without image blocks
+function generateHtmlCharts(stats: {
   totalOpen: number;
   openOnly: number;
   inProgress: number;
@@ -162,145 +163,85 @@ function generateSummaryInfographic(stats: {
   age16to30: number;
   age30plus: number;
 }): string {
-  const width = 800;
-  const height = 300;
+  const depts = Object.entries(stats.deptBreakdown);
+  const total = stats.totalOpen || 1;
+  const p0to15 = Math.round((stats.age0to15 / total) * 100);
+  const p16to30 = Math.round((stats.age16to30 / total) * 100);
+  const p30plus = Math.round((stats.age30plus / total) * 100);
 
-  const depts = Object.entries(stats.deptBreakdown).slice(0, 4);
+  return `
+    <!-- KPI Metric Cards Grid -->
+    <table style="width: 100%; border-collapse: separate; border-spacing: 8px; margin: 16px 0;">
+      <tr>
+        <td style="width: 20%; background-color: #f0f9ff; border: 1.5px solid #0284c7; border-radius: 10px; padding: 12px 8px; text-align: center; vertical-align: top;">
+          <div style="font-size: 10px; font-weight: 800; color: #0284c7; letter-spacing: 0.5px; text-transform: uppercase;">Total Open</div>
+          <div style="font-size: 26px; font-weight: 900; color: #0369a1; margin: 4px 0;">${stats.totalOpen}</div>
+          <div style="font-size: 9.5px; color: #64748b; font-weight: 600;">Deviations</div>
+        </td>
+        <td style="width: 20%; background-color: #fef2f2; border: 1.5px solid #dc2626; border-radius: 10px; padding: 12px 8px; text-align: center; vertical-align: top;">
+          <div style="font-size: 10px; font-weight: 800; color: #dc2626; letter-spacing: 0.5px; text-transform: uppercase;">Overdue &gt; TCD</div>
+          <div style="font-size: 26px; font-weight: 900; color: #b91c1c; margin: 4px 0;">${stats.overdue}</div>
+          <div style="font-size: 9.5px; color: #991b1b; font-weight: 700;">Immediate Action</div>
+        </td>
+        <td style="width: 20%; background-color: #fffbeb; border: 1.5px solid #d97706; border-radius: 10px; padding: 12px 8px; text-align: center; vertical-align: top;">
+          <div style="font-size: 10px; font-weight: 800; color: #d97706; letter-spacing: 0.5px; text-transform: uppercase;">Pending Verify</div>
+          <div style="font-size: 26px; font-weight: 900; color: #b45309; margin: 4px 0;">${stats.pendingVerify}</div>
+          <div style="font-size: 9.5px; color: #92400e; font-weight: 600;">Shop-Floor Check</div>
+        </td>
+        <td style="width: 20%; background-color: #eef2ff; border: 1.5px solid #4f46e5; border-radius: 10px; padding: 12px 8px; text-align: center; vertical-align: top;">
+          <div style="font-size: 10px; font-weight: 800; color: #4f46e5; letter-spacing: 0.5px; text-transform: uppercase;">In Progress</div>
+          <div style="font-size: 26px; font-weight: 900; color: #3730a3; margin: 4px 0;">${stats.inProgress}</div>
+          <div style="font-size: 9.5px; color: #4338ca; font-weight: 600;">Work Underway</div>
+        </td>
+        <td style="width: 20%; background-color: #fdf2f8; border: 1.5px solid #db2777; border-radius: 10px; padding: 12px 8px; text-align: center; vertical-align: top;">
+          <div style="font-size: 10px; font-weight: 800; color: #db2777; letter-spacing: 0.5px; text-transform: uppercase;">Critical Prio</div>
+          <div style="font-size: 26px; font-weight: 900; color: #9d174d; margin: 4px 0;">${stats.critical}</div>
+          <div style="font-size: 9.5px; color: #be185d; font-weight: 600;">Plant Severity</div>
+        </td>
+      </tr>
+    </table>
 
-  const svg = `
-<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
-  <defs>
-    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#0f172a" />
-      <stop offset="50%" stop-color="#1e1b4b" />
-      <stop offset="100%" stop-color="#0f172a" />
-    </linearGradient>
-    <linearGradient id="cardGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.12" />
-      <stop offset="100%" stop-color="#ffffff" stop-opacity="0.04" />
-    </linearGradient>
-    <linearGradient id="redGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#ef4444" />
-      <stop offset="100%" stop-color="#b91c1c" />
-    </linearGradient>
-    <linearGradient id="amberGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#f59e0b" />
-      <stop offset="100%" stop-color="#d97706" />
-    </linearGradient>
-    <linearGradient id="blueGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#3b82f6" />
-      <stop offset="100%" stop-color="#1d4ed8" />
-    </linearGradient>
-    <linearGradient id="emeraldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#10b981" />
-      <stop offset="100%" stop-color="#047857" />
-    </linearGradient>
-    <filter id="shadow" x="-5%" y="-5%" width="110%" height="110%">
-      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000000" flood-opacity="0.35" />
-    </filter>
-  </defs>
+    <!-- Visual Distribution Charts (Aging & Department) -->
+    <table style="width: 100%; border-collapse: separate; border-spacing: 8px; margin-bottom: 16px;">
+      <tr>
+        <!-- Aging Progress Stack Chart -->
+        <td style="width: 50%; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 14px; vertical-align: top;">
+          <div style="font-size: 11px; font-weight: 800; color: #334155; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">
+            📊 Deviation Aging Distribution
+          </div>
+          <table style="width: 100%; height: 16px; border-collapse: collapse; border-radius: 4px; overflow: hidden; margin-bottom: 8px;">
+            <tr>
+              ${stats.age0to15 > 0 ? `<td style="width: ${p0to15}%; background-color: #10b981;" title="0-15 Days (${stats.age0to15})"></td>` : ''}
+              ${stats.age16to30 > 0 ? `<td style="width: ${p16to30}%; background-color: #f59e0b;" title="16-30 Days (${stats.age16to30})"></td>` : ''}
+              ${stats.age30plus > 0 ? `<td style="width: ${p30plus}%; background-color: #ef4444;" title=">30 Days (${stats.age30plus})"></td>` : ''}
+              ${stats.totalOpen === 0 ? `<td style="width: 100%; background-color: #10b981;"></td>` : ''}
+            </tr>
+          </table>
+          <table style="width: 100%; font-size: 11px;">
+            <tr>
+              <td style="color: #065f46; font-weight: 700;"><span style="display: inline-block; width: 8px; height: 8px; background-color: #10b981; border-radius: 2px; margin-right: 4px;"></span>0–15d: <strong>${stats.age0to15}</strong></td>
+              <td style="color: #92400e; font-weight: 700;"><span style="display: inline-block; width: 8px; height: 8px; background-color: #f59e0b; border-radius: 2px; margin-right: 4px;"></span>16–30d: <strong>${stats.age16to30}</strong></td>
+              <td style="color: #991b1b; font-weight: 700;"><span style="display: inline-block; width: 8px; height: 8px; background-color: #ef4444; border-radius: 2px; margin-right: 4px;"></span>&gt;30d: <strong>${stats.age30plus}</strong></td>
+            </tr>
+          </table>
+        </td>
 
-  <!-- Background Canvas -->
-  <rect width="${width}" height="${height}" rx="18" fill="url(#bgGrad)" />
-  <rect width="${width}" height="${height}" rx="18" fill="none" stroke="#334155" stroke-width="1.5" />
-
-  <!-- Header Section -->
-  <g transform="translate(32, 28)">
-    <rect x="0" y="0" width="8" height="24" rx="4" fill="#6366f1" />
-    <text x="18" y="16" fill="#ffffff" font-size="16" font-weight="800" letter-spacing="0.5">BOROSIL RENEWABLES — 15-DAY ENGINEERING OPEN ACTION TRACKER</text>
-    <text x="18" y="34" fill="#94a3b8" font-size="11" font-weight="600">Automated Bi-Weekly Governance Digest • Aging &amp; Overdue Deviation Audit</text>
-  </g>
-
-  <!-- KPI Block 1: Total Open -->
-  <g transform="translate(32, 85)" filter="url(#shadow)">
-    <rect width="132" height="92" rx="14" fill="url(#cardGrad)" stroke="#38bdf8" stroke-width="1.5" />
-    <text x="16" y="24" fill="#38bdf8" font-size="10" font-weight="800" letter-spacing="1">TOTAL OPEN</text>
-    <text x="16" y="64" fill="#ffffff" font-size="36" font-weight="900">${stats.totalOpen}</text>
-    <text x="16" y="80" fill="#94a3b8" font-size="9" font-weight="700">Deviations</text>
-  </g>
-
-  <!-- KPI Block 2: Overdue (Critical red) -->
-  <g transform="translate(180, 85)" filter="url(#shadow)">
-    <rect width="132" height="92" rx="14" fill="url(#cardGrad)" stroke="#ef4444" stroke-width="1.5" />
-    <text x="16" y="24" fill="#f87171" font-size="10" font-weight="800" letter-spacing="1">OVERDUE &gt; TCD</text>
-    <text x="16" y="64" fill="#ef4444" font-size="36" font-weight="900">${stats.overdue}</text>
-    <text x="16" y="80" fill="#fca5a5" font-size="9" font-weight="700">Immediate Attention</text>
-  </g>
-
-  <!-- KPI Block 3: Pending Verify -->
-  <g transform="translate(328, 85)" filter="url(#shadow)">
-    <rect width="144" height="92" rx="14" fill="url(#cardGrad)" stroke="#f59e0b" stroke-width="1.5" />
-    <text x="16" y="24" fill="#fbbf24" font-size="10" font-weight="800" letter-spacing="1">PENDING VERIFY</text>
-    <text x="16" y="64" fill="#f59e0b" font-size="36" font-weight="900">${stats.pendingVerify}</text>
-    <text x="16" y="80" fill="#fde68a" font-size="9" font-weight="700">Shop-Floor Check</text>
-  </g>
-
-  <!-- KPI Block 4: In Progress -->
-  <g transform="translate(488, 85)" filter="url(#shadow)">
-    <rect width="132" height="92" rx="14" fill="url(#cardGrad)" stroke="#60a5fa" stroke-width="1.5" />
-    <text x="16" y="24" fill="#93c5fd" font-size="10" font-weight="800" letter-spacing="1">IN PROGRESS</text>
-    <text x="16" y="64" fill="#60a5fa" font-size="36" font-weight="900">${stats.inProgress}</text>
-    <text x="16" y="80" fill="#bfdbfe" font-size="9" font-weight="700">Work Underway</text>
-  </g>
-
-  <!-- KPI Block 5: Critical Priority -->
-  <g transform="translate(636, 85)" filter="url(#shadow)">
-    <rect width="132" height="92" rx="14" fill="url(#cardGrad)" stroke="#ec4899" stroke-width="1.5" />
-    <text x="16" y="24" fill="#f472b6" font-size="10" font-weight="800" letter-spacing="1">CRITICAL PRIO</text>
-    <text x="16" y="64" fill="#ec4899" font-size="36" font-weight="900">${stats.critical}</text>
-    <text x="16" y="80" fill="#fbcfe8" font-size="9" font-weight="700">Plant Severity</text>
-  </g>
-
-  <!-- Bottom Panel: Aging & Department Breakdown -->
-  <g transform="translate(32, 195)">
-    <rect width="736" height="80" rx="12" fill="#1e293b" fill-opacity="0.75" stroke="#334155" />
-
-    <!-- Aging Category Strip -->
-    <text x="20" y="26" fill="#cbd5e1" font-size="11" font-weight="800" letter-spacing="0.5">DEVIATION AGING DISTRIBUTION</text>
-    
-    <!-- 0-15 Days -->
-    <g transform="translate(20, 38)">
-      <rect width="105" height="28" rx="6" fill="#10b981" fill-opacity="0.18" stroke="#10b981" stroke-width="1" />
-      <text x="10" y="18" fill="#a7f3d0" font-size="10" font-weight="700">0 - 15 Days:</text>
-      <text x="80" y="18" fill="#ffffff" font-size="12" font-weight="900">${stats.age0to15}</text>
-    </g>
-
-    <!-- 16-30 Days -->
-    <g transform="translate(135, 38)">
-      <rect width="105" height="28" rx="6" fill="#f59e0b" fill-opacity="0.18" stroke="#f59e0b" stroke-width="1" />
-      <text x="10" y="18" fill="#fde68a" font-size="10" font-weight="700">16 - 30 Days:</text>
-      <text x="82" y="18" fill="#ffffff" font-size="12" font-weight="900">${stats.age16to30}</text>
-    </g>
-
-    <!-- >30 Days -->
-    <g transform="translate(250, 38)">
-      <rect width="115" height="28" rx="6" fill="#ef4444" fill-opacity="0.2" stroke="#ef4444" stroke-width="1" />
-      <text x="10" y="18" fill="#fca5a5" font-size="10" font-weight="700">&gt; 30 Days:</text>
-      <text x="85" y="18" fill="#ffffff" font-size="12" font-weight="900">${stats.age30plus}</text>
-    </g>
-
-    <!-- Vertical separator -->
-    <line x1="382" y1="12" x2="382" y2="68" stroke="#475569" stroke-width="1" stroke-dasharray="3 3" />
-
-    <!-- Top Departments -->
-    <text x="400" y="26" fill="#cbd5e1" font-size="11" font-weight="800" letter-spacing="0.5">OPEN DEVIATIONS BY DEPARTMENT</text>
-    <g transform="translate(400, 38)">
-      ${depts.map(([dept, count], idx) => {
-        const xPos = idx * 80;
-        return `
-          <g transform="translate(${xPos}, 0)">
-            <rect width="72" height="28" rx="6" fill="#334155" />
-            <text x="6" y="13" fill="#94a3b8" font-size="8.5" font-weight="700">${dept.substring(0, 10)}</text>
-            <text x="6" y="24" fill="#38bdf8" font-size="10" font-weight="900">${count} pts</text>
-          </g>
-        `;
-      }).join('')}
-    </g>
-  </g>
-</svg>
-  `.trim();
-
-  return svg;
+        <!-- Department Breakdown Summary -->
+        <td style="width: 50%; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 14px; vertical-align: top;">
+          <div style="font-size: 11px; font-weight: 800; color: #334155; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">
+            🏭 Open Deviations by Department
+          </div>
+          <div>
+            ${depts.length > 0 ? depts.map(([dept, count]) => `
+              <span style="display: inline-block; background-color: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px; padding: 3px 8px; margin: 2px 4px 2px 0; font-size: 10.5px; color: #1e293b;">
+                <strong>${dept}</strong>: <span style="color: #2563eb; font-weight: 800;">${count}</span>
+              </span>
+            `).join('') : '<span style="font-size: 11px; color: #64748b;">No department deviations recorded</span>'}
+          </div>
+        </td>
+      </tr>
+    </table>
+  `;
 }
 
 // Handler execution logic (supports both GET for Vercel Cron and POST for manual trigger)
@@ -430,12 +371,7 @@ async function handleCronTrigger(req: NextRequest) {
       age30plus,
     };
 
-    // 5. Generate Visual Infographic SVG and attach as inline CID
-    const svgContent = generateSummaryInfographic(stats);
-    const svgBuffer = Buffer.from(svgContent, 'utf-8');
-    const chartCid = `open_points_chart_${Date.now()}`;
-
-    // 6. Gather all unique concerned emails (assigned person + CC emails + Fixed user recipients)
+    // 5. Gather all unique concerned emails (assigned person + CC emails + Fixed user recipients)
     const concernedEmails = new Set<string>(FIXED_RECIPIENTS.map((e) => e.trim().toLowerCase()));
 
     processedActions.forEach((act) => {
@@ -560,56 +496,35 @@ async function handleCronTrigger(req: NextRequest) {
   <meta charset="utf-8">
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, Calibri, Arial, sans-serif; font-size: 13px; color: #1e293b; background-color: #f1f5f9; margin: 0; padding: 20px; }
-    .container { max-width: 860px; margin: 0 auto; background: #ffffff; border-radius: 16px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 4px 16px rgba(0,0,0,0.06); }
-    .header { background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%); color: #ffffff; padding: 24px 30px; }
+    .container { max-width: 860px; margin: 0 auto; background: #ffffff; border-radius: 14px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 4px 16px rgba(0,0,0,0.06); }
     .portal-btn { display: inline-block; background-color: #4f46e5; color: #ffffff !important; padding: 12px 28px; text-decoration: none; border-radius: 8px; font-weight: 800; font-size: 13px; letter-spacing: 0.3px; }
     .table-container { padding: 0 24px 24px 24px; overflow-x: auto; }
-    table { width: 100%; border-collapse: collapse; text-align: left; }
-    th { background-color: #f8fafc; font-size: 10px; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.5px; padding: 10px; border-bottom: 2px solid #cbd5e1; }
+    table.data-table { width: 100%; border-collapse: collapse; text-align: left; }
+    table.data-table th { background-color: #f8fafc; font-size: 10px; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.5px; padding: 10px; border-bottom: 2px solid #cbd5e1; }
   </style>
 </head>
 <body>
   <div class="container">
-    <!-- Top Header -->
-    <div class="header">
-      <div style="font-size: 10px; font-weight: 800; letter-spacing: 1.5px; color: #a5b4fc; text-transform: uppercase;">
-        BOROSIL RENEWABLES LTD. • ENGINEERING AUDIT SYSTEM
+    <div style="padding: 24px 28px 0 28px;">
+      <!-- Greetings Message -->
+      <p style="font-size: 14px; font-weight: 700; color: #1e293b; margin: 0 0 8px 0;">Dear Sir,</p>
+      <p style="font-size: 13px; color: #334155; margin: 0 0 16px 0; line-height: 1.5;">Please find below the open engineering deviation action points requiring your review and necessary action:</p>
+
+      <!-- Action Required Callout Box -->
+      <div style="background-color: #eff6ff; border: 1px solid #bfdbfe; border-left: 4px solid #2563eb; border-radius: 8px; padding: 12px 16px; font-size: 12.5px; color: #1e40af; line-height: 1.6; margin-bottom: 16px;">
+        📌 <strong>Action Required:</strong> Below is the comprehensive list of <strong>${stats.totalOpen} open engineering deviation points</strong>. 
+        Please note that <strong>${stats.overdue} points</strong> have crossed their Target Closure Date (TCD). 
+        Responsible FPR leads are requested to submit RCA/CAPA and after-evidence photos in the portal. 
+        Points under <em>Pending Admin Verify</em> (${stats.pendingVerify}) require physical inspection on the shop floor before final sign-off.
       </div>
-      <h1 style="margin: 6px 0 2px 0; font-size: 20px; font-weight: 800; color: #ffffff;">
-        15-Day Governance Digest: Open Deviation Points
-      </h1>
-      <p style="margin: 0; font-size: 12px; color: #cbd5e1;">
-        Bi-weekly action item tracking report for concerned engineering leads, HODs, and auditors.
-      </p>
-    </div>
 
-    <!-- Embedded High-Resolution Visual Infographic -->
-    <div style="padding: 24px 24px 12px 24px; text-align: center;">
-      <a href="https://brl-engineering-audit.vercel.app/?tab=actions" target="_blank" title="Click to view live interactive tracker in portal">
-        <img src="cid:${chartCid}" alt="Open Points Aging & Severity Infographic" style="width: 100%; max-width: 812px; height: auto; border-radius: 12px; display: block; margin: 0 auto; border: 1px solid #cbd5e1;" />
-      </a>
-    </div>
-
-    <!-- Development Callout Banner -->
-    ${DEV_MODE_ONLY_MEHUL ? `
-    <div style="margin: 0 24px 16px 24px; background-color: #fffbeb; border: 2px dashed #f59e0b; border-radius: 10px; padding: 12px 16px; font-size: 12px; color: #92400e; line-height: 1.5;">
-      🔒 <strong>DEVELOPMENT MODE: Dispatched exclusively to Mehul Chikhaliya (mehul.chikhaliya@borosil.com).</strong><br />
-      No emails were sent to Chhayank Dave, Hiren Dodiya, Purvesh Kapadiya, or any other team members. 
-      The Assigned FPR and Department columns below demonstrate how deviations are mapped to concerned engineers from the Plant Matrix.
-    </div>
-    ` : ''}
-
-    <!-- Explanatory note -->
-    <div style="margin: 0 24px 16px 24px; background-color: #eff6ff; border: 1px solid #bfdbfe; border-radius: 10px; padding: 12px 16px; font-size: 12px; color: #1e40af; line-height: 1.5;">
-      📌 <strong>Action Required:</strong> Below is the comprehensive list of <strong>${stats.totalOpen} open engineering deviation points</strong>. 
-      Please note that <strong>${stats.overdue} points</strong> have crossed their Target Closure Date (TCD). 
-      Responsible FPR leads are requested to submit RCA/CAPA and after-evidence photos in the portal. 
-      Points under <em>Pending Admin Verify</em> (${stats.pendingVerify}) require physical inspection on the shop floor before final sign-off.
+      <!-- Visual HTML Charts: KPI Cards, Aging Stack Bar & Department Breakdown -->
+      ${generateHtmlCharts(stats)}
     </div>
 
     <!-- Data Table -->
     <div class="table-container">
-      <table>
+      <table class="data-table">
         <thead>
           <tr>
             <th>Action ID</th>
@@ -637,12 +552,8 @@ async function handleCronTrigger(req: NextRequest) {
       </div>
     </div>
 
-    <!-- Footer -->
+    <!-- Clean Footer -->
     <div style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 16px 24px; font-size: 11px; color: #64748b; text-align: center;">
-      ${DEV_MODE_ONLY_MEHUL 
-        ? `🔒 <strong>Under Development:</strong> This report was dispatched exclusively to Mehul Chikhaliya (<span style="color: #4f46e5;">mehul.chikhaliya@borosil.com</span>). Broad team broadcasts remain paused.`
-        : `This is an automated 15-day governance email sent to designated stakeholders: <strong style="color: #334155;">Mehul Chikhaliya, Chhayank Dave, Hiren Dodiya, Purvesh Kapadiya</strong>, along with concerned department engineers.`}
-      <br />
       © ${today.getFullYear()} Borosil Renewables Ltd. • Process Quality Assurance Department.
     </div>
   </div>
@@ -650,7 +561,7 @@ async function handleCronTrigger(req: NextRequest) {
 </html>
     `;
 
-    // 9. Send Email via Google Workspace SMTP
+    // 9. Send Email via Google Workspace SMTP (zero image attachments)
     const host = process.env.SMTP_HOST || 'smtp.gmail.com';
     const port = Number(process.env.SMTP_PORT || 587);
     const user = process.env.SMTP_USER || 'process.qa@borosil.com';
@@ -671,14 +582,6 @@ async function handleCronTrigger(req: NextRequest) {
       cc: ccRecipients.length > 0 ? ccRecipients.join(', ') : undefined,
       subject,
       html: htmlContent,
-      attachments: [
-        {
-          filename: 'open-points-infographic.svg',
-          content: svgBuffer,
-          contentType: 'image/svg+xml',
-          cid: chartCid,
-        },
-      ],
     };
 
     const info = await transporter.sendMail(mailOptions);
