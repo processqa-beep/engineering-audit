@@ -274,6 +274,18 @@ async function handleCronTrigger(req: NextRequest) {
       }
     }
 
+    // 1b. Fallback to real plant actions if Supabase is unavailable or empty
+    if (actions.length === 0) {
+      try {
+        const realActions = (await import('@/lib/realPlantActions.json')).default;
+        if (Array.isArray(realActions) && realActions.length > 0) {
+          actions = realActions;
+        }
+      } catch (e) {
+        console.warn('[Real plant actions load notice]:', e);
+      }
+    }
+
     // 2. Filter for non-closed points (Open, In Progress, Pending Verification, Overdue)
     const openActions = actions.filter((a) => {
       const s = (a.status || 'Open').toLowerCase().trim();
@@ -506,17 +518,10 @@ async function handleCronTrigger(req: NextRequest) {
 <body>
   <div class="container">
     <div style="padding: 24px 28px 0 28px;">
-      <!-- Greetings Message -->
-      <p style="font-size: 14px; font-weight: 700; color: #1e293b; margin: 0 0 8px 0;">Dear Sir,</p>
-      <p style="font-size: 13px; color: #334155; margin: 0 0 16px 0; line-height: 1.5;">Please find below the open engineering deviation action points requiring your review and necessary action:</p>
-
-      <!-- Action Required Callout Box -->
-      <div style="background-color: #eff6ff; border: 1px solid #bfdbfe; border-left: 4px solid #2563eb; border-radius: 8px; padding: 12px 16px; font-size: 12.5px; color: #1e40af; line-height: 1.6; margin-bottom: 16px;">
-        📌 <strong>Action Required:</strong> Below is the comprehensive list of <strong>${stats.totalOpen} open engineering deviation points</strong>. 
-        Please note that <strong>${stats.overdue} points</strong> have crossed their Target Closure Date (TCD). 
-        Responsible FPR leads are requested to submit RCA/CAPA and after-evidence photos in the portal. 
-        Points under <em>Pending Admin Verify</em> (${stats.pendingVerify}) require physical inspection on the shop floor before final sign-off.
-      </div>
+      <!-- Greetings Message & Action Required (Unified Single Block) -->
+      <p style="font-size: 13.5px; color: #1e293b; line-height: 1.6; margin: 0 0 18px 0;">
+        Dear Sir, please find below the open engineering deviation action points requiring your review and necessary action: 📌 <strong>Action Required:</strong> Below is the comprehensive list of <strong>${stats.totalOpen} open engineering deviation points</strong>. Please note that <strong>${stats.overdue} points</strong> have crossed their Target Closure Date (TCD). Responsible FPR leads are requested to submit RCA/CAPA and after-evidence photos in the portal. Points under <em>Pending Admin Verify</em> (${stats.pendingVerify}) require physical inspection on the shop floor before final sign-off.
+      </p>
 
       <!-- Visual HTML Charts: KPI Cards, Aging Stack Bar & Department Breakdown -->
       ${generateHtmlCharts(stats)}

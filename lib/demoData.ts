@@ -139,12 +139,14 @@ export const initialEmployees: Employee[] = [
   { id: 'EMP-04', name: 'Pavan Kumar',       role: 'Engineering', department: 'Maintenance', email: 'pavan.kumar@borosil.com',      password: 'borosil123', status: 'Approved', emailParticipation: 'CC', sectionScope: 'ALL', triggerOn: 'ANY_NG', active: true },
 ];
 
+import realPlantActionsData from './realPlantActions.json';
+
 // ──────────────────────────────────────────────────────────────────────────────
-// AUDIT DATA — EMPTY (Created dynamically when user submits audits)
+// AUDIT DATA — Pre-seeded with real plant actions from production system
 // ──────────────────────────────────────────────────────────────────────────────
 export const initialAudits: AuditHeader[] = [];
 export const initialAuditResults: AuditResult[] = [];
-export const initialActions: ActionItem[] = [];
+export const initialActions: ActionItem[] = (realPlantActionsData as unknown) as ActionItem[];
 export const initialMailConfigs: MailConfig[] = [];
 
 // ──────────────────────────────────────────────────────────────────────────────

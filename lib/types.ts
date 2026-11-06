@@ -283,16 +283,16 @@ export interface ActionItem {
   rootCause?: string;          // Root Cause Analysis (RCA)
   correctiveAction?: string;   // Corrective Action taken
   preventiveAction?: string;   // Preventive Action to stop recurrence
-  closureRemark?: string;
-  closurePhotoUrl?: string;    // After Photo (evidence of fix)
-  photoUrl?: string;           // Finding / Before Photo
-  resolvedBy?: string;         // Engineer who resolved
-  resolvedDate?: string;       // Date submitted for verification
-  verifiedBy?: string;         // Admin who verified and closed
-  verifiedDate?: string;       // Date verified
-  adminVerificationRemarks?: string; // Remarks from Admin
-  closedDate?: string;
-  closedBy?: string;
+  closureRemark?: string | null;
+  closurePhotoUrl?: string | null;    // After Photo (evidence of fix)
+  photoUrl?: string | null;           // Finding / Before Photo
+  resolvedBy?: string | null;         // Engineer who resolved
+  resolvedDate?: string | null;       // Date submitted for verification
+  verifiedBy?: string | null;         // Admin who verified and closed
+  verifiedDate?: string | null;       // Date verified
+  adminVerificationRemarks?: string | null; // Remarks from Admin
+  closedDate?: string | null;
+  closedBy?: string | null;
   createdAt: string;
 }
 
