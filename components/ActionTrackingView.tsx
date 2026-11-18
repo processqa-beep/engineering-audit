@@ -269,30 +269,44 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
     if (currentUser.role === 'Admin' || currentUser.role === 'QA') return true;
     if (currentUser.role === 'Viewer') return false;
 
-    // Check department match
-    if (
-      currentUser.department &&
-      act.responsibleDepartment &&
-      currentUser.department.toLowerCase().trim() === act.responsibleDepartment.toLowerCase().trim()
-    ) {
+    // 1. Department match (case-insensitive)
+    const userDept = (currentUser.department || '').toLowerCase().trim();
+    const actDept = (act.responsibleDepartment || '').toLowerCase().trim();
+    if (userDept && actDept && (userDept === actDept || actDept.includes(userDept) || userDept.includes(actDept))) {
       return true;
     }
 
-    // Check assigned email match
-    if (
-      currentUser.email &&
-      act.assignedEmail &&
-      currentUser.email.toLowerCase().trim() === act.assignedEmail.toLowerCase().trim()
-    ) {
-      return true;
+    // 2. Assigned Email & CC Email match (supports comma-separated list of emails)
+    const userEmail = (currentUser.email || '').toLowerCase().trim();
+    if (userEmail) {
+      const assignedList = (act.assignedEmail || '')
+        .split(',')
+        .map((e) => e.toLowerCase().trim())
+        .filter(Boolean);
+      if (assignedList.some((e) => e === userEmail || userEmail.includes(e) || e.includes(userEmail))) {
+        return true;
+      }
+
+      const ccList = (act.ccEmail || '')
+        .split(',')
+        .map((e) => e.toLowerCase().trim())
+        .filter(Boolean);
+      if (ccList.some((e) => e === userEmail || userEmail.includes(e) || e.includes(userEmail))) {
+        return true;
+      }
     }
 
-    // Check responsible person name match
-    if (
-      currentUser.name &&
-      act.responsiblePerson &&
-      currentUser.name.toLowerCase().trim() === act.responsiblePerson.toLowerCase().trim()
-    ) {
+    // 3. Responsible person / CC person name match
+    const userName = (currentUser.name || '').toLowerCase().trim();
+    if (userName) {
+      const respName = (act.responsiblePerson || '').toLowerCase().trim();
+      const ccName = (act.ccPerson || '').toLowerCase().trim();
+      if (respName && (respName.includes(userName) || userName.includes(respName))) return true;
+      if (ccName && (ccName.includes(userName) || userName.includes(ccName))) return true;
+    }
+
+    // 4. Engineering, HOD, and Auditor roles have operational access to update deviations
+    if (currentUser.role === 'Engineering' || currentUser.role === 'Auditor') {
       return true;
     }
 
@@ -441,8 +455,20 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
       auditorName: matchedAudit?.auditorName || editingAction.auditorEmail || 'Auditor',
     };
 
+    // 1. Instantly update React local state so UI updates immediately without lag
+    setActions((prev) =>
+      prev.map((a) => (a.actionId === editingAction.actionId ? { ...a, ...updates, ...emailPayloadAction } : a))
+    );
+
+    // 2. Save immediately to local storage engine
+    StorageEngine.updateActionDetailed(editingAction.actionId, updates);
+
     const toList = Array.from(
-      new Set([editingAction.assignedEmail, 'mehul.chikhaliya@borosil.com'].filter(Boolean))
+      new Set(
+        [editingAction.assignedEmail, 'mehul.chikhaliya@borosil.com']
+          .filter(Boolean)
+          .flatMap((c) => (c || '').split(',').map((x) => x.trim()).filter(Boolean))
+      )
     );
     const ccList = Array.from(
       new Set(
@@ -452,7 +478,7 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
       )
     );
 
-    // 1. Dispatch email when engineer submits for verification
+    // 3. Dispatch email notifications
     if (newStatus === 'Pending Verification') {
       fetch('/api/send-email', {
         method: 'POST',
@@ -465,9 +491,7 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
           subject: `[VERIFICATION REQUIRED] Action Resolved: ${editingAction.componentName} (Audit #${editingAction.auditId}) - Awaiting Admin Shop-Floor Verification`,
         }),
       }).catch((mailErr) => console.warn('[Verification request email dispatch notice]:', mailErr));
-    }
-    // 2. Dispatch email when Admin officially verifies in actual and closes
-    else if (newStatus === 'Closed') {
+    } else if (newStatus === 'Closed') {
       fetch('/api/send-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -482,8 +506,8 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
     }
 
     try {
-      await SupabaseBackendClient.updateActionDetailed(editingAction.actionId, updates, { ...editingAction, ...updates });
-      await refreshActionsFromCloud(true);
+      await SupabaseBackendClient.updateActionDetailed(editingAction.actionId, updates, emailPayloadAction);
+      refreshActionsFromCloud(true).catch(() => {});
     } catch (err) {
       console.warn('Action sync notice:', err);
     } finally {
@@ -878,7 +902,7 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
                         </div>
                       </div>
                     </div>
-                    {isAdmin && (
+                    {(isAdmin || hasPermission) && (
                       <button
                         type="button"
                         onClick={() => {
@@ -888,7 +912,7 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
                         className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-extrabold transition shadow-md shadow-emerald-600/20 flex items-center space-x-1.5 self-start sm:self-center cursor-pointer shrink-0"
                       >
                         <CheckCircle2 className="w-4 h-4" />
-                        <span>Inspect &amp; Verify Closure</span>
+                        <span>Verify &amp; Close Point</span>
                       </button>
                     )}
                   </div>
@@ -1171,12 +1195,19 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
                         <button
                           onClick={() => handleOpenStatusModal(act)}
                           className={`px-4 py-2 text-white rounded-xl text-xs font-extrabold transition shadow-md flex items-center space-x-1.5 cursor-pointer ${
-                            act.status === 'Pending Verification' && isAdmin
+                            act.status === 'Closed'
+                              ? 'bg-slate-700 hover:bg-slate-600 shadow-slate-600/20'
+                              : act.status === 'Pending Verification'
                               ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-500/20'
                               : 'bg-indigo-600 hover:bg-indigo-500 shadow-indigo-500/20'
                           }`}
                         >
-                          {act.status === 'Pending Verification' && isAdmin ? (
+                          {act.status === 'Closed' ? (
+                            <>
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                              <span>View / Edit Closure</span>
+                            </>
+                          ) : act.status === 'Pending Verification' ? (
                             <>
                               <ShieldCheck className="w-3.5 h-3.5" />
                               <span>Verify &amp; Close</span>
@@ -1184,13 +1215,7 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
                           ) : (
                             <>
                               <Wrench className="w-3.5 h-3.5" />
-                              <span>
-                                {isAdmin
-                                  ? 'Update RCA / Close'
-                                  : act.status === 'Pending Verification'
-                                  ? 'View / Update Resolution'
-                                  : 'Resolve & Submit for Verification'}
-                              </span>
+                              <span>Update RCA / Close</span>
                             </>
                           )}
                         </button>
@@ -1354,11 +1379,6 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
                 <div>
                   <label className="text-slate-700 font-bold block mb-1">
                     Action Status
-                    {!isAdmin && (
-                      <span className="text-[10px] text-amber-700 font-medium ml-1">
-                        (Submit for Admin verification)
-                      </span>
-                    )}
                   </label>
                   <select
                     value={newStatus}
@@ -1367,18 +1387,9 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
                   >
                     <option value="Open">Open</option>
                     <option value="In Progress">In Progress</option>
-                    {isAdmin ? (
-                      <>
-                        <option value="Pending Verification">Pending Verification (Awaiting Inspection)</option>
-                        <option value="Closed">Verified in Actual &amp; Closed ✓</option>
-                        <option value="Overdue">Overdue</option>
-                      </>
-                    ) : (
-                      <>
-                        <option value="Pending Verification">Resolved — Submit for Admin Verification &amp; Closure</option>
-                        <option value="Overdue">Overdue</option>
-                      </>
-                    )}
+                    <option value="Pending Verification">Pending Verification (Awaiting Shop-Floor Check)</option>
+                    <option value="Closed">Verified in Actual &amp; Closed ✓</option>
+                    <option value="Overdue">Overdue</option>
                   </select>
                 </div>
 
@@ -1505,15 +1516,15 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
               </div>
 
               {/* Admin Shop-Floor Physical Verification Remarks */}
-              {(isAdmin || Boolean(editingAction.adminVerificationRemarks) || Boolean(editingAction.verifiedBy)) && (
+              {(isAdmin || newStatus === 'Closed' || Boolean(editingAction.adminVerificationRemarks) || Boolean(editingAction.verifiedBy)) && (
                 <div className="bg-indigo-50/70 p-3.5 rounded-2xl border border-indigo-200 space-y-2">
                   <div className="flex items-center space-x-2">
                     <ShieldCheck className="w-4 h-4 text-indigo-700" />
                     <span className="font-extrabold text-indigo-950 text-xs">
-                      Admin Shop-Floor Physical Verification
+                      Shop-Floor Physical Verification &amp; Sign-off
                     </span>
                   </div>
-                  {isAdmin ? (
+                  {isAdmin || newStatus === 'Closed' ? (
                     <div>
                       <label className="text-indigo-900 font-bold block mb-1 text-[11px]">
                         Physical Verification Remarks / Shop-Floor Findings
@@ -1551,7 +1562,7 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
                 disabled={saving}
                 onClick={handleSaveStatusUpdate}
                 className={`px-5 py-2 text-white rounded-xl text-xs font-extrabold transition shadow-md disabled:opacity-50 flex items-center space-x-1.5 cursor-pointer ${
-                  newStatus === 'Closed' && isAdmin
+                  newStatus === 'Closed'
                     ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-500/20'
                     : newStatus === 'Pending Verification'
                     ? 'bg-amber-600 hover:bg-amber-500 shadow-amber-500/20'
@@ -1562,10 +1573,10 @@ export const ActionTrackingView: React.FC<ActionTrackingViewProps> = ({ onNaviga
                 <span>
                   {saving
                     ? 'Saving...'
-                    : newStatus === 'Closed' && isAdmin
-                    ? 'Verify in Actual & Close Action'
-                    : newStatus === 'Pending Verification' && !isAdmin
-                    ? 'Submit for Admin Verification'
+                    : newStatus === 'Closed'
+                    ? 'Verify & Close Action Point ✓'
+                    : newStatus === 'Pending Verification'
+                    ? 'Submit for Verification'
                     : 'Save & Update Action'}
                 </span>
               </button>

@@ -489,7 +489,7 @@ export class StorageEngine {
       actions[idx] = {
         ...actions[idx],
         ...updates,
-        closedDate: updates.status === 'Closed' ? (updates.closedDate || new Date().toISOString().substring(0, 10)) : actions[idx].closedDate,
+        closedDate: updates.status === 'Closed' ? (updates.closedDate || new Date().toISOString().substring(0, 10)) : (updates.status ? null : actions[idx].closedDate),
       };
       setItem(STORAGE_KEYS.ACTIONS, actions);
     }
