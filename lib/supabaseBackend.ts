@@ -250,13 +250,16 @@ export class SupabaseBackendClient {
         email: d.email,
         department: d.department,
         role: d.role,
-        password: '',
+        password: d.password || '',
         status: d.status || 'Approved',
         emailParticipation: d.email_participation || 'NONE',
         sectionScope: d.section_scope || 'ALL',
         triggerOn: d.trigger_on || 'ANY_NG',
         active: d.active !== false,
         createdAt: d.created_at,
+        requestedAt: d.requested_at || d.created_at,
+        approvedAt: d.approved_at,
+        approvedBy: d.approved_by,
         updatedAt: d.updated_at,
       }));
 
@@ -285,13 +288,30 @@ export class SupabaseBackendClient {
     }
   }
 
+  public static async deleteEmployee(id: string): Promise<boolean> {
+    try {
+      const res = await fetch('/api/db', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'DELETE_EMPLOYEE',
+          payload: { id },
+        }),
+      });
+      const json = await res.json();
+      return Boolean(json.success);
+    } catch {
+      return false;
+    }
+  }
+
   public static async requestAccess(
     name: string,
     email: string,
     department: string,
     password: string
   ): Promise<{ success: boolean; message: string }> {
-    StorageEngine.requestAccess(name, email, department, password);
+    const localRes = StorageEngine.requestAccess(name, email, department, password);
     try {
       const res = await fetch('/api/db', {
         method: 'POST',
@@ -302,9 +322,12 @@ export class SupabaseBackendClient {
         }),
       });
       const json = await res.json();
+      if (!res.ok || !json.success) {
+        return { success: false, message: json.message || 'Server error submitting access request' };
+      }
       return { success: true, message: json.message || 'Access request submitted' };
     } catch {
-      return { success: true, message: 'Saved locally' };
+      return localRes;
     }
   }
 
@@ -388,6 +411,23 @@ export class SupabaseBackendClient {
         body: JSON.stringify({
           action: 'SAVE_FPR_MATRIX',
           payload: matrix,
+        }),
+      });
+      const json = await res.json();
+      return Boolean(json.success);
+    } catch {
+      return false;
+    }
+  }
+
+  public static async deleteFpr(id: string): Promise<boolean> {
+    try {
+      const res = await fetch('/api/db', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'DELETE_FPR',
+          payload: { id },
         }),
       });
       const json = await res.json();

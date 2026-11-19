@@ -207,7 +207,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       try {
         // Sync latest employees first
         await SupabaseBackendClient.fetchEmployees().catch(() => {});
-        const res = StorageEngine.requestAccess(regName, cleanEmail, finalDept, regPassword);
+        const res = await SupabaseBackendClient.requestAccess(regName, cleanEmail, finalDept, regPassword);
 
         if (res.success) {
           // Push updated pending user to Supabase

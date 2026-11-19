@@ -583,18 +583,27 @@ export const SettingsView: React.FC = () => {
   const [fprMatrix, setFprMatrix] = useState<FprEntry[]>(() => StorageEngine.getFprMatrix());
   const [showFprForm, setShowFprForm] = useState(false);
   const [editingFpr, setEditingFpr] = useState<Partial<FprEntry> | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefreshAll = async () => {
+    setRefreshing(true);
+    try {
+      const [fprData, empData] = await Promise.all([
+        SupabaseBackendClient.fetchFprMatrix(),
+        SupabaseBackendClient.fetchEmployees(),
+      ]);
+      if (fprData && fprData.length > 0) setFprMatrix(fprData);
+      if (empData && empData.length > 0) setEmployees(empData);
+      setSavedMessage('Synced latest team members & FPR matrix from Supabase.');
+      setTimeout(() => setSavedMessage(''), 3000);
+    } catch (_) {
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   useEffect(() => {
-    SupabaseBackendClient.fetchFprMatrix()
-      .then((data) => {
-        if (data && data.length > 0) setFprMatrix(data);
-      })
-      .catch(() => {});
-    SupabaseBackendClient.fetchEmployees()
-      .then((data) => {
-        if (data && data.length > 0) setEmployees(data);
-      })
-      .catch(() => {});
+    handleRefreshAll();
     SupabaseBackendClient.fetchPlantStructure().catch(() => {});
   }, []);
 
@@ -629,12 +638,19 @@ export const SettingsView: React.FC = () => {
     setTimeout(() => setSavedMessage(''), 3000);
   };
 
-  const handleDeleteFpr = (id: string) => {
+  const handleDeleteFpr = async (id: string) => {
     if (!confirm('Remove this FPR assignment?')) return;
     const updated = fprMatrix.filter((e) => e.id !== id);
     setFprMatrix(updated);
     StorageEngine.saveFprMatrix(updated);
-    SupabaseBackendClient.saveFprMatrix(updated).catch((err) => console.warn('Supabase FPR save notice:', err));
+    try {
+      await SupabaseBackendClient.deleteFpr(id);
+      await SupabaseBackendClient.saveFprMatrix(updated);
+    } catch (err) {
+      console.warn('Supabase FPR delete notice:', err);
+    }
+    setSavedMessage('FPR assignment removed permanently.');
+    setTimeout(() => setSavedMessage(''), 3000);
   };
 
   const handleToggleFprActive = (id: string) => {
@@ -774,21 +790,32 @@ export const SettingsView: React.FC = () => {
     setTimeout(() => setSavedMessage(''), 4000);
   };
 
-  const handleRejectUser = (emp: Employee) => {
+  const handleRejectUser = async (emp: Employee) => {
     if (!confirm(`Reject access request for "${emp.name}" (${emp.email})?`)) return;
     StorageEngine.rejectUser(emp.id);
     const updated = employees.map((e) => (e.id === emp.id ? { ...e, status: 'Rejected' as any } : e));
     setEmployees(updated);
-    SupabaseBackendClient.saveEmployees(updated).catch((err) => console.warn('Supabase reject save error:', err));
+    try {
+      await SupabaseBackendClient.rejectUser(emp.id);
+      await SupabaseBackendClient.saveEmployees(updated);
+    } catch (err) {
+      console.warn('Supabase reject save error:', err);
+    }
     setSavedMessage(`Access request for "${emp.name}" rejected.`);
     setTimeout(() => setSavedMessage(''), 4000);
   };
 
-  const handleDeleteUser = (emp: Employee) => {
+  const handleDeleteUser = async (emp: Employee) => {
     if (!confirm(`Are you sure you want to delete user "${emp.name}" (${emp.email})?`)) return;
     const updatedList = employees.filter((e) => e.id !== emp.id);
     setEmployees(updatedList);
     StorageEngine.saveEmployees(updatedList);
+    try {
+      await SupabaseBackendClient.deleteEmployee(emp.id);
+      await SupabaseBackendClient.saveEmployees(updatedList);
+    } catch (err) {
+      console.warn('Supabase delete user error:', err);
+    }
     setSavedMessage(`User "${emp.name}" removed.`);
     setTimeout(() => setSavedMessage(''), 4000);
   };
@@ -866,13 +893,24 @@ export const SettingsView: React.FC = () => {
             </p>
           </div>
 
-          <button
-            onClick={handleOpenAddUser}
-            className="flex items-center space-x-1.5 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-extrabold text-xs shadow-md shadow-indigo-500/20 transition self-start sm:self-auto shrink-0"
-          >
-            <UserPlus className="w-4 h-4" />
-            <span>+ Add User</span>
-          </button>
+          <div className="flex items-center space-x-2 self-start sm:self-auto shrink-0">
+            <button
+              onClick={handleRefreshAll}
+              disabled={refreshing}
+              className="flex items-center space-x-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl font-bold text-xs transition border border-slate-200"
+              title="Fetch latest team members & requests from cloud database"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin text-indigo-600' : ''}`} />
+              <span>{refreshing ? 'Refreshing...' : 'Refresh'}</span>
+            </button>
+            <button
+              onClick={handleOpenAddUser}
+              className="flex items-center space-x-1.5 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-extrabold text-xs shadow-md shadow-indigo-500/20 transition"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>+ Add User</span>
+            </button>
+          </div>
         </div>
 
         {/* Pending Requests Alert Banner & List */}

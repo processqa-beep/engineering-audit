@@ -625,7 +625,17 @@ export async function POST(req: NextRequest) {
       }));
 
       try {
-        await supabase.from('fpr_matrix').upsert(rows);
+        const incomingIds = rows.map((r: any) => r.id);
+        const { data: allCurrent } = await supabase.from('fpr_matrix').select('id');
+        if (allCurrent && allCurrent.length > 0) {
+          const toDelete = allCurrent.filter((c: any) => !incomingIds.includes(c.id)).map((c: any) => c.id);
+          if (toDelete.length > 0) {
+            await supabase.from('fpr_matrix').delete().in('id', toDelete);
+          }
+        }
+        if (rows.length > 0) {
+          await supabase.from('fpr_matrix').upsert(rows);
+        }
       } catch (err) {
         console.warn('[Supabase fpr_matrix table save notice]:', err);
       }
@@ -644,26 +654,70 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, count: rows.length });
     }
 
+    // 3.5 DELETE FPR
+    if (action === 'DELETE_FPR') {
+      const { id } = payload;
+      if (id) {
+        const { error } = await supabase.from('fpr_matrix').delete().eq('id', id);
+        if (error) {
+          console.error('[Supabase DELETE_FPR error]:', error);
+          throw error;
+        }
+        try {
+          const { data } = await supabase.from('fpr_matrix').select('*');
+          await supabase.from('plant_structure').upsert({
+            id: 'fpr_matrix_backup',
+            data: data || [],
+            updated_at: new Date().toISOString(),
+          });
+        } catch (_) {}
+      }
+      return NextResponse.json({ success: true, message: 'FPR deleted' });
+    }
+
     // 4. SAVE EMPLOYEES
     if (action === 'SAVE_EMPLOYEES') {
       const employees = payload;
-      const rows = employees.map((e: any) => ({
-        id: e.id,
-        name: e.name,
-        email: e.email,
-        department: e.department,
-        role: e.role,
-        status: e.status || 'Approved',
-        email_participation: e.emailParticipation || 'NONE',
-        section_scope: e.sectionScope || 'ALL',
-        trigger_on: e.triggerOn || 'ANY_NG',
-        active: e.active !== false,
-        updated_at: new Date().toISOString(),
-      }));
+      const rows = employees.map((e: any) => {
+        const row: any = {
+          id: e.id,
+          name: e.name,
+          email: e.email,
+          department: e.department,
+          role: e.role,
+          status: e.status || 'Approved',
+          email_participation: e.emailParticipation || 'NONE',
+          section_scope: e.sectionScope || 'ALL',
+          trigger_on: e.triggerOn || 'ANY_NG',
+          active: e.active !== false,
+          updated_at: new Date().toISOString(),
+        };
+        if (e.password) row.password = e.password;
+        if (e.requestedAt) row.requested_at = e.requestedAt;
+        if (e.approvedAt) row.approved_at = e.approvedAt;
+        if (e.approvedBy) row.approved_by = e.approvedBy;
+        return row;
+      });
 
-      const { error } = await supabase.from('employees').upsert(rows);
-      if (error) throw error;
+      const { error } = await supabase.from('employees').upsert(rows, { onConflict: 'email' });
+      if (error) {
+        console.error('[Supabase SAVE_EMPLOYEES error]:', error);
+        throw error;
+      }
       return NextResponse.json({ success: true, count: rows.length });
+    }
+
+    // 4.5 DELETE EMPLOYEE
+    if (action === 'DELETE_EMPLOYEE') {
+      const { id } = payload;
+      if (id) {
+        const { error } = await supabase.from('employees').delete().eq('id', id);
+        if (error) {
+          console.error('[Supabase DELETE_EMPLOYEE error]:', error);
+          throw error;
+        }
+      }
+      return NextResponse.json({ success: true, message: 'Employee deleted' });
     }
 
     // 5. UPDATE ACTION ITEM
@@ -801,28 +855,43 @@ export async function POST(req: NextRequest) {
     if (action === 'REQUEST_ACCESS') {
       const { name, email, department, password } = payload;
       const cleanEmail = email.trim().toLowerCase();
-      const id = `EMP-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`;
+      const id = `REQ-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`;
+
+      // Check if employee with this email already exists in supabase
+      const { data: existingEmp } = await supabase
+        .from('employees')
+        .select('*')
+        .eq('email', cleanEmail)
+        .maybeSingle();
+
+      const empId = existingEmp?.id || id;
+      const empStatus = existingEmp?.status === 'Approved' ? 'Approved' : 'Pending';
 
       const { error } = await supabase.from('employees').upsert({
-        id,
+        id: empId,
         name: name.trim(),
         email: cleanEmail,
         department: department.trim() || 'General / Plant',
-        role: 'Viewer',
-        status: 'Pending',
-        email_participation: 'NONE',
-        section_scope: 'ALL',
-        trigger_on: 'ANY_NG',
+        role: existingEmp?.role || 'Viewer',
+        status: empStatus,
+        password: password || existingEmp?.password || '',
+        email_participation: existingEmp?.email_participation || 'NONE',
+        section_scope: existingEmp?.section_scope || 'ALL',
+        trigger_on: existingEmp?.trigger_on || 'ANY_NG',
         active: true,
-        created_at: new Date().toISOString(),
+        created_at: existingEmp?.created_at || new Date().toISOString(),
+        requested_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-      });
+      }, { onConflict: 'email' });
 
-      if (error) throw error;
+      if (error) {
+        console.error('[Supabase REQUEST_ACCESS error]:', error);
+        throw error;
+      }
       return NextResponse.json({ success: true, message: 'Access request submitted to database' });
     }
 
-    // 7. APPROVE / REJECT USER
+    // 7. APPROVE USER
     if (action === 'APPROVE_USER') {
       const { id, role, department, emailParticipation, sectionScope } = payload;
       const { error } = await supabase
@@ -833,6 +902,23 @@ export async function POST(req: NextRequest) {
           email_participation: emailParticipation || 'NONE',
           section_scope: sectionScope || 'ALL',
           status: 'Approved',
+          approved_at: new Date().toISOString(),
+          approved_by: 'Admin',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id);
+
+      if (error) throw error;
+      return NextResponse.json({ success: true });
+    }
+
+    // 7.5 REJECT USER
+    if (action === 'REJECT_USER') {
+      const { id } = payload;
+      const { error } = await supabase
+        .from('employees')
+        .update({
+          status: 'Rejected',
           updated_at: new Date().toISOString(),
         })
         .eq('id', id);

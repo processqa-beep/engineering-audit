@@ -321,7 +321,12 @@ export class StorageEngine {
         return { success: false, message: 'This email is already registered and approved. Please sign in directly.' };
       }
       if (existing.status === 'Pending') {
-        return { success: false, message: 'An access request for this email is already pending Admin approval.' };
+        existing.name = name.trim();
+        existing.department = department.trim() || 'General / Plant';
+        if (password) existing.password = password.trim();
+        existing.requestedAt = new Date().toISOString();
+        this.saveEmployees(employees);
+        return { success: true, message: 'Access request refreshed! Your account is pending Admin approval.' };
       }
     }
 
@@ -555,7 +560,7 @@ export class StorageEngine {
   // ── FPR MATRIX (Department × Section/Line → Person + CC) ─────────────────
   public static getFprMatrix(): FprEntry[] {
     const list = getItem<FprEntry[]>(STORAGE_KEYS.FPR_MATRIX, initialFprMatrix);
-    return list && list.length > 0 ? list : initialFprMatrix;
+    return Array.isArray(list) ? list : initialFprMatrix;
   }
 
   public static saveFprMatrix(matrix: FprEntry[]): void {
